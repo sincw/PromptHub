@@ -7,8 +7,8 @@
   <p>
     <a href="https://github.com/legeling/PromptHub/stargazers"><img src="https://img.shields.io/github/stars/legeling/PromptHub?style=flat-square&color=yellow" alt="GitHub Stars"/></a>
     <a href="https://github.com/legeling/PromptHub/network/members"><img src="https://img.shields.io/github/forks/legeling/PromptHub?style=flat-square" alt="GitHub Forks"/></a>
-    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/version-v0.4.0-green?style=flat-square" alt="Version"/></a>
-    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/download-0.4.0-blue?style=flat-square" alt="Téléchargements"/></a>
+    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/version-v0.4.1-green?style=flat-square" alt="Version"/></a>
+    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/download-0.4.1-blue?style=flat-square" alt="Téléchargements"/></a>
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="Licence : AGPL-3.0"/>
   </p>
   

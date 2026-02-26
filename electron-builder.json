@@ -28,7 +28,8 @@
     }
   ],
   "asarUnpack": [
-    "**/*.node"
+    "**/*.node",
+    "**/node-sqlite3-wasm/**"
   ],
   "asar": true,
   "npmRebuild": false,

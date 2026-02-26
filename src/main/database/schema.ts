@@ -2,7 +2,11 @@
  * 数据库表结构定义
  */
 
-export const SCHEMA = `
+/**
+ * Tables only — run BEFORE migrations so CREATE TABLE IF NOT EXISTS
+ * is a safe no-op for existing databases.
+ */
+export const SCHEMA_TABLES = `
 -- Prompts 表
 CREATE TABLE IF NOT EXISTS prompts (
   id TEXT PRIMARY KEY,
@@ -63,9 +67,9 @@ CREATE TABLE IF NOT EXISTS skills (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT,
-  content TEXT, -- System Prompt / SKILL.md content
-  mcp_config TEXT, -- JSON string for MCP servers config
-  protocol_type TEXT DEFAULT 'mcp', -- e.g., 'mcp', 'claude-code'
+  content TEXT,
+  mcp_config TEXT,
+  protocol_type TEXT DEFAULT 'mcp',
   version TEXT,
   author TEXT,
   tags TEXT,
@@ -73,8 +77,12 @@ CREATE TABLE IF NOT EXISTS skills (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+`;
 
--- 索引
+/**
+ * Indexes, FTS, and triggers — run AFTER migrations so all columns exist.
+ */
+export const SCHEMA_INDEXES = `
 CREATE INDEX IF NOT EXISTS idx_prompts_folder ON prompts(folder_id);
 CREATE INDEX IF NOT EXISTS idx_prompts_updated ON prompts(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prompts_favorite ON prompts(is_favorite);
@@ -83,15 +91,11 @@ CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
 CREATE INDEX IF NOT EXISTS idx_skills_updated ON skills(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_skills_favorite ON skills(is_favorite);
 
--- 排序字段索引（性能优化）
--- Sorting field indexes (performance optimization)
 CREATE INDEX IF NOT EXISTS idx_prompts_pinned ON prompts(is_pinned);
 CREATE INDEX IF NOT EXISTS idx_prompts_created ON prompts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prompts_usage ON prompts(usage_count DESC);
 CREATE INDEX IF NOT EXISTS idx_folders_sort ON folders(sort_order);
 
--- 复合索引（性能优化）
--- Composite indexes (performance optimization)
 CREATE INDEX IF NOT EXISTS idx_prompts_folder_favorite ON prompts(folder_id, is_favorite);
 CREATE INDEX IF NOT EXISTS idx_prompts_folder_updated ON prompts(folder_id, updated_at DESC);
 
@@ -121,3 +125,6 @@ CREATE TRIGGER IF NOT EXISTS prompts_au AFTER UPDATE ON prompts BEGIN
   VALUES (NEW.rowid, NEW.title, NEW.description, NEW.system_prompt, NEW.user_prompt, NEW.tags);
 END;
 `;
+
+/** @deprecated Use SCHEMA_TABLES + SCHEMA_INDEXES instead */
+export const SCHEMA = SCHEMA_TABLES + SCHEMA_INDEXES;

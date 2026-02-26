@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain, dialog, Notification, Tray, Menu, nativeImage, session, protocol } from 'electron';
 import path from 'path';
 import fs from 'fs';
-import Database from 'better-sqlite3';
+import Database from './database/sqlite';
 import { initDatabase } from './database';
 import { registerAllIPC } from './ipc';
 import { getMinimizeOnLaunchSetting } from './ipc/settings.ipc';

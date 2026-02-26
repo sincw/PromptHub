@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import Database from 'better-sqlite3';
+import Database from '../database/sqlite';
 import { IPC_CHANNELS } from '../../shared/constants/ipc-channels';
 import { setMasterPassword, unlock, lock, securityStatus } from '../security';
 

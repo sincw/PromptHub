@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite';
 import { v4 as uuidv4 } from 'uuid';
 import type { Folder, CreateFolderDTO, UpdateFolderDTO } from '@shared/types';
 

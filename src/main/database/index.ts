@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite';
 import path from 'path';
 import { app } from 'electron';
-import { SCHEMA } from './schema';
+import { SCHEMA_TABLES, SCHEMA_INDEXES } from './schema';
 
 let db: Database.Database | null = null;
 
@@ -28,9 +28,8 @@ export function initDatabase(): Database.Database {
   // 启用外键约束
   db.pragma('foreign_keys = ON');
 
-  // Create table schema
-  // 创建表结构
-  db.exec(SCHEMA);
+  // Create tables only (indexes come after migrations)
+  db.exec(SCHEMA_TABLES);
 
   // Migration: check if prompts table has images column
   // 迁移：检查 prompts 表是否有 images 字段
@@ -136,6 +135,9 @@ export function initDatabase(): Database.Database {
   } catch (error) {
     console.error('Migration (skills store columns) failed:', error);
   }
+
+  // Now that all columns exist, create indexes + FTS
+  db.exec(SCHEMA_INDEXES);
 
   console.log(`Database initialized at: ${dbPath}`);
   return db;

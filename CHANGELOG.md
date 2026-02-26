@@ -1,3 +1,16 @@
+## [0.4.1] - 2026-02-27
+
+### 修复 / Fixed
+
+- 🔧 **WASM SQLite 迁移**：从 better-sqlite3 迁移到 node-sqlite3-wasm (纯 WASM)，彻底解决 Windows x64/arm64 启动报错 "not a valid Win32 application" 的问题 (closes #55, #56)
+  - **WASM SQLite Migration**: Replaced better-sqlite3 (native .node) with node-sqlite3-wasm (pure WASM), fixing "not a valid Win32 application" errors on Windows x64/arm64 (closes #55, #56)
+- 🔧 **数据库初始化修复**：拆分 Schema 为表创建和索引创建两阶段，修复旧数据库升级时 "no such column: is_pinned" 错误
+  - **Database Init Fix**: Split schema into table creation and index creation phases, fixing "no such column: is_pinned" error on existing databases
+- 🔧 **CI/CD 简化**：移除 electron-rebuild 和原生模块架构验证步骤，所有平台构建流程统一
+  - **CI/CD Simplification**: Removed electron-rebuild and native module architecture verification steps, unified build pipeline across all platforms
+
+---
+
 ## [0.4.0] - 2026-02-12
 
 ### 新功能 / Added

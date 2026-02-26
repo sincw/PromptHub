@@ -13,7 +13,6 @@ jobs:
         include:
           # macOS: Use Intel runner for x64, Apple Silicon runner for arm64
           # CRITICAL: macos-15-intel is x86_64, macos-15 is Apple Silicon (arm64)
-          # better-sqlite3 native module must be built on matching architecture
           - os: macos-15-intel # Intel (x86_64) runner for x64 builds
             platform: mac
             arch: x64
@@ -78,82 +77,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Rebuild native modules for Electron
-        shell: bash
-        run: |
-          # Rebuild native modules for the target architecture
-          # 为目标架构重建原生模块
-
-          # Detect exact Electron version from installed package
-          ELECTRON_VERSION=$(node -p "require('electron/package.json').version")
-          echo "Detected Electron version: $ELECTRON_VERSION"
-
-          # First, remove any prebuilt binaries to force rebuild from source
-          # 首先删除预编译二进制，强制从源码重新编译
-          rm -rf node_modules/better-sqlite3/build || true
-          rm -rf node_modules/better-sqlite3/prebuilds || true
-
-          if [ "${{ matrix.platform }}" = "mac" ]; then
-            echo "Rebuilding better-sqlite3 for macOS ${{ matrix.arch }}"
-            npx electron-rebuild -f -w better-sqlite3 --arch ${{ matrix.arch }} -v $ELECTRON_VERSION
-          elif [ "${{ matrix.platform }}" = "win" ]; then
-            echo "Rebuilding better-sqlite3 for Windows ${{ matrix.arch }}"
-            npx electron-rebuild -f -w better-sqlite3 --arch ${{ matrix.arch }} -v $ELECTRON_VERSION
-          else
-            pnpm run rebuild
-          fi
-
-      - name: Verify native module architecture (macOS)
-        if: matrix.platform == 'mac'
-        shell: bash
-        run: |
-          # Verify the better-sqlite3 native module is built for correct architecture
-          # 验证 better-sqlite3 原生模块是否为正确架构编译
-          NATIVE_MODULE="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-          if [ -f "$NATIVE_MODULE" ]; then
-            echo "Checking architecture of $NATIVE_MODULE"
-            file "$NATIVE_MODULE"
-            ARCH=$(file "$NATIVE_MODULE" | grep -o 'arm64\|x86_64')
-            echo "Detected architecture: $ARCH"
-            if [ "${{ matrix.arch }}" = "arm64" ] && [ "$ARCH" != "arm64" ]; then
-              echo "ERROR: Expected arm64 but got $ARCH"
-              exit 1
-            elif [ "${{ matrix.arch }}" = "x64" ] && [ "$ARCH" != "x86_64" ]; then
-              echo "ERROR: Expected x86_64 but got $ARCH"
-              exit 1
-            fi
-            echo "Architecture verification passed!"
-          else
-            echo "ERROR: Native module not found at $NATIVE_MODULE"
-            exit 1
-          fi
-
-      - name: Verify native module (Windows)
-        if: matrix.platform == 'win'
-        shell: bash
-        run: |
-          # Verify the better-sqlite3 native module exists and is a valid PE binary
-          # 验证 better-sqlite3 原生模块存在且是有效的 PE 二进制
-          NATIVE_MODULE="node_modules/better-sqlite3/build/Release/better_sqlite3.node"
-          if [ -f "$NATIVE_MODULE" ]; then
-            echo "Native module found at $NATIVE_MODULE"
-            FILE_SIZE=$(stat -c%s "$NATIVE_MODULE" 2>/dev/null || stat -f%z "$NATIVE_MODULE")
-            echo "File size: $FILE_SIZE bytes"
-            # Check it's a PE binary (starts with MZ)
-            HEADER=$(xxd -l 2 -p "$NATIVE_MODULE")
-            if [ "$HEADER" = "4d5a" ]; then
-              echo "Valid PE binary (MZ header detected)"
-            else
-              echo "ERROR: Not a valid PE binary! Header: $HEADER"
-              echo "This file may have been compiled for a different platform."
-              exit 1
-            fi
-          else
-            echo "ERROR: Native module not found at $NATIVE_MODULE"
-            echo "electron-rebuild may have failed silently."
-            exit 1
-          fi
-
       - name: Clean previous build artifacts
         shell: bash
         run: |
@@ -175,31 +98,6 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify packaged native module (macOS)
-        if: matrix.platform == 'mac'
-        shell: bash
-        run: |
-          # Verify the native module inside the final .app bundle has correct architecture
-          # 验证最终 .app 包内的原生模块架构是否正确
-          APP_MODULE=$(find dist -path "*/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node" -type f | head -1)
-          if [ -n "$APP_MODULE" ]; then
-            echo "Found packaged module: $APP_MODULE"
-            file "$APP_MODULE"
-            ARCH=$(file "$APP_MODULE" | grep -o 'arm64\|x86_64')
-            echo "Packaged module architecture: $ARCH"
-            if [ "${{ matrix.arch }}" = "arm64" ] && [ "$ARCH" != "arm64" ]; then
-              echo "FATAL: Packaged app contains x86_64 module but target is arm64!"
-              echo "This means electron-builder replaced the correct binary during packaging."
-              exit 1
-            elif [ "${{ matrix.arch }}" = "x64" ] && [ "$ARCH" != "x86_64" ]; then
-              echo "FATAL: Packaged app contains arm64 module but target is x64!"
-              exit 1
-            fi
-            echo "Post-build architecture verification passed!"
-          else
-            echo "WARNING: Could not find native module in packaged app (may be inside asar)"
-          fi
 
       - name: Normalize Windows update metadata
         if: matrix.platform == 'win' && matrix.arch != ''

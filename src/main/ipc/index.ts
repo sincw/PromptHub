@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database from '../database/sqlite';
 import { registerPromptIPC } from './prompt.ipc';
 import { registerFolderIPC } from './folder.ipc';
 import { registerSettingsIPC } from './settings.ipc';

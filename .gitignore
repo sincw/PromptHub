@@ -31,6 +31,8 @@ out/
 *.swp
 *.swo
 .windsurfrules
+.claude/
+.agent/
 
 # OS
 .DS_Store
