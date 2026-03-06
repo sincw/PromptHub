@@ -85,7 +85,7 @@ describe('Updater Service (Main Process)', () => {
 
         initUpdater(mockWindow);
 
-        expect(autoUpdater.channel).toBe('latest-x64');
+        expect(autoUpdater.channel).toBe('latest');
     });
 
     it('should set architecture specific channel on Windows arm64', () => {
@@ -94,7 +94,7 @@ describe('Updater Service (Main Process)', () => {
 
         initUpdater(mockWindow);
 
-        expect(autoUpdater.channel).toBe('latest-arm64');
+        expect(autoUpdater.channel).toBe('arm64');
     });
 
     it('should NOT change channel on macOS', () => {

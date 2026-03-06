@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { testConnection, incrementalUpload } from '../../../src/renderer/services/webdav';
-import * as db from '../../../src/renderer/services/database';
+import * as backup from '../../../src/renderer/services/database-backup';
 
-// Mock database service
-vi.mock('../../../src/renderer/services/database', () => ({
+// Mock backup workflow service
+vi.mock('../../../src/renderer/services/database-backup', () => ({
     exportDatabase: vi.fn(),
+    restoreFromBackup: vi.fn(),
 }));
 
 describe('WebDAV Service', () => {
@@ -104,7 +105,7 @@ describe('WebDAV Service', () => {
         it('should perform incremental upload logic', async () => {
             // Mock database return
             /* @ts-ignore */
-            db.exportDatabase.mockResolvedValue({
+            backup.exportDatabase.mockResolvedValue({
                 prompts: [{ id: 1, content: 'test' }],
                 folders: [],
                 version: '4.0',
