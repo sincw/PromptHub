@@ -331,7 +331,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Cask
-        if: ${{ !contains(github.ref, 'beta') && !contains(github.ref, 'alpha') && secrets.HOMEBREW_TAP_TOKEN != '' }}
+        if: ${{ !contains(github.ref, 'beta') && !contains(github.ref, 'alpha') && env.HOMEBREW_TAP_TOKEN != '' }}
         shell: bash
         run: |
           # Wait for release assets to be fully available
@@ -341,7 +341,9 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Skip Homebrew Cask update
-        if: ${{ !contains(github.ref, 'beta') && !contains(github.ref, 'alpha') && secrets.HOMEBREW_TAP_TOKEN == '' }}
+        if: ${{ !contains(github.ref, 'beta') && !contains(github.ref, 'alpha') && env.HOMEBREW_TAP_TOKEN == '' }}
         shell: bash
         run: |
           echo "HOMEBREW_TAP_TOKEN is not configured; skipping Homebrew cask publish."
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
