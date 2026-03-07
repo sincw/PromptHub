@@ -83,15 +83,28 @@ export function PlatformIcon({ platformId, size = 24, className = '' }: Platform
   }
   
   return (
-    <img
-      src={iconSrc}
-      alt={`${platformId} icon`}
-      width={size}
-      height={size}
-      className={`object-contain ${className}`}
-      onError={() => setImageError(true)}
-      loading="lazy"
-    />
+    <span
+      className={`inline-flex items-center justify-center ${className} ${
+        platformId === 'copilot'
+          ? 'rounded-xl bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800/80 dark:ring-slate-700'
+          : ''
+      }`}
+      style={{ width: size, height: size }}
+    >
+      <img
+        src={iconSrc}
+        alt={`${platformId} icon`}
+        width={size}
+        height={size}
+        className={`object-contain ${
+          platformId === 'copilot'
+            ? 'brightness-0 dark:brightness-0 dark:invert'
+            : ''
+        }`}
+        onError={() => setImageError(true)}
+        loading="lazy"
+      />
+    </span>
   );
 }
 

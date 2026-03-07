@@ -143,6 +143,7 @@ export function initDatabase(): Database.Database {
       { name: "source_url", type: "TEXT" },
       { name: "icon_url", type: "TEXT" },
       { name: "icon_emoji", type: "TEXT" },
+      { name: "icon_background", type: "TEXT" },
       { name: "category", type: "TEXT DEFAULT 'general'" },
       { name: "is_builtin", type: "INTEGER DEFAULT 0" },
       { name: "registry_slug", type: "TEXT" },
@@ -150,7 +151,8 @@ export function initDatabase(): Database.Database {
       { name: "prerequisites", type: "TEXT" },
       { name: "compatibility", type: "TEXT" },
       { name: "original_tags", type: "TEXT" },
-      { name: "current_version", type: "INTEGER DEFAULT 1" },
+      { name: "current_version", type: "INTEGER DEFAULT 0" },
+      { name: "version_tracking_enabled", type: "INTEGER DEFAULT 0" },
       { name: "local_repo_path", type: "TEXT" },
     ];
 
@@ -251,6 +253,41 @@ export function initDatabase(): Database.Database {
         );
       }
       markMigration("backfill_local_repo_path_v1");
+    }
+
+    if (!hasMigration("normalize_skill_version_tracking_v1")) {
+      try {
+        const skillsWithVersionStats = db!
+          .prepare(
+            `SELECT
+               s.id AS id,
+               MAX(sv.version) AS max_version
+             FROM skills s
+             LEFT JOIN skill_versions sv ON sv.skill_id = s.id
+             GROUP BY s.id`,
+          )
+          .all() as Array<{ id: string; max_version: number | null }>;
+
+        for (const skill of skillsWithVersionStats) {
+          const hasTrackedVersions =
+            typeof skill.max_version === "number" && skill.max_version > 0;
+          db!
+            .prepare(
+              "UPDATE skills SET current_version = ?, version_tracking_enabled = ? WHERE id = ?",
+            )
+            .run(
+              hasTrackedVersions ? skill.max_version : 0,
+              hasTrackedVersions ? 1 : 0,
+              skill.id,
+            );
+        }
+      } catch (error) {
+        console.error(
+          "Failed to normalize skill version tracking state:",
+          error,
+        );
+      }
+      markMigration("normalize_skill_version_tracking_v1");
     }
 
     // ── skill_versions table ────────────────────────────────────────────────

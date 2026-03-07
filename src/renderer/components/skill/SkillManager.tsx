@@ -7,13 +7,12 @@ import {
   StarIcon,
   LayoutGridIcon,
   ListIcon,
-  DownloadIcon,
   FolderInputIcon,
   CheckSquareIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react";
-import { SkillIcon } from "./SkillIcon";
+import { SkillGalleryCard } from "./SkillGalleryCard";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { SkillFullDetailPage } from "./SkillFullDetailPage";
@@ -22,6 +21,9 @@ import { SkillStore } from "./SkillStore";
 import { SkillScanPreview } from "./SkillScanPreview";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import type { Skill, ScannedSkill } from "../../../shared/types";
+
+const MAX_STAGGERED_CARDS = 10;
+const CARD_STAGGER_MS = 50;
 
 // Lazy load list view for better performance
 // 懒加载列表视图以提升性能
@@ -55,17 +57,15 @@ export function SkillManager() {
   const filteredSkills = useMemo(() => {
     let result = skills;
     if (isDistributionView) {
-      result = [...skills].sort((a, b) => {
-        const aDeployed = deployedSkillNames.has(a.name) ? 1 : 0;
-        const bDeployed = deployedSkillNames.has(b.name) ? 1 : 0;
-        return bDeployed - aDeployed;
-      });
+      result = skills.filter((s) => deployedSkillNames.has(s.name));
     } else if (filterType === "favorites")
       result = result.filter((s) => s.is_favorite);
     else if (filterType === "installed")
       result = result.filter((s) => !!s.registry_slug);
     else if (filterType === "deployed")
       result = result.filter((s) => deployedSkillNames.has(s.name));
+    else if (filterType === "pending")
+      result = result.filter((s) => !deployedSkillNames.has(s.name));
     // Apply tag filter
     if (skillFilterTags.length > 0) {
       result = result.filter(
@@ -130,8 +130,11 @@ export function SkillManager() {
     setScannedSkills(result);
   };
 
-  const handleImportScanned = async (skillsToImport: ScannedSkill[]) => {
-    const result = await importScannedSkills(skillsToImport);
+  const handleImportScanned = async (
+    skillsToImport: ScannedSkill[],
+    userTagsByPath?: Record<string, string[]>,
+  ) => {
+    const result = await importScannedSkills(skillsToImport, userTagsByPath);
     // Refresh deployed status after import
     await loadDeployedStatus();
     return result.importedCount;
@@ -229,7 +232,9 @@ export function SkillManager() {
         ? t("skill.imported", "已导入")
         : filterType === "deployed"
           ? t("skill.deployed", "已分发")
-          : t("nav.mySkills", "我的 Skills");
+          : filterType === "pending"
+            ? t("skill.pendingDeployment", "待分发")
+            : t("nav.mySkills", "我的 Skills");
 
   const emptyStateTitle = isDistributionView
     ? t("skill.noSkills", "暂无技能")
@@ -239,7 +244,9 @@ export function SkillManager() {
         ? t("skill.noImportedSkills", "还没有已导入的技能")
         : filterType === "deployed"
           ? t("skill.noDeployedSkills", "还没有已分发的技能")
-          : t("skill.noSkills", "暂无技能");
+          : filterType === "pending"
+            ? t("skill.noPendingSkills", "还没有待分发的技能")
+            : t("skill.noSkills", "暂无技能");
 
   const emptyStateHint = isDistributionView
     ? t(
@@ -258,10 +265,15 @@ export function SkillManager() {
               "skill.noDeployedSkillsHint",
               "将技能分发到 Claude、Cursor 等平台后，这里会显示已分发项目。",
             )
-          : t(
-              "skill.noSkillsHint",
-              "从 Skill 商店添加、扫描本地环境或手动创建技能开始使用",
-            );
+          : filterType === "pending"
+            ? t(
+                "skill.noPendingSkillsHint",
+                "尚未分发到任何平台的 skill 会显示在这里。",
+              )
+            : t(
+                "skill.noSkillsHint",
+                "从 Skill 商店添加、扫描本地环境或手动创建技能开始使用",
+              );
 
   const headerSubtitle = isDistributionView
     ? t(
@@ -468,122 +480,26 @@ export function SkillManager() {
                     const isSelected = selectedSkillIds.has(skill.id);
 
                     return (
-                    <div
+                    <SkillGalleryCard
                       key={skill.id}
-                      onClick={() => {
-                        if (isSelectionMode) {
-                          toggleSkillSelection(skill.id);
-                          return;
-                        }
-                        selectSkill(skill.id);
-                      }}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                      className={`group relative bg-card border rounded-2xl p-5 transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-4 ${
-                        isSelectionMode
-                          ? isSelected
-                            ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
-                            : "border-border hover:border-primary/40"
-                          : "border-border hover:border-primary/50 hover:shadow-xl hover:-translate-y-1"
-                      }`}
-                    >
-                      {isSelectionMode && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSkillSelection(skill.id);
-                          }}
-                          className={`absolute right-4 top-4 z-10 p-2 rounded-lg border transition-colors ${
-                            isSelected
-                              ? "border-primary/40 bg-primary/15 text-primary"
-                              : "border-border bg-background/80 text-muted-foreground hover:text-foreground"
-                          }`}
-                          title={
-                            isSelected
-                              ? t("common.clear", "清空")
-                              : t("common.select", "选择")
-                          }
-                        >
-                          {isSelected ? (
-                            <CheckSquareIcon className="w-4 h-4" />
-                          ) : (
-                            <SquareIcon className="w-4 h-4" />
-                          )}
-                        </button>
-                      )}
-                      <div className="flex items-start justify-between mb-4">
-                        <SkillIcon
-                          iconUrl={skill.icon_url}
-                          iconEmoji={skill.icon_emoji}
-                          name={skill.name}
-                          size="lg"
-                          className="transition-transform group-hover:scale-110 group-hover:shadow-lg"
-                        />
-                        {!isSelectionMode && <div className="flex gap-1">
-                          {/* Quick install button */}
-                          {/* 快速安装按钮 */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setQuickInstallSkill(skill);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all active:scale-90"
-                            title={t("skill.quickInstall", "快速安装")}
-                          >
-                            <DownloadIcon className="w-4 h-4" />
-                          </button>
-                          {/* Favorite button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavorite(skill.id);
-                            }}
-                            className={`p-2 rounded-lg transition-all active:scale-90 ${
-                              skill.is_favorite
-                                ? "text-yellow-500 hover:text-yellow-600"
-                                : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-yellow-500 hover:bg-yellow-500/10"
-                            }`}
-                            title={
-                              skill.is_favorite
-                                ? t("skill.removeFavorite", "取消收藏")
-                                : t("skill.addFavorite", "添加收藏")
-                            }
-                          >
-                            <StarIcon
-                              className={`w-4 h-4 ${skill.is_favorite ? "fill-current" : ""}`}
-                            />
-                          </button>
-                          {/* Delete button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirm({
-                                isOpen: true,
-                                skillIds: [skill.id],
-                                skillNames: [skill.name],
-                              });
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all active:scale-90"
-                            title={t("skill.delete", "删除")}
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
-                        </div>}
-                      </div>
-
-                      <h3
-                        className="font-bold text-foreground text-lg mb-2 line-clamp-1 group-hover:text-primary transition-colors"
-                        title={skill.name}
-                      >
-                        {skill.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2 h-10 mb-4 leading-relaxed italic opacity-80">
-                        {skill.description ||
-                          t(
-                            "skill.defaultDescription",
-                            "技能描述，帮助 AI 理解何时使用此技能",
-                          )}
-                      </p>
-                    </div>
+                      animationDelayMs={
+                        Math.min(index, MAX_STAGGERED_CARDS) * CARD_STAGGER_MS
+                      }
+                      isSelected={isSelected}
+                      isSelectionMode={isSelectionMode}
+                      onDelete={(selectedSkill) =>
+                        setDeleteConfirm({
+                          isOpen: true,
+                          skillIds: [selectedSkill.id],
+                          skillNames: [selectedSkill.name],
+                        })
+                      }
+                      onOpen={selectSkill}
+                      onQuickInstall={setQuickInstallSkill}
+                      onToggleFavorite={toggleFavorite}
+                      onToggleSelection={toggleSkillSelection}
+                      skill={skill}
+                    />
                   )})}
                 </div>
               )}

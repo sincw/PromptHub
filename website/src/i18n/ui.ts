@@ -1,3 +1,5 @@
+import { HERO_VERSION_BADGE } from "../generated/release";
+
 export const languages = {
   zh: "简体中文",
   en: "English",
@@ -17,7 +19,7 @@ export const ui = {
       backers: "支持者",
     },
     hero: {
-      version: "v0.4.2 版已发布",
+      version: HERO_VERSION_BADGE.zh,
       titleStart: "AI Prompt & Skill",
       titleEnd: "一站式管理工作台",
       desc: "Prompt 管理 · 技能商店 · 多平台安装 · 版本控制 · 多模型测试 —— 管理 Prompt 与 SKILL.md，一键安装到 12+ AI 编程工具。",
@@ -207,7 +209,7 @@ export const ui = {
       backers: "Backers",
     },
     hero: {
-      version: "v0.4.2 Released",
+      version: HERO_VERSION_BADGE.en,
       titleStart: "AI Prompt & Skill",
       titleEnd: "Management Hub.",
       desc: "Prompt Management · Skill Store · Multi-Platform Install · Version Control · Multi-Model Arena — Manage prompts & SKILL.md, one-click install to 12+ AI coding tools.",

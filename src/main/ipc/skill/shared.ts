@@ -17,16 +17,43 @@ export async function ensureLocalRepoPath(
   const skill = db.getById(skillId);
   if (!skill) return null;
 
-  const repoPath =
-    skill.local_repo_path || SkillInstaller.getLocalRepoPath(skill.name);
+  const managedRepoPath = SkillInstaller.getLocalRepoPath(skill.name);
+  const candidateRepoPath =
+    skill.local_repo_path && SkillInstaller.isManagedRepoPath(skill.local_repo_path)
+      ? skill.local_repo_path
+      : managedRepoPath;
 
   try {
-    const stat = fs.statSync(repoPath);
+    const stat = fs.statSync(candidateRepoPath);
     if (stat.isDirectory()) {
-      return repoPath;
+      if (skill.local_repo_path !== candidateRepoPath) {
+        db.update(skillId, { local_repo_path: candidateRepoPath });
+      }
+      return candidateRepoPath;
     }
   } catch {
     // fall through to bootstrap from DB content
+  }
+
+  if (
+    skill.local_repo_path &&
+    !SkillInstaller.isManagedRepoPath(skill.local_repo_path)
+  ) {
+    try {
+      const externalRepoStat = fs.statSync(skill.local_repo_path);
+      if (externalRepoStat.isDirectory()) {
+        const savedRepoPath = await SkillInstaller.saveToLocalRepo(
+          skill.name,
+          skill.local_repo_path,
+        );
+        if (skill.local_repo_path !== savedRepoPath) {
+          db.update(skillId, { local_repo_path: savedRepoPath });
+        }
+        return savedRepoPath;
+      }
+    } catch {
+      // fall through to bootstrap from DB content
+    }
   }
 
   const repoContent = skill.instructions || skill.content || "";
@@ -92,7 +119,9 @@ export function resolveRepoPath(db: SkillDB, skillId: string): string | null {
   if (!skill) return null;
 
   const repoPath =
-    skill.local_repo_path || SkillInstaller.getLocalRepoPath(skill.name);
+    skill.local_repo_path && SkillInstaller.isManagedRepoPath(skill.local_repo_path)
+      ? skill.local_repo_path
+      : SkillInstaller.getLocalRepoPath(skill.name);
   try {
     const stat = fs.statSync(repoPath);
     if (stat.isDirectory()) {

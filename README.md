@@ -14,7 +14,7 @@
   [![GitHub Forks](https://img.shields.io/github/forks/legeling/PromptHub?style=for-the-badge&logo=github)](https://github.com/legeling/PromptHub/network/members)
   [![Downloads](https://img.shields.io/github/downloads/legeling/PromptHub/total?style=for-the-badge&logo=github&color=blue)](https://github.com/legeling/PromptHub/releases)
   
-  [![Version](https://img.shields.io/badge/version-v0.4.2-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
+  [![Version](https://img.shields.io/badge/version-v0.4.3-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
   [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=for-the-badge)](./LICENSE)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/legeling/PromptHub/pulls)
   
@@ -137,6 +137,15 @@
   <p><strong>主界面</strong></p>
   <img src="./docs/imgs/1-index.png" width="80%" alt="主界面"/>
   <br/><br/>
+  <p><strong>Skill 商店</strong></p>
+  <img src="./docs/imgs/10-skill-store.png" width="80%" alt="Skill 商店"/>
+  <br/><br/>
+  <p><strong>Skill 详情与平台安装</strong></p>
+  <img src="./docs/imgs/11-skill-platform-install.png" width="80%" alt="Skill 详情与平台安装"/>
+  <br/><br/>
+  <p><strong>Skill 文件编辑与版本对比</strong></p>
+  <img src="./docs/imgs/12-skill-files-version-diff.png" width="80%" alt="Skill 文件编辑与版本对比"/>
+  <br/><br/>
   <p><strong>画廊视图</strong></p>
   <img src="./docs/imgs/2-gallery-view.png" width="80%" alt="画廊视图"/>
   <br/><br/>
@@ -166,20 +175,46 @@
 
 ### 下载
 
-从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.4.2：
+从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.4.3：
 
 | 平台    | 下载                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.2-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.2-arm64.exe) |
-| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-x64.dmg)     |
-| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.4.2_amd64.deb)              |
+| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.3-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.3-arm64.exe) |
+| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.3-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.3-x64.dmg)     |
+| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.3-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.4.3_amd64.deb)              |
+
+> 💡 **架构选择建议**
+>
+> - **macOS**：Apple Silicon（M1/M2/M3/M4）下载 `arm64`，Intel Mac 下载 `x64`
+> - **Windows**：绝大多数电脑下载 `x64`；只有 Windows on ARM 设备才下载 `arm64`
 
 ### macOS 通过 Homebrew 安装
 
 ```bash
-brew tap legeling/tap
+brew tap legeling/tap   # 首次安装只需执行一次
 brew install --cask prompthub
 ```
+
+### Homebrew 用户升级
+
+如果你是通过 Homebrew 安装的，后续升级建议优先使用 Homebrew，不要和应用内更新混用：
+
+```bash
+brew update
+brew upgrade --cask prompthub
+```
+
+如果 Homebrew 已同步到新版本，但本地安装状态异常，可以重新安装当前版本：
+
+```bash
+brew reinstall --cask prompthub
+```
+
+> 💡 **说明**
+>
+> - **通过 DMG/EXE 手动安装的用户**：优先使用应用内「检查更新」或前往 Releases 手动下载
+> - **通过 Homebrew 安装的用户**：优先使用 `brew upgrade --cask prompthub`
+> - 混用两种升级方式可能导致 Homebrew 记录的版本与实际安装状态不一致
 
 ### macOS 首次启动
 
@@ -263,7 +298,7 @@ pnpm build
 | 前端     | React 18 + TypeScript 5 |
 | 样式     | TailwindCSS             |
 | 状态管理 | Zustand                 |
-| 本地存储 | SQLite                  |
+| 本地存储 | SQLite（WASM）          |
 | 构建工具 | Vite + electron-builder |
 
 ## 项目结构
@@ -314,7 +349,7 @@ PromptHub/
 
 ## 路线图
 
-### v0.4.2 (当前) 🎉
+### v0.4.3 (当前) 🎉
 
 - [x] **Skill 技能商店**：内置 20+ 精选 AI 代理技能，来自 Anthropic、OpenAI 等官方源
 - [x] **多平台安装**：支持一键安装 SKILL.md 到 Claude Code、Cursor、Windsurf、Codex 等 12+ 平台
@@ -327,7 +362,7 @@ PromptHub/
 
 ### v0.3.x
 
-- [x] **多层级文件夹**：支持无限层级文件夹嵌套与拖拽管理
+- [x] **多层级文件夹**：支持分层嵌套与拖拽管理
 - [x] **版本控制系统**：像管理代码一样管理 Prompt，支持历史对比与一键回滚
 - [x] **变量模板系统**：支持 `{{variable}}` 语法，自动生成填充表单，支持复制前预览
 - [x] **多模型实验室**：内置国内外主流服务商，支持多模型并行对比测试与响应时间分析
@@ -352,7 +387,7 @@ PromptHub/
 
 查看完整的更新日志：**[CHANGELOG.md](./CHANGELOG.md)**
 
-### 最新版本 v0.4.2 (2026-03-06)
+### 最新版本 v0.4.3 (2026-03-07)
 
 **修复 / Fixed**
 

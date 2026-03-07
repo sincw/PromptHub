@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { StarIcon, HashIcon, PlusIcon, LayoutGridIcon, LinkIcon, SettingsIcon, ChevronLeftIcon, ChevronRightIcon, XIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, MessageSquareTextIcon, CommandIcon, CuboidIcon, StoreIcon, GlobeIcon } from 'lucide-react';
+import { StarIcon, HashIcon, PlusIcon, LayoutGridIcon, LinkIcon, SettingsIcon, ChevronLeftIcon, ChevronRightIcon, XIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, MessageSquareTextIcon, CommandIcon, CuboidIcon, StoreIcon, GlobeIcon, Clock3Icon } from 'lucide-react';
 import { useFolderStore } from '../../stores/folder.store';
 import { usePromptStore } from '../../stores/prompt.store';
 import { useSettingsStore } from '../../stores/settings.store';
@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/ui.store';
 import { useSkillStore } from '../../stores/skill.store';
 import { ResourcesModal } from '../resources/ResourcesModal';
 import { FolderModal, PrivateFolderUnlockModal } from '../folder';
+import { getUserSkillTags } from '../skill/skill-modal-utils';
 import { useTranslation } from 'react-i18next';
 import type { Folder } from '../../../shared/types';
 import { BUILTIN_SKILL_REGISTRY } from '../../../shared/constants/skill-registry';
@@ -111,8 +112,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const setSkillFilterType = useSkillStore((state) => state.setFilterType);
   const skillFavoritesCount = useMemo(() => skills.filter(s => s.is_favorite).length, [skills]);
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
-  const skillDeployedCount = useMemo(() => skills.filter(s => deployedSkillNames.has(s.name)).length, [skills, deployedSkillNames]);
-  const distributionManageableCount = useMemo(() => skills.length, [skills]);
+  const skillDeployedCount = useMemo(
+    () => skills.filter((s) => deployedSkillNames.has(s.name)).length,
+    [skills, deployedSkillNames],
+  );
+  const skillPendingCount = useMemo(
+    () => skills.filter((s) => !deployedSkillNames.has(s.name)).length,
+    [skills, deployedSkillNames],
+  );
   const storeView = useSkillStore((state) => state.storeView);
   const setStoreView = useSkillStore((state) => state.setStoreView);
   const registrySkills = useSkillStore((state) => state.registrySkills);
@@ -124,24 +131,32 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const toggleSkillFilterTag = useSkillStore((state) => state.toggleFilterTag);
   const clearSkillFilterTags = useSkillStore((state) => state.clearFilterTags);
   const uniqueSkillTags = useMemo(() => {
-    // Only show user-added tags (tags that are NOT in original_tags)
-    const userTags: string[] = [];
-    for (const s of skills) {
-      const tags = s.tags || [];
-      const originalSet = new Set(s.original_tags || []);
-      for (const tag of tags) {
-        if (!originalSet.has(tag)) {
-          userTags.push(tag);
-        }
-      }
-    }
-    return [...new Set(userTags)];
+    return [...new Set(skills.flatMap((skill) => getUserSkillTags(skill)))].sort(
+      (a, b) => a.localeCompare(b),
+    );
   }, [skills]);
   const claudeCodeStoreCount = useMemo(
     () => remoteStoreEntries['claude-code']?.skills.length || 0,
     [remoteStoreEntries],
   );
   const [showAllSkillTags, setShowAllSkillTags] = useState(false);
+
+  const confirmLeaveDirtySkillEditor = useCallback(() => {
+    const hasUnsaved = (
+      window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean }
+    ).__PROMPTHUB_SKILL_EDITOR_DIRTY;
+
+    if (!hasUnsaved) {
+      return true;
+    }
+
+    return window.confirm(
+      t(
+        'skill.unsavedChangesWarning',
+        'You have unsaved changes. Discard and close?',
+      ),
+    );
+  }, [t]);
 
   // Skill tags section settings (mirrors prompt tags behavior)
   const skillTagsSectionHeight = useSettingsStore((state) => state.skillTagsSectionHeight);
@@ -733,6 +748,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               active={skillFilterType === 'all' && storeView === 'my-skills' && currentPage === 'home'}
               collapsed={isCollapsed}
               onClick={() => {
+                if (!confirmLeaveDirtySkillEditor()) return;
                 setSkillFilterType('all');
                 setStoreView('my-skills');
                 if (currentPage !== 'home') onNavigate('home');
@@ -745,6 +761,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               active={skillFilterType === 'favorites' && storeView === 'my-skills' && currentPage === 'home'}
               collapsed={isCollapsed}
               onClick={() => {
+                if (!confirmLeaveDirtySkillEditor()) return;
                 setSkillFilterType('favorites');
                 setStoreView('my-skills');
                 if (currentPage !== 'home') onNavigate('home');
@@ -752,12 +769,26 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             />
             <NavItem
               icon={<GlobeIcon className="w-5 h-5" />}
-              label={t('nav.distribution', '分发')}
-              count={distributionManageableCount}
+              label={t('skill.deployed', '已分发')}
+              count={skillDeployedCount}
               active={storeView === 'distribution' && currentPage === 'home'}
               collapsed={isCollapsed}
               onClick={() => {
+                if (!confirmLeaveDirtySkillEditor()) return;
                 setStoreView('distribution');
+                if (currentPage !== 'home') onNavigate('home');
+              }}
+            />
+            <NavItem
+              icon={<Clock3Icon className="w-5 h-5" />}
+              label={t('skill.pendingDeployment', '待分发')}
+              count={skillPendingCount}
+              active={skillFilterType === 'pending' && storeView === 'my-skills' && currentPage === 'home'}
+              collapsed={isCollapsed}
+              onClick={() => {
+                if (!confirmLeaveDirtySkillEditor()) return;
+                setSkillFilterType('pending');
+                setStoreView('my-skills');
                 if (currentPage !== 'home') onNavigate('home');
               }}
             />
@@ -768,6 +799,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
               active={storeView === 'store' && currentPage === 'home'}
               collapsed={isCollapsed}
               onClick={() => {
+                if (!confirmLeaveDirtySkillEditor()) return;
                 setStoreView('store');
                 selectStoreSource(selectedStoreSourceId || 'official');
                 if (currentPage !== 'home') onNavigate('home');
@@ -1039,7 +1071,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       {/* Bottom actions */}
       <div className="p-2 border-t border-sidebar-border space-y-1">
         <button
-          onClick={() => setIsResourcesOpen(true)}
+          onClick={() => {
+            if (!confirmLeaveDirtySkillEditor()) {
+              return;
+            }
+            setIsResourcesOpen(true);
+          }}
           title={isCollapsed ? t('nav.resources') : undefined}
           className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors`}
         >
@@ -1047,7 +1084,12 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           {!isCollapsed && <span>{t('nav.resources')}</span>}
         </button>
         <button
-          onClick={() => onNavigate('settings')}
+          onClick={() => {
+            if (!confirmLeaveDirtySkillEditor()) {
+              return;
+            }
+            onNavigate('settings');
+          }}
           title={isCollapsed ? t('header.settings') : undefined}
           className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm transition-colors ${currentPage === 'settings'
             ? 'bg-sidebar-accent text-sidebar-foreground'

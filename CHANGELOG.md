@@ -1,3 +1,34 @@
+## [0.4.3] - 2026-03-07
+
+### 修复 / Fixed
+
+- 🔄 **自动更新一致性修复**：停止覆盖已发布的同版本 release/tag，修复 Windows 与 macOS 自动更新下载完成后 SHA512 校验失败的问题
+  - **Auto-update Consistency Fix**: Stopped overwriting published releases/tags for the same version, fixing SHA512 mismatch errors after download on Windows and macOS
+- 🍺 **Homebrew 发布修复**：Homebrew Cask 发布改为使用专用 token，并补充下载重试，解决跨仓库推送 `403` 失败
+  - **Homebrew Publish Fix**: Switched Homebrew Cask publishing to a dedicated token with retry logic, fixing cross-repo `403` push failures
+- 🗂️ **Skill 版本管理交互修复**：文件编辑器中的版本管理改为显式开关，切换版本历史时不再触发原生确认框，统一改为自定义未保存弹窗
+  - **Skill Versioning UX Fix**: Skill file editor now uses an explicit version-management toggle and replaces native confirm dialogs with the app's custom unsaved-changes dialog
+- 🌍 **Skill 多语言补齐**：修复 Skill 详情、侧边栏、平台安装区在日语/繁中/德语/西语/法语下残留英文的问题
+  - **Skill i18n Completion**: Fixed remaining English strings in Skill detail, sidebar, and platform install panels for JA / ZH-TW / DE / ES / FR
+
+### 新功能 / Added
+
+- 🎨 **Skill 图标背景与预置图标**：支持为 Skill 图标单独设置背景色，并新增一批通用预置图标
+  - **Skill Icon Backgrounds & Presets**: Added configurable icon background colors and a broader set of reusable preset icons for Skills
+- 🏷️ **Skill 标签体系完善**：Skill 现支持 Prompt 同款标签交互，用户标签与导入来源标签分离，本地扫描时可直接填写导入标签
+  - **Improved Skill Tag System**: Skills now support Prompt-style tag editing, with user tags separated from imported source tags and import-time tagging for local scan flows
+- 🧭 **本地扫描卡片化**：本地扫描结果改为卡片式展示，便于批量筛选和导入
+  - **Card-based Local Scan**: Local scan results now use a card layout for easier bulk selection and import
+
+### 优化 / Improvements
+
+- 📚 **README 与多语言文档同步**：主 README 及多语言 README 更新到 `v0.4.3`，并补充 Homebrew 升级说明与 Skill 相关截图
+  - **README Sync**: Updated the main README and localized READMEs to `v0.4.3`, adding Homebrew upgrade guidance and Skill-related screenshots
+- 🧪 **发布前校验增强**：新增 manifest/hash/架构检查脚本，发布前验证安装包与更新元数据一致性
+  - **Release Verification**: Added manifest/hash/architecture verification scripts to validate installer assets and update metadata before release
+
+---
+
 ## [0.4.2] - 2026-03-06
 
 ### 修复 / Fixed

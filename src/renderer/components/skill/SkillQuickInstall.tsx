@@ -6,17 +6,13 @@ import {
   Loader2Icon,
   CuboidIcon,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { PlatformIcon } from "../ui/PlatformIcon";
+import { useState } from "react";
 import { useSettingsStore } from "../../stores/settings.store";
+import { useToast } from "../ui/Toast";
 import type { Skill } from "../../../shared/types";
-
-interface SkillPlatform {
-  id: string;
-  name: string;
-  icon: string;
-  skillsDir: { darwin: string; win32: string; linux: string };
-}
+import { PlatformIcon } from "../ui/PlatformIcon";
+import { getErrorMessage } from "./detail-utils";
+import { useSkillPlatform } from "./use-skill-platform";
 
 interface SkillQuickInstallProps {
   skill: Skill;
@@ -32,115 +28,41 @@ export function SkillQuickInstall({ skill, onClose }: SkillQuickInstallProps) {
   const skillInstallMethod = useSettingsStore(
     (state) => state.skillInstallMethod,
   );
-
-  const [supportedPlatforms, setSupportedPlatforms] = useState<SkillPlatform[]>(
-    [],
-  );
-  const [detectedPlatforms, setDetectedPlatforms] = useState<string[]>([]);
-  const [installStatus, setInstallStatus] = useState<Record<string, boolean>>(
-    {},
-  );
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(
-    new Set(),
-  );
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [installProgress, setInstallProgress] = useState<{
-    current: number;
-    total: number;
-  } | null>(null);
-
-  // Load platforms and status
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const platforms = await window.api.skill.getSupportedPlatforms();
-        setSupportedPlatforms(platforms);
-
-        const detected = await window.api.skill.detectPlatforms();
-        setDetectedPlatforms(detected);
-
-        const status = await window.api.skill.getMdInstallStatus(skill.name);
-        setInstallStatus(status);
-      } catch (e) {
-        console.error("Failed to load platforms:", e);
-      }
-    };
-    loadData();
-  }, [skill.name]);
-
-  // Available platforms (detected on system)
-  const availablePlatforms = useMemo(() => {
-    return supportedPlatforms.filter((p) => detectedPlatforms.includes(p.id));
-  }, [supportedPlatforms, detectedPlatforms]);
-
-  // Uninstalled platforms
-  const uninstalledPlatforms = useMemo(() => {
-    return availablePlatforms.filter((p) => !installStatus[p.id]);
-  }, [availablePlatforms, installStatus]);
-
-  const togglePlatform = useCallback((platformId: string) => {
-    setSelectedPlatforms((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(platformId)) {
-        newSet.delete(platformId);
-      } else {
-        newSet.add(platformId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const selectAll = useCallback(() => {
-    setSelectedPlatforms(new Set(uninstalledPlatforms.map((p) => p.id)));
-  }, [uninstalledPlatforms]);
+  const { showToast } = useToast();
+  const [isClosingSoon, setIsClosingSoon] = useState(false);
+  const {
+    availablePlatforms,
+    batchInstall,
+    installProgress,
+    installStatus,
+    isBatchInstalling,
+    selectedPlatforms,
+    selectAllPlatforms,
+    togglePlatformSelection,
+    uninstalledPlatforms,
+  } = useSkillPlatform(skill, skillInstallMethod);
 
   const handleInstall = async () => {
-    if (selectedPlatforms.size === 0) return;
-
-    setIsInstalling(true);
-    setInstallProgress({ current: 0, total: selectedPlatforms.size });
+    if (selectedPlatforms.size === 0 || isClosingSoon) return;
 
     try {
-      const skillMdContent = await window.api.skill.export(skill.id, "skillmd");
-      const platformIds = Array.from(selectedPlatforms);
-
-      for (let i = 0; i < platformIds.length; i++) {
-        const platformId = platformIds[i];
-        setInstallProgress({ current: i + 1, total: platformIds.length });
-
-        try {
-          if (skillInstallMethod === "symlink") {
-            await window.api.skill.installMdSymlink(
-              skill.name,
-              skillMdContent,
-              platformId,
-            );
-          } else {
-            await window.api.skill.installMd(
-              skill.name,
-              skillMdContent,
-              platformId,
-            );
-          }
-          setInstallStatus((prev) => ({ ...prev, [platformId]: true }));
-        } catch (e) {
-          console.error(`Failed to install to ${platformId}:`, e);
-        }
+      const result = await batchInstall();
+      if (result.successCount > 0) {
+        showToast(
+          `${t("skill.installSuccess", "Operation successful")} ${result.successCount}/${result.totalCount}`,
+          "success",
+        );
+        setIsClosingSoon(true);
+        setTimeout(() => {
+          onClose();
+        }, 1000);
       }
-
-      // Clear selection after install
-      setSelectedPlatforms(new Set());
-
-      // Close modal after short delay to show success
-      setTimeout(() => {
-        onClose();
-      }, 1000);
-    } catch (e) {
-      console.error("Install failed:", e);
-      alert(`${t("skill.updateFailed")}: ${e}`);
-    } finally {
-      setIsInstalling(false);
-      setInstallProgress(null);
+    } catch (error) {
+      console.error("Install failed:", error);
+      showToast(
+        `${t("skill.updateFailed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     }
   };
 
@@ -199,9 +121,9 @@ export function SkillQuickInstall({ skill, onClose }: SkillQuickInstallProps) {
                   {t("skill.selectPlatforms", "选择要安装的平台")}
                 </p>
                 <button
-                  onClick={selectAll}
+                  onClick={selectAllPlatforms}
                   className="text-xs text-primary hover:underline"
-                  disabled={isInstalling}
+                  disabled={isBatchInstalling}
                 >
                   {t("skill.selectAll")}
                 </button>
@@ -216,8 +138,8 @@ export function SkillQuickInstall({ skill, onClose }: SkillQuickInstallProps) {
                     <div
                       key={platform.id}
                       onClick={() => {
-                        if (!isInstalled && !isInstalling) {
-                          togglePlatform(platform.id);
+                        if (!isInstalled && !isBatchInstalling) {
+                          togglePlatformSelection(platform.id);
                         }
                       }}
                       className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
@@ -226,7 +148,7 @@ export function SkillQuickInstall({ skill, onClose }: SkillQuickInstallProps) {
                           : isSelected
                             ? "bg-primary/10 border-primary cursor-pointer"
                             : "bg-accent/30 border-border hover:bg-accent/50 cursor-pointer"
-                      } ${isInstalling && !isInstalled ? "opacity-60 cursor-wait" : ""}`}
+                      } ${isBatchInstalling && !isInstalled ? "opacity-60 cursor-wait" : ""}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
@@ -269,10 +191,10 @@ export function SkillQuickInstall({ skill, onClose }: SkillQuickInstallProps) {
           <div className="p-5 border-t border-border shrink-0">
             <button
               onClick={handleInstall}
-              disabled={selectedPlatforms.size === 0 || isInstalling}
+              disabled={selectedPlatforms.size === 0 || isBatchInstalling}
               className="w-full py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors hover:bg-primary/90"
             >
-              {isInstalling ? (
+              {isBatchInstalling ? (
                 <>
                   <Loader2Icon className="w-4 h-4 animate-spin" />
                   {installProgress

@@ -7,22 +7,10 @@ import { useSettingsStore } from '../../stores/settings.store';
 import { useToast } from '../ui/Toast';
 import { SkillQuickInstall } from './SkillQuickInstall';
 import type { RegistrySkill, Skill } from '../../../shared/types';
+import { getErrorMessage, renderImmersiveSegments, stripFrontmatter } from './detail-utils';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
-
-/**
- * Strip YAML frontmatter from SKILL.md content
- * 剥离 SKILL.md 中的 YAML frontmatter
- */
-function stripFrontmatter(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed.startsWith('---')) return trimmed;
-  const endIdx = trimmed.indexOf('---', 3);
-  if (endIdx === -1) return trimmed;
-  const body = trimmed.slice(endIdx + 3).trim();
-  return body;
-}
 
 interface SkillStoreDetailProps {
   skill: RegistrySkill;
@@ -51,35 +39,6 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
   const [showTranslation, setShowTranslation] = useState(false);
   const [deploySkill, setDeploySkill] = useState<Skill | null>(null);
 
-  // Render immersive translation: split interleaved <t>...</t> lines
-  const renderImmersive = useCallback((raw: string) => {
-    const lines = raw.split('\n');
-    const segments: { type: 'original' | 'translation'; text: string }[] = [];
-    let buf: string[] = [];
-    let currentType: 'original' | 'translation' = 'original';
-
-    const flush = () => {
-      const joined = buf.join('\n');
-      if (joined.trim()) segments.push({ type: currentType, text: joined });
-      buf = [];
-    };
-
-    for (const line of lines) {
-      const tMatch = line.match(/^<t>(.*)<\/t>$/);
-      if (tMatch) {
-        flush();
-        currentType = 'translation';
-        buf.push(tMatch[1]);
-        flush();
-        currentType = 'original';
-      } else {
-        buf.push(line);
-      }
-    }
-    flush();
-    return segments;
-  }, []);
-
   const targetLang = useMemo(() => {
     const lang = (i18n.language || '').toLowerCase();
     return lang.startsWith('zh') ? '中文' : lang.startsWith('ja') ? '日本語' : lang.startsWith('ko') ? '한국어' : 'English';
@@ -100,11 +59,11 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
       await translateContent(textToTranslate, translationCacheKey, targetLang);
       setShowTranslation(true);
       showToast(t('skill.translateSuccess', 'Translation complete'), 'success');
-    } catch (e: any) {
-      if (e?.message === 'AI_NOT_CONFIGURED') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'AI_NOT_CONFIGURED') {
         showToast(t('skill.aiNotConfigured', 'Please configure AI model in Settings first'), 'error');
       } else {
-        showToast(t('skill.translateFailed', 'Translation failed') + `: ${e}`, 'error');
+        showToast(`${t('skill.translateFailed', 'Translation failed')}: ${getErrorMessage(error)}`, 'error');
       }
     } finally {
       setIsTranslating(false);
@@ -120,11 +79,11 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
       await translateContent(textToTranslate, translationCacheKey, targetLang, { forceRefresh: true });
       setShowTranslation(true);
       showToast(t('skill.translateRefreshed', 'Translation refreshed'), 'success');
-    } catch (e: any) {
-      if (e?.message === 'AI_NOT_CONFIGURED') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'AI_NOT_CONFIGURED') {
         showToast(t('skill.aiNotConfigured', 'Please configure AI model in Settings first'), 'error');
       } else {
-        showToast(t('skill.translateFailed', 'Translation failed') + `: ${e}`, 'error');
+        showToast(`${t('skill.translateFailed', 'Translation failed')}: ${getErrorMessage(error)}`, 'error');
       }
     } finally {
       setIsTranslating(false);
@@ -132,6 +91,9 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
   };
 
   const handleInstall = async () => {
+    if (isInstalling || installed) {
+      return;
+    }
     setIsInstalling(true);
     try {
       const result = await installFromRegistry(skill.slug);
@@ -182,6 +144,7 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
           <SkillIcon
             iconUrl={skill.icon_url}
             iconEmoji={skill.icon_emoji}
+            backgroundColor={skill.icon_background}
             name={skill.name}
             size="lg"
           />
@@ -255,7 +218,7 @@ export function SkillStoreDetail({ skill, isInstalled, onClose }: SkillStoreDeta
             if (showTranslation && cachedTranslation) {
               // Immersive mode: interleaved original + translation
               if (translationMode === 'immersive') {
-                const segments = renderImmersive(cachedTranslation);
+                const segments = renderImmersiveSegments(cachedTranslation);
                 return (
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
                     <div className="markdown-body">

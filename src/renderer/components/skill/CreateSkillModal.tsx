@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
   XIcon,
+  HashIcon,
   GithubIcon,
   SearchIcon,
   EditIcon,
@@ -13,9 +14,6 @@ import {
   AlertCircleIcon,
   BrainIcon,
   UploadIcon,
-  TagIcon,
-  PlusIcon,
-  XCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   SaveIcon,
@@ -37,6 +35,7 @@ import {
 import { BUILTIN_SKILL_REGISTRY } from "../../../shared/constants/skill-registry";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { SkillIconPicker } from "./SkillIconPicker";
+import { getExistingSkillTags } from "./skill-modal-utils";
 import type { ScannedSkill } from "../../../shared/types/skill";
 
 interface CreateSkillModalProps {
@@ -79,6 +78,9 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const [author, setAuthor] = useState("");
   const [iconUrl, setIconUrl] = useState<string | undefined>(undefined);
   const [iconEmoji, setIconEmoji] = useState<string | undefined>(undefined);
+  const [iconBackground, setIconBackground] = useState<string | undefined>(
+    undefined,
+  );
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
@@ -100,6 +102,12 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const [scanDone, setScanDone] = useState(false);
   const [importingCount, setImportingCount] = useState(0);
   const [scanImportNotice, setScanImportNotice] = useState<string | null>(null);
+  const [scanTagDrafts, setScanTagDrafts] = useState<Record<string, string[]>>(
+    {},
+  );
+  const [scanTagInputs, setScanTagInputs] = useState<Record<string, string>>(
+    {},
+  );
 
   const installedScanPaths = useMemo(() => {
     return new Set(
@@ -123,6 +131,10 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     [annotatedScanResults],
   );
   const importedScanCount = annotatedScanResults.length - selectableScanResults.length;
+  const existingTags = useMemo(
+    () => getExistingSkillTags(existingSkills),
+    [existingSkills],
+  );
 
   // Get default chat model for AI generation
   // 获取默认对话模型用于 AI 生成
@@ -166,7 +178,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
       description.trim() !== "" ||
       instructions.trim() !== "" ||
       Boolean(iconUrl) ||
-      Boolean(iconEmoji)
+      Boolean(iconEmoji) ||
+      Boolean(iconBackground)
     );
   };
 
@@ -190,6 +203,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setAuthor("");
     setIconUrl(undefined);
     setIconEmoji(undefined);
+    setIconBackground(undefined);
     setTags([]);
     setTagInput("");
     setInstrTab("edit");
@@ -202,6 +216,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setScanDone(false);
     setImportingCount(0);
     setScanImportNotice(null);
+    setScanTagDrafts({});
+    setScanTagInputs({});
     onClose();
   };
 
@@ -392,7 +408,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
         protocol_type: "skill",
         source_url: githubUrl,
         is_favorite: false,
-        tags: ["github"],
+        tags: [],
+        original_tags: ["github"],
       });
 
       if (!createdSkill) {
@@ -436,6 +453,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
         author: author || undefined,
         icon_url: iconUrl,
         icon_emoji: iconEmoji,
+        icon_background: iconBackground,
       });
 
       if (!createdSkill) {
@@ -465,6 +483,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setScanImportNotice(null);
     setScanResults([]);
     setSelectedScanItems(new Set());
+    setScanTagDrafts({});
+    setScanTagInputs({});
 
     try {
       const allResults: ScannedSkill[] =
@@ -525,6 +545,27 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     }
   };
 
+  const handleAddScanTag = (localPath: string) => {
+    const nextTag = (scanTagInputs[localPath] || "").trim().toLowerCase();
+    if (!nextTag) return;
+
+    setScanTagDrafts((prev) => {
+      const existing = prev[localPath] || [];
+      if (existing.includes(nextTag)) {
+        return prev;
+      }
+      return { ...prev, [localPath]: [...existing, nextTag] };
+    });
+    setScanTagInputs((prev) => ({ ...prev, [localPath]: "" }));
+  };
+
+  const handleRemoveScanTag = (localPath: string, tag: string) => {
+    setScanTagDrafts((prev) => ({
+      ...prev,
+      [localPath]: (prev[localPath] || []).filter((item) => item !== tag),
+    }));
+  };
+
   // Import selected scanned skills
   // 导入选中的扫描到的技能（使用 store 的 importScannedSkills 确保 name 校验 + saveToRepo）
   const handleImportSelected = async () => {
@@ -539,7 +580,10 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setImportingCount(0);
 
     try {
-      const importResult = await importScannedSkills(toImport);
+      const userTagsByPath = Object.fromEntries(
+        toImport.map((skill) => [skill.localPath, scanTagDrafts[skill.localPath] || []]),
+      );
+      const importResult = await importScannedSkills(toImport, userTagsByPath);
       setImportingCount(importResult.importedCount);
 
       const summary = t(
@@ -950,9 +994,15 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                 name={name}
                 iconUrl={iconUrl}
                 iconEmoji={iconEmoji}
-                onChange={({ iconUrl: nextIconUrl, iconEmoji: nextIconEmoji }) => {
+                iconBackground={iconBackground}
+                onChange={({
+                  iconUrl: nextIconUrl,
+                  iconEmoji: nextIconEmoji,
+                  iconBackground: nextIconBackground,
+                }) => {
                   setIconUrl(nextIconUrl);
                   setIconEmoji(nextIconEmoji);
+                  setIconBackground(nextIconBackground);
                 }}
               />
 
@@ -985,42 +1035,69 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
               </div>
 
               {/* Tags */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  {t("skill.tags", "Tags")}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  {t("skill.tagsOptional", "Tags (Optional)")}
                 </label>
                 <div className="flex flex-wrap gap-2 mb-2">
                   {tags.map((tag) => (
                     <span
                       key={tag}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary text-white"
                     >
-                      <TagIcon className="w-3 h-3" />
+                      <HashIcon className="w-3 h-3" />
                       {tag}
                       <button
+                        type="button"
                         onClick={() => handleRemoveTag(tag)}
-                        className="ml-0.5 hover:text-destructive transition-colors"
+                        className="ml-1 hover:text-white/70"
                       >
-                        <XCircleIcon className="w-3.5 h-3.5" />
+                        <XIcon className="w-3 h-3" />
                       </button>
                     </span>
                   ))}
                 </div>
+                {existingTags.length > 0 && (
+                  <div className="mb-2">
+                    <div className="text-xs text-muted-foreground mb-1.5">
+                      {t("skill.selectExistingTags", "Select existing tags:")}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {existingTags
+                        .filter((existingTag) => !tags.includes(existingTag))
+                        .map((existingTag) => (
+                          <button
+                            key={existingTag}
+                            type="button"
+                            onClick={() => setTags([...tags, existingTag])}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted hover:bg-accent transition-colors"
+                          >
+                            <HashIcon className="w-3 h-3" />
+                            {existingTag}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={handleTagKeyDown}
-                    placeholder={t("skill.addTag", "Add tag")}
-                    className="flex-1 px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    placeholder={t(
+                      "skill.enterTagHint",
+                      "Enter new tag and press Enter",
+                    )}
+                    className="flex-1 h-10 px-4 rounded-xl bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background transition-all duration-200"
                   />
                   <button
+                    type="button"
                     onClick={handleAddTag}
                     disabled={!tagInput.trim()}
                     className="px-3 py-2 bg-accent hover:bg-accent/80 text-foreground rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                   >
-                    <PlusIcon className="w-4 h-4" />
+                    {t("skill.addTag", "Add tag")}
                   </button>
                 </div>
               </div>
@@ -1370,82 +1447,175 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                     )}
                   </div>
 
-                  {/* Scrollable results list */}
-                  <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
+                  {/* Scrollable results cards */}
+                  <div className="max-h-[480px] overflow-y-auto pr-1">
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                     {annotatedScanResults.map((skill) => {
                       const isSelected = selectedScanItems.has(skill.filePath);
+                      const shortPath = (() => {
+                        const parts = skill.localPath
+                          .replace(/\\/g, "/")
+                          .split("/")
+                          .filter(Boolean);
+                        return parts.length >= 2
+                          ? `.../${parts[parts.length - 2]}/${parts[parts.length - 1]}`
+                          : skill.localPath;
+                      })();
                       return (
                         <button
                           key={skill.filePath}
                           onClick={() =>
                             !skill.isImported && toggleScanItem(skill.filePath)
                           }
-                          className={`w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors ${
+                          className={`w-full rounded-2xl border p-4 text-left transition-all shadow-sm ${
                             skill.isImported
-                              ? "border-border bg-card opacity-55 cursor-not-allowed"
+                              ? "border-border bg-muted/30 opacity-70 cursor-not-allowed"
                               : isSelected
-                              ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
-                              : "border-border bg-card hover:bg-accent/50"
+                                ? "border-primary/40 bg-primary/5 shadow-primary/10"
+                                : "border-border bg-card hover:border-primary/30 hover:shadow-md"
                           }`}
                           disabled={skill.isImported}
                         >
-                          {/* Checkbox */}
-                          <div className="mt-0.5 shrink-0">
-                            {skill.isImported || isSelected ? (
-                              <CheckSquareIcon className="w-4 h-4 text-primary" />
-                            ) : (
-                              <SquareIcon className="w-4 h-4 text-muted-foreground" />
-                            )}
-                          </div>
-                          {/* Skill info */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <FileTextIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="font-medium text-sm truncate">
-                                {skill.name}
-                              </span>
-                              {skill.isImported && (
-                                <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
-                                  {t("skill.importedBadge", "Already Imported")}
-                                </span>
-                              )}
-                              <span className="text-xs text-muted-foreground">
-                                v{skill.version}
-                              </span>
+                          <div className="flex items-start gap-3">
+                            <div
+                              className={`mt-0.5 flex h-10 w-10 items-center justify-center rounded-xl ${
+                                skill.isImported
+                                  ? "bg-accent text-muted-foreground"
+                                  : "bg-primary/10 text-primary"
+                              }`}
+                            >
+                              <FileTextIcon className="w-5 h-5" />
                             </div>
-                            <p className="text-xs text-muted-foreground line-clamp-1 mb-1">
-                              {skill.description}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground/70 font-mono truncate mb-1">
-                              {skill.localPath}
-                            </p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {skill.platforms.map((p) => (
-                                <span
-                                  key={p}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                                >
-                                  {p}
-                                </span>
-                              ))}
-                              {skill.author && skill.author !== "Local" && (
-                                <span className="text-[10px] text-muted-foreground">
-                                  {t("skill.author", "Author")}: {skill.author}
-                                </span>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="font-semibold text-sm truncate">
+                                      {skill.name}
+                                    </h4>
+                                    {skill.version && (
+                                      <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                                        v{skill.version}
+                                      </span>
+                                    )}
+                                    {skill.isImported && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
+                                        {t("skill.importedBadge", "Already Imported")}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {skill.author && (
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                      {skill.author}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="shrink-0 pt-0.5">
+                                  {skill.isImported || isSelected ? (
+                                    <CheckSquareIcon className="w-4 h-4 text-primary" />
+                                  ) : (
+                                    <SquareIcon className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                              </div>
+
+                              {skill.description && (
+                                <p className="mt-3 text-xs leading-5 text-muted-foreground line-clamp-3">
+                                  {skill.description}
+                                </p>
                               )}
-                              {skill.tags.slice(0, 3).map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="inline-flex px-1.5 py-0.5 text-[10px] rounded bg-muted text-muted-foreground"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
+
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {skill.platforms.map((p) => (
+                                  <span
+                                    key={p}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-primary/8 text-primary/80"
+                                  >
+                                    {p}
+                                  </span>
+                                ))}
+                              </div>
+
+                              {!skill.isImported && isSelected && (
+                                <div className="mt-4 rounded-xl border border-border bg-accent/20 p-3 space-y-2">
+                                  <div className="text-[11px] font-medium text-foreground">
+                                    {t("skill.importTags", "导入标签")}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {(scanTagDrafts[skill.localPath] || []).map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-white"
+                                      >
+                                        <HashIcon className="w-3 h-3" />
+                                        {tag}
+                                        <button
+                                          type="button"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            handleRemoveScanTag(skill.localPath, tag);
+                                          }}
+                                          className="hover:text-white/70"
+                                        >
+                                          <XIcon className="w-3 h-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={scanTagInputs[skill.localPath] || ""}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onChange={(event) =>
+                                        setScanTagInputs((prev) => ({
+                                          ...prev,
+                                          [skill.localPath]: event.target.value,
+                                        }))
+                                      }
+                                      onKeyDown={(event) => {
+                                        if (event.key === "Enter") {
+                                          event.preventDefault();
+                                          event.stopPropagation();
+                                          handleAddScanTag(skill.localPath);
+                                        }
+                                      }}
+                                      placeholder={t(
+                                        "skill.enterTagHint",
+                                        "输入新标签后按回车",
+                                      )}
+                                      className="flex-1 h-9 rounded-xl border-0 bg-background px-3 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        handleAddScanTag(skill.localPath);
+                                      }}
+                                      disabled={!scanTagInputs[skill.localPath]?.trim()}
+                                      className="rounded-xl bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-card disabled:opacity-50"
+                                    >
+                                      {t("skill.addTag", "添加标签")}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div
+                                className="mt-4 flex items-center gap-1 text-[11px] text-muted-foreground/60 font-mono truncate"
+                                title={skill.localPath}
+                              >
+                                <FolderOpenIcon className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{shortPath}</span>
+                              </div>
                             </div>
                           </div>
                         </button>
                       );
                     })}
+                    </div>
                   </div>
 
                   {/* Rescan button */}

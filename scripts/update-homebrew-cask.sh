@@ -13,27 +13,49 @@ VERSION="${1:?Usage: $0 <version>}"
 REPO="legeling/PromptHub"
 TAP_REPO="legeling/homebrew-tap"
 CASK_FILE="Casks/prompthub.rb"
+TAP_BRANCH="${HOMEBREW_TAP_BRANCH:-main}"
+TAP_TOKEN="${HOMEBREW_TAP_TOKEN:-}"
+
+if [ -z "$TAP_TOKEN" ]; then
+  echo "HOMEBREW_TAP_TOKEN is not set; skipping Homebrew cask update."
+  exit 0
+fi
 
 echo "Updating Homebrew Cask for PromptHub v${VERSION}..."
+
+download_with_retry() {
+  local url="$1"
+  local output="$2"
+  local label="$3"
+
+  for attempt in 1 2 3 4 5; do
+    echo "Downloading ${label} (attempt ${attempt}/5)..."
+    if curl -fL --retry 3 --retry-delay 2 -o "$output" "$url"; then
+      return 0
+    fi
+    sleep 10
+  done
+
+  echo "Failed to download ${label} after multiple attempts: ${url}"
+  return 1
+}
 
 # Download DMGs and compute SHA256
 ARM64_URL="https://github.com/${REPO}/releases/download/v${VERSION}/PromptHub-${VERSION}-arm64.dmg"
 X64_URL="https://github.com/${REPO}/releases/download/v${VERSION}/PromptHub-${VERSION}-x64.dmg"
 
-echo "Downloading arm64 DMG..."
-curl -fSL -o /tmp/prompthub-arm64.dmg "$ARM64_URL"
+download_with_retry "$ARM64_URL" /tmp/prompthub-arm64.dmg "arm64 DMG"
 ARM64_SHA=$(shasum -a 256 /tmp/prompthub-arm64.dmg | awk '{print $1}')
 echo "arm64 SHA256: $ARM64_SHA"
 
-echo "Downloading x64 DMG..."
-curl -fSL -o /tmp/prompthub-x64.dmg "$X64_URL"
+download_with_retry "$X64_URL" /tmp/prompthub-x64.dmg "x64 DMG"
 X64_SHA=$(shasum -a 256 /tmp/prompthub-x64.dmg | awk '{print $1}')
 echo "x64 SHA256: $X64_SHA"
 
 # Clone tap repo
 WORK_DIR=$(mktemp -d)
 echo "Cloning ${TAP_REPO} to ${WORK_DIR}..."
-git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" "$WORK_DIR"
+git clone "https://x-access-token:${TAP_TOKEN}@github.com/${TAP_REPO}.git" "$WORK_DIR"
 
 # Generate updated Cask formula
 cat > "${WORK_DIR}/${CASK_FILE}" <<EOF
@@ -77,8 +99,12 @@ cd "$WORK_DIR"
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 git add "${CASK_FILE}"
-git commit -m "Update PromptHub to ${VERSION}" || echo "No changes to commit"
-git push origin main
+if git diff --cached --quiet; then
+  echo "Homebrew cask is already up to date."
+else
+  git commit -m "Update PromptHub to ${VERSION}"
+  git push origin "${TAP_BRANCH}"
+fi
 
 # Cleanup
 rm -rf "$WORK_DIR" /tmp/prompthub-arm64.dmg /tmp/prompthub-x64.dmg

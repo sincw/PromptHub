@@ -10,6 +10,7 @@ import type {
   SkillStoreSource,
   SkillMCPConfig,
   MCPServerConfig,
+  SkillChatParams,
 } from "../../shared/types";
 import {
   BUILTIN_SKILL_REGISTRY,
@@ -18,7 +19,12 @@ import {
 import { chatCompletion } from "../services/ai";
 import { useSettingsStore } from "./settings.store";
 
-export type SkillFilterType = "all" | "favorites" | "installed" | "deployed";
+export type SkillFilterType =
+  | "all"
+  | "favorites"
+  | "installed"
+  | "deployed"
+  | "pending";
 export type SkillViewMode = "gallery" | "list";
 export type SkillStoreView = "my-skills" | "distribution" | "store";
 // Translation cache constraints
@@ -26,6 +32,15 @@ export type SkillStoreView = "my-skills" | "distribution" | "store";
 const TRANSLATION_CACHE_MAX_SIZE = 200;
 const TRANSLATION_CACHE_EVICT_COUNT = 50;
 const TRANSLATION_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+const REMOTE_CONTENT_CONCURRENCY = 6;
+const REMOTE_REPO_SYNC_CONCURRENCY = 6;
+
+interface ParsedGitHubSkillLocation {
+  owner: string;
+  repo: string;
+  branch: string;
+  directoryPath: string;
+}
 
 interface TranslationCacheEntry {
   value: string;
@@ -63,6 +78,206 @@ function pruneTranslationCache(
   }
 
   return Object.fromEntries(entries);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function parseJson<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function isGitHubTreeEntry(
+  value: unknown,
+): value is { path: string; type: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "path" in value &&
+    typeof value.path === "string" &&
+    "type" in value &&
+    typeof value.type === "string"
+  );
+}
+
+function parseGitHubSkillLocation(
+  sourceUrl?: string,
+  contentUrl?: string,
+): ParsedGitHubSkillLocation | null {
+  if (sourceUrl) {
+    try {
+      const parsed = new URL(sourceUrl);
+      if (parsed.hostname.toLowerCase() === "github.com") {
+        const parts = parsed.pathname.split("/").filter(Boolean);
+        if (parts.length >= 5 && parts[2] === "tree") {
+          return {
+            owner: parts[0],
+            repo: parts[1],
+            branch: parts[3],
+            directoryPath: parts.slice(4).join("/"),
+          };
+        }
+      }
+    } catch {
+      // Ignore invalid source URL and try contentUrl fallback.
+    }
+  }
+
+  if (contentUrl) {
+    try {
+      const parsed = new URL(contentUrl);
+      if (parsed.hostname.toLowerCase() === "raw.githubusercontent.com") {
+        const parts = parsed.pathname.split("/").filter(Boolean);
+        if (parts.length >= 5) {
+          return {
+            owner: parts[0],
+            repo: parts[1],
+            branch: parts[2],
+            directoryPath: parts.slice(3, -1).join("/"),
+          };
+        }
+      }
+    } catch {
+      // Ignore invalid content URL.
+    }
+  }
+
+  return null;
+}
+
+function shouldSyncRemoteRepoFile(relativePath: string): boolean {
+  const ext = relativePath.includes(".")
+    ? relativePath.slice(relativePath.lastIndexOf(".")).toLowerCase()
+    : "";
+  return (
+    ext === "" ||
+    [
+      ".md",
+      ".mdx",
+      ".txt",
+      ".json",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".ini",
+      ".cfg",
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".ts",
+      ".tsx",
+      ".jsx",
+      ".py",
+      ".rb",
+      ".go",
+      ".rs",
+      ".java",
+      ".kt",
+      ".swift",
+      ".sh",
+      ".bash",
+      ".zsh",
+      ".ps1",
+      ".html",
+      ".css",
+      ".svg",
+      ".xml",
+      ".sql",
+      ".r",
+      ".lua",
+      ".php",
+      ".c",
+      ".cpp",
+      ".h",
+      ".hpp",
+      ".cs",
+      ".lock",
+      ".gitignore",
+      ".env",
+    ].includes(ext)
+  );
+}
+
+async function syncRemoteGitHubSkillRepo(
+  skillId: string,
+  sourceUrl?: string,
+  contentUrl?: string,
+): Promise<void> {
+  const location = parseGitHubSkillLocation(sourceUrl, contentUrl);
+  if (!location || !location.directoryPath) {
+    return;
+  }
+
+  const treeRaw = await window.api.skill.fetchRemoteContent(
+    `https://api.github.com/repos/${location.owner}/${location.repo}/git/trees/${location.branch}?recursive=1`,
+  );
+  const treeData = parseJson<{ tree?: Array<{ path?: string; type?: string }> }>(
+    treeRaw || "{}",
+    {},
+  );
+  const directoryPrefix = `${location.directoryPath}/`;
+  const files = Array.isArray(treeData.tree)
+    ? treeData.tree.filter(
+        (entry): entry is { path: string; type: string } =>
+          isGitHubTreeEntry(entry) &&
+          entry.type === "blob" &&
+          entry.path.startsWith(directoryPrefix),
+      )
+    : [];
+
+  await runWithConcurrency(
+    files,
+    REMOTE_REPO_SYNC_CONCURRENCY,
+    async (file) => {
+      const relativePath = file.path.slice(directoryPrefix.length);
+      if (!relativePath || !shouldSyncRemoteRepoFile(relativePath)) {
+        return;
+      }
+      const rawUrl = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${location.branch}/${file.path}`;
+      const content = await window.api.skill.fetchRemoteContent(rawUrl);
+      await window.api.skill.writeLocalFile(skillId, relativePath, content);
+    },
+  );
+}
+
+function validateStoreSourceUrl(url: string): string {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error("INVALID_STORE_SOURCE_URL");
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("STORE_SOURCE_HTTPS_REQUIRED");
+  }
+
+  return parsedUrl.toString();
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      await worker(items[currentIndex], currentIndex);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runWorker()),
+  );
 }
 
 interface SkillState {
@@ -107,7 +322,10 @@ interface SkillState {
   toggleFavorite: (id: string) => Promise<void>;
   scanLocalSkills: () => Promise<number>;
   scanLocalPreview: (customPaths?: string[]) => Promise<ScannedSkill[]>;
-  importScannedSkills: (skills: ScannedSkill[]) => Promise<ScannedImportResult>;
+  importScannedSkills: (
+    skills: ScannedSkill[],
+    userTagsByPath?: Record<string, string[]>,
+  ) => Promise<ScannedImportResult>;
   installToPlatform: (
     platform: "claude" | "cursor",
     name: string,
@@ -165,9 +383,6 @@ interface SkillState {
   // 已分发到平台的技能名称集合
   deployedSkillNames: Set<string>;
   loadDeployedStatus: () => Promise<void>;
-
-  // Version management
-  createVersion: (skillId: string, note?: string) => Promise<boolean>;
 
   // Translation cache (with TTL + size limit)
   // 翻译缓存（带 TTL + 大小限制）
@@ -368,7 +583,10 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      importScannedSkills: async (scannedSkills: ScannedSkill[]) => {
+      importScannedSkills: async (
+        scannedSkills: ScannedSkill[],
+        userTagsByPath?: Record<string, string[]>,
+      ) => {
         set({ isLoading: true, error: null });
         try {
           let importCount = 0;
@@ -384,6 +602,7 @@ export const useSkillStore = create<SkillState>()(
             }
 
             try {
+              const userTags = userTagsByPath?.[scanned.localPath] ?? [];
               const newSkill = await window.api.skill.create({
                 name: scanned.name,
                 description: scanned.description,
@@ -392,10 +611,10 @@ export const useSkillStore = create<SkillState>()(
                 protocol_type: "skill",
                 version: scanned.version,
                 author: scanned.author,
-                tags: scanned.tags,
+                tags: userTags,
+                original_tags: scanned.tags,
                 is_favorite: false,
                 source_url: scanned.localPath,
-                local_repo_path: scanned.localPath || undefined,
               });
 
               // Copy skill files from original location into local repo
@@ -412,21 +631,24 @@ export const useSkillStore = create<SkillState>()(
                       local_repo_path: repoPath,
                     });
                   }
-                } catch (copyErr: any) {
+                } catch (error: unknown) {
                   console.warn(
                     `Skill "${scanned.name}" imported to DB but failed to copy files to local repo:`,
-                    copyErr?.message,
+                    getErrorMessage(error),
                   );
                 }
               }
 
               importCount++;
-            } catch (err: any) {
+            } catch (error: unknown) {
               failed.push({
                 name: scanned.name,
-                reason: err?.message || "Unknown import error",
+                reason: getErrorMessage(error) || "Unknown import error",
               });
-              console.warn(`Failed to import skill "${scanned.name}":`, err?.message);
+              console.warn(
+                `Failed to import skill "${scanned.name}":`,
+                getErrorMessage(error),
+              );
             }
           }
           // Refresh skills after import
@@ -536,6 +758,8 @@ export const useSkillStore = create<SkillState>()(
           filtered = filtered.filter((s) => !!s.registry_slug);
         } else if (filterType === "deployed") {
           filtered = filtered.filter((s) => deployedSkillNames.has(s.name));
+        } else if (filterType === "pending") {
+          filtered = filtered.filter((s) => !deployedSkillNames.has(s.name));
         }
 
         if (filterTags.length > 0) {
@@ -584,8 +808,10 @@ export const useSkillStore = create<SkillState>()(
             const updated = [...registry];
             let hasUpdates = false;
 
-            await Promise.allSettled(
-              updated.map(async (skill, index) => {
+            await runWithConcurrency(
+              updated,
+              REMOTE_CONTENT_CONCURRENCY,
+              async (skill, index) => {
                 if (!skill.content_url) return;
                 try {
                   const realContent = await window.api.skill.fetchRemoteContent(
@@ -598,7 +824,7 @@ export const useSkillStore = create<SkillState>()(
                 } catch {
                   // Silently fall back to embedded content
                 }
-              }),
+              },
             );
 
             if (hasUpdates) {
@@ -610,16 +836,34 @@ export const useSkillStore = create<SkillState>()(
 
       installRegistrySkill: async (regSkill) => {
         try {
+          let effectiveContent = regSkill.content;
+          if (regSkill.content_url) {
+            try {
+              const freshContent = await window.api.skill.fetchRemoteContent(
+                regSkill.content_url,
+              );
+              if (freshContent.trim()) {
+                effectiveContent = freshContent;
+              }
+            } catch (fetchError) {
+              console.warn(
+                `Failed to fetch fresh SKILL.md for "${regSkill.slug}", falling back to cached registry content:`,
+                fetchError,
+              );
+            }
+          }
+
           const newSkill = await window.api.skill.create({
             name: regSkill.slug,
             description: regSkill.description,
-            instructions: regSkill.content,
-            content: regSkill.content,
+            instructions: effectiveContent,
+            content: effectiveContent,
             protocol_type: "skill",
             version: regSkill.version,
             author: regSkill.author,
             source_url: regSkill.source_url,
-            tags: regSkill.tags,
+            tags: [],
+            original_tags: regSkill.tags,
             is_favorite: false,
             icon_url: regSkill.icon_url,
             icon_emoji: regSkill.icon_emoji,
@@ -635,7 +879,12 @@ export const useSkillStore = create<SkillState>()(
               await window.api.skill.writeLocalFile(
                 newSkill.id,
                 "SKILL.md",
-                regSkill.content,
+                effectiveContent,
+              );
+              await syncRemoteGitHubSkillRepo(
+                newSkill.id,
+                regSkill.source_url,
+                regSkill.content_url,
               );
             } catch (repoError) {
               console.warn(
@@ -647,8 +896,8 @@ export const useSkillStore = create<SkillState>()(
             return newSkill;
           }
           return null;
-        } catch (error: any) {
-          throw new Error(error?.message || "Failed to install skill");
+        } catch (error: unknown) {
+          throw new Error(getErrorMessage(error) || "Failed to install skill");
         }
       },
 
@@ -696,12 +945,16 @@ export const useSkillStore = create<SkillState>()(
       upsertRegistrySkills: (incomingSkills) => {
         set((state) => {
           const merged = [...state.registrySkills];
+          const indexBySlug = new Map(
+            merged.map((skill, index) => [skill.slug, index]),
+          );
 
           for (const incoming of incomingSkills) {
-            const index = merged.findIndex((skill) => skill.slug === incoming.slug);
+            const index = indexBySlug.get(incoming.slug);
             if (index >= 0) {
               merged[index] = { ...merged[index], ...incoming };
             } else {
+              indexBySlug.set(incoming.slug, merged.length);
               merged.push(incoming);
             }
           }
@@ -712,7 +965,7 @@ export const useSkillStore = create<SkillState>()(
 
       addCustomStoreSource: (name, url, type = "marketplace-json") => {
         const trimmedName = name.trim();
-        const trimmedUrl = url.trim();
+        const trimmedUrl = validateStoreSourceUrl(url.trim());
         if (!trimmedName || !trimmedUrl) return;
 
         const newId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -817,19 +1070,6 @@ export const useSkillStore = create<SkillState>()(
       },
 
       // ─── Translation / 翻译 ───
-
-      // ─── Version Management / 版本管理 ───
-
-      createVersion: async (skillId, note) => {
-        try {
-          await window.api.skill.versionCreate(skillId, note);
-          return true;
-        } catch (error) {
-          console.error("Failed to create version:", error);
-          return false;
-        }
-      },
-
       translationCache: {} as Record<string, TranslationCacheEntry>,
 
       translateContent: async (content, cacheKey, targetLang, options) => {
@@ -858,7 +1098,7 @@ export const useSkillStore = create<SkillState>()(
               apiKey: defaultModel.apiKey,
               apiUrl: defaultModel.apiUrl,
               model: defaultModel.model,
-              chatParams: defaultModel.chatParams as any,
+              chatParams: defaultModel.chatParams as SkillChatParams | undefined,
             }
           : {
               provider: settingsState.aiProvider,
@@ -948,7 +1188,6 @@ This skill helps you write tests.
       partialize: (state) => ({
         viewMode: state.viewMode,
         filterType: state.filterType,
-        translationCache: state.translationCache,
         storeView: state.storeView,
         customStoreSources: state.customStoreSources,
         selectedStoreSourceId: state.selectedStoreSourceId,

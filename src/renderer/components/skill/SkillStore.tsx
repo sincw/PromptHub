@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   SearchIcon,
-  CheckIcon,
   Loader2Icon,
   LayoutGridIcon,
   CodeIcon,
@@ -14,21 +13,28 @@ import {
   WandIcon,
   BriefcaseIcon,
   FileSpreadsheetIcon,
-  StoreIcon,
   BoxesIcon,
-  LinkIcon,
-  TrashIcon,
-  PowerIcon,
-  PlusIcon,
   GlobeIcon,
   FolderIcon,
   DatabaseIcon,
 } from 'lucide-react';
-import { SkillIcon } from './SkillIcon';
 import { SkillStoreDetail } from './SkillStoreDetail';
+import { SkillStoreCard } from './SkillStoreCard';
+import { SkillStoreCustomSources } from './SkillStoreCustomSources';
+import { SkillStoreSourceForm } from './SkillStoreSourceForm';
 import { useSkillStore } from '../../stores/skill.store';
 import { useToast } from '../ui/Toast';
-import type { RegistrySkill, SkillCategory, SkillStoreSource } from '../../../shared/types';
+import type {
+  GitHubRepoMetadata,
+  GitHubTreeEntry,
+  GitHubTreeResponse,
+  MarketplaceReferenceEntry,
+  MarketplaceRegistryDocument,
+  MarketplaceSkillEntry,
+  RegistrySkill,
+  SkillCategory,
+  SkillStoreSource,
+} from '../../../shared/types';
 import { SKILL_CATEGORIES } from '../../../shared/constants/skill-registry';
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -63,6 +69,7 @@ const CUSTOM_SOURCE_TYPE_OPTIONS: Array<{
 ];
 
 const REMOTE_STORE_TTL = 1000 * 60 * 60;
+const MAX_REMOTE_STORE_DEPTH = 3;
 
 function stripQuotes(value: string) {
   return value.trim().replace(/^['"]|['"]$/g, '');
@@ -145,6 +152,37 @@ function dedupeRegistrySkills(skills: RegistrySkill[]) {
   return Array.from(map.values());
 }
 
+function parseJson<T>(raw: string, fallback: T): T {
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isDefined<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+function isGitHubTreeEntry(entry: GitHubTreeEntry | null | undefined): entry is GitHubTreeEntry & { path: string; type: string } {
+  return Boolean(
+    entry &&
+      typeof entry.path === 'string' &&
+      typeof entry.type === 'string',
+  );
+}
+
+function resolveMarketplaceReference(
+  entry: string | MarketplaceReferenceEntry,
+): string | undefined {
+  if (typeof entry === 'string') return entry;
+  return entry.url || entry.index || entry.manifest;
+}
+
 export function SkillStore() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language?.startsWith('zh');
@@ -202,18 +240,18 @@ export function SkillStore() {
       const repoMetaRaw = await window.api.skill.fetchRemoteContent(
         `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}`,
       );
-      const repoMeta = JSON.parse(repoMetaRaw || '{}');
+      const repoMeta = parseJson<GitHubRepoMetadata>(repoMetaRaw || '{}', {});
       const defaultBranch = repoMeta.default_branch || 'main';
 
       const treeRaw = await window.api.skill.fetchRemoteContent(
         `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/git/trees/${defaultBranch}?recursive=1`,
       );
-      const treeData = JSON.parse(treeRaw || '{}');
+      const treeData = parseJson<GitHubTreeResponse>(treeRaw || '{}', {});
       const skillFiles = Array.isArray(treeData.tree)
         ? treeData.tree.filter(
-            (item: any) =>
-              item?.type === 'blob' &&
-              typeof item.path === 'string' &&
+            (item): item is GitHubTreeEntry & { path: string; type: string } =>
+              isGitHubTreeEntry(item) &&
+              item.type === 'blob' &&
               item.path.startsWith('skills/') &&
               item.path.endsWith('/SKILL.md'),
           )
@@ -222,8 +260,8 @@ export function SkillStore() {
       const builtinBySlug = new Map(registrySkills.map((skill) => [skill.slug, skill]));
 
       const remoteSkills = await Promise.all(
-        skillFiles.map(async (item: any) => {
-          const path = item.path as string;
+        skillFiles.map(async (item) => {
+          const path = item.path;
           const slug = path.split('/').slice(-2, -1)[0];
           const rawUrl = `https://raw.githubusercontent.com/${parsedRepo.owner}/${parsedRepo.repo}/${defaultBranch}/${path}`;
           const sourceRepoUrl = `${parsedRepo.repositoryUrl}/tree/${defaultBranch}/${path.replace(/\/SKILL\.md$/, '')}`;
@@ -256,26 +294,32 @@ export function SkillStore() {
         }),
       );
 
-      return dedupeRegistrySkills(remoteSkills.filter((skill): skill is RegistrySkill => Boolean(skill)));
+      return dedupeRegistrySkills(remoteSkills.filter(isDefined));
     },
     [registrySkills, t],
   );
 
   const loadMarketplaceStore = useCallback(
-    async (url: string, visited = new Set<string>()): Promise<RegistrySkill[]> => {
+    async (
+      url: string,
+      visited = new Set<string>(),
+      depth = 0,
+    ): Promise<RegistrySkill[]> => {
       const resolvedUrl = resolveUrl(url, url);
-      if (!resolvedUrl || visited.has(resolvedUrl)) return [];
+      if (!resolvedUrl || visited.has(resolvedUrl) || depth > MAX_REMOTE_STORE_DEPTH) {
+        return [];
+      }
       visited.add(resolvedUrl);
 
       const raw = await window.api.skill.fetchRemoteContent(resolvedUrl);
       if (!raw) return [];
 
-      const data = JSON.parse(raw);
+      const data = parseJson<MarketplaceRegistryDocument>(raw, {});
       const builtinBySlug = new Map(registrySkills.map((skill) => [skill.slug, skill]));
       const directSkills = Array.isArray(data.skills) ? data.skills : [];
 
       const mappedSkills = await Promise.all(
-        directSkills.map(async (item: any) => {
+        directSkills.map(async (item: MarketplaceSkillEntry) => {
           const slug = item.slug || item.id || slugify(item.name || item.title || 'remote-skill');
           if (!slug) return null;
 
@@ -308,7 +352,7 @@ export function SkillStore() {
             slug,
             name: item.name || item.title || parsed.name || builtin?.name || toTitleCase(slug),
             description,
-            category: (item.category as SkillCategory) || builtin?.category || inferCategory(slug, description),
+            category: item.category || builtin?.category || inferCategory(slug, description),
             icon_url: item.icon_url || item.iconUrl || builtin?.icon_url,
             icon_emoji: item.icon_emoji || item.iconEmoji || builtin?.icon_emoji,
             author: item.author || builtin?.author || 'Community',
@@ -335,17 +379,19 @@ export function SkillStore() {
         ...(Array.isArray(data.sources) ? data.sources : []),
         ...(Array.isArray(data.registries) ? data.registries : []),
       ]
-        .map((entry: any) => (typeof entry === 'string' ? entry : entry?.url || entry?.index || entry?.manifest))
+        .map((entry) => resolveMarketplaceReference(entry))
         .filter(Boolean)
         .map((entry: string) => resolveUrl(resolvedUrl, entry))
         .filter((entry: string | null): entry is string => Boolean(entry));
 
       const nestedSkills = await Promise.all(
-        nestedStoreRefs.map((entry) => loadMarketplaceStore(entry, visited)),
+        nestedStoreRefs.map((entry) =>
+          loadMarketplaceStore(entry, visited, depth + 1),
+        ),
       );
 
       return dedupeRegistrySkills([
-        ...mappedSkills.filter((skill): skill is RegistrySkill => Boolean(skill)),
+        ...mappedSkills.filter(isDefined),
         ...nestedSkills.flat(),
       ]);
     },
@@ -479,8 +525,8 @@ export function SkillStore() {
       if (result) {
         showToast(`${t('skill.addedToLibrary', 'Imported')}: ${skill.name}`, 'success');
       }
-    } catch (err: any) {
-      showToast(err?.message || t('skill.updateFailed', 'Failed'), 'error');
+    } catch (error: unknown) {
+      showToast(getErrorMessage(error) || t('skill.updateFailed', 'Failed'), 'error');
     } finally {
       setTimeout(() => setInstallingSlug(null), 500);
     }
@@ -492,14 +538,22 @@ export function SkillStore() {
       return;
     }
 
-    addCustomStoreSource(sourceName, sourceUrl, sourceType);
-    const createdId = useSkillStore.getState().selectedStoreSourceId;
-    setSourceName('');
-    setSourceUrl('');
-    setSourceType('marketplace-json');
-    showToast(t('skill.storeSourceAdded', '商店已添加'), 'success');
-    if (createdId) {
-      void loadStoreSource(createdId, true);
+    try {
+      addCustomStoreSource(sourceName, sourceUrl, sourceType);
+      const createdId = useSkillStore.getState().selectedStoreSourceId;
+      setSourceName('');
+      setSourceUrl('');
+      setSourceType('marketplace-json');
+      showToast(t('skill.storeSourceAdded', '商店已添加'), 'success');
+      if (createdId) {
+        void loadStoreSource(createdId, true);
+      }
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error && error.message === 'STORE_SOURCE_HTTPS_REQUIRED'
+          ? t('skill.storeSourceHttpsRequired', '商店地址必须使用 HTTPS')
+          : t('skill.storeSourceInvalidUrl', '商店地址格式无效');
+      showToast(message, 'error');
     }
   };
 
@@ -631,102 +685,17 @@ export function SkillStore() {
         )}
 
         {selectedStoreSourceId === 'new-custom' && (
-          <div className="space-y-4 bg-card border border-border rounded-2xl p-4">
-            <div className="space-y-2">
-              <div className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                {t('skill.storeSourceType', '商店类型')}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {CUSTOM_SOURCE_TYPE_OPTIONS.map((option) => {
-                  const active = sourceType === option.value;
-                  const label =
-                    option.value === 'marketplace-json'
-                      ? t('skill.sourceTypeMarketplace', 'Marketplace JSON')
-                      : option.value === 'git-repo'
-                        ? t('skill.sourceTypeGit', 'Git 仓库')
-                        : t('skill.sourceTypeLocal', '本地目录');
-                  const hint =
-                    option.value === 'marketplace-json'
-                      ? t('skill.sourceTypeMarketplaceHint', '直接拉取 marketplace.json 并解析其中的 skills 列表。')
-                      : option.value === 'git-repo'
-                        ? t('skill.sourceTypeGitHint', '输入 GitHub 仓库地址，自动扫描 skills/*/SKILL.md。')
-                        : t('skill.sourceTypeLocalHint', '输入本地目录路径，扫描目录中的 skills。');
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setSourceType(option.value)}
-                      className={`text-left rounded-xl border px-4 py-3 transition-all ${
-                        active
-                          ? 'border-primary bg-primary/10 text-foreground shadow-[0_0_0_1px_rgba(96,165,250,0.2)]'
-                          : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/40 hover:bg-muted/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <span className={`${active ? 'text-primary' : 'text-muted-foreground'}`}>{option.icon}</span>
-                        {label}
-                      </div>
-                      <div className="mt-1 text-xs leading-5">{hint}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1.35fr_auto] gap-2">
-              <input
-                type="text"
-                value={sourceName}
-                onChange={(e) => setSourceName(e.target.value)}
-                placeholder={t('skill.storeNamePlaceholder', '商店名称')}
-                className="px-3 py-2 text-sm bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
-              />
-              <input
-                type="text"
-                value={sourceUrl}
-                onChange={(e) => setSourceUrl(e.target.value)}
-                placeholder={
-                  sourceType === 'local-dir'
-                    ? t('skill.storePathPlaceholder', '本地目录路径')
-                    : t('skill.storeUrlPlaceholder', '商店地址 / manifest URL')
-                }
-                className="px-3 py-2 text-sm bg-accent/50 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50"
-              />
-              <button
-                onClick={handleAddSource}
-                className="px-4 py-2 text-sm rounded-lg bg-primary text-white hover:opacity-90 transition-opacity"
-              >
-                {t('common.add', '添加')}
-              </button>
-            </div>
-
-            <div className="rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground leading-6">
-              <div className="font-medium text-foreground mb-1">{t('skill.storeExamples', '示例')}</div>
-              {sourceType === 'marketplace-json' && (
-                <>
-                  <div>{t('skill.storeExampleMarketplace', 'Marketplace JSON 示例')}</div>
-                  <div className="mt-1 font-mono break-all text-[11px]">
-                    https://raw.githubusercontent.com/docker/claude-code-plugin-manager/main/marketplace.json
-                  </div>
-                </>
-              )}
-              {sourceType === 'git-repo' && (
-                <>
-                  <div>{t('skill.storeExampleGit', 'Git 仓库示例')}</div>
-                  <div className="mt-1 font-mono break-all text-[11px]">
-                    https://github.com/anthropics/skills
-                  </div>
-                </>
-              )}
-              {sourceType === 'local-dir' && (
-                <>
-                  <div>{t('skill.storeExampleLocal', '本地目录示例')}</div>
-                  <div className="mt-1 font-mono break-all text-[11px]">~/Documents/my-skills</div>
-                </>
-              )}
-            </div>
-          </div>
+          <SkillStoreSourceForm
+            handleAddSource={handleAddSource}
+            setSourceName={setSourceName}
+            setSourceType={setSourceType}
+            setSourceUrl={setSourceUrl}
+            sourceName={sourceName}
+            sourceType={sourceType}
+            sourceUrl={sourceUrl}
+            t={t}
+            typeOptions={CUSTOM_SOURCE_TYPE_OPTIONS}
+          />
         )}
       </div>
 
@@ -873,119 +842,19 @@ export function SkillStore() {
               </p>
             </div>
 
-            {!selectedCustomSource && customStoreSources.length === 0 ? (
-              <div className="bg-card border border-dashed border-border rounded-2xl p-8 text-center text-muted-foreground">
-                <LinkIcon className="w-10 h-10 mx-auto opacity-30 mb-3" />
-                <h4 className="text-base font-semibold text-foreground mb-1">
-                  {t('skill.noCustomStores', '还没有自定义商店')}
-                </h4>
-                <p className="text-sm">
-                  {t('skill.noCustomStoresHint', '点击左侧虚线框“添加商店”开始接入你自己的 skill 来源。')}
-                </p>
-              </div>
-            ) : selectedCustomSource ? (
-              <div className="bg-card border border-border rounded-2xl p-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <LinkIcon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold text-foreground truncate">{selectedCustomSource.name}</h4>
-                      <span
-                        className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                          selectedCustomSource.enabled
-                            ? 'bg-green-500/10 text-green-500'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {selectedCustomSource.enabled
-                          ? t('common.enabled', '已启用')
-                          : t('common.disabled', '已停用')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate mt-1">{selectedCustomSource.url}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => toggleCustomStoreSource(selectedCustomSource.id)}
-                    className="px-3 py-2 text-sm rounded-lg bg-accent text-foreground hover:bg-accent/80 transition-colors"
-                  >
-                    {selectedCustomSource.enabled ? t('common.disable', '停用') : t('common.enable', '启用')}
-                  </button>
-                  <button
-                    onClick={() => void loadStoreSource(selectedCustomSource.id, true)}
-                    className="px-3 py-2 text-sm rounded-lg bg-accent text-foreground hover:bg-accent/80 transition-colors inline-flex items-center gap-2"
-                  >
-                    <Loader2Icon className={`w-4 h-4 ${loadingSourceId === selectedCustomSource.id ? 'animate-spin' : ''}`} />
-                    {t('common.refresh', '刷新')}
-                  </button>
-                  <button
-                    onClick={() => {
-                      removeCustomStoreSource(selectedCustomSource.id);
-                      selectStoreSource('official');
-                    }}
-                    className="px-3 py-2 text-sm rounded-lg text-destructive hover:bg-destructive/10 transition-colors"
-                  >
-                    {t('common.delete', '删除')}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {customStoreSources.map((source) => {
-                  const count = remoteStoreEntries[source.id]?.skills.length || 0;
-                  return (
-                    <div
-                      key={source.id}
-                      className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4"
-                    >
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <LinkIcon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-semibold text-foreground truncate">{source.name}</h4>
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                              source.enabled ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'
-                            }`}
-                          >
-                            {source.enabled ? t('common.enabled', '已启用') : t('common.disabled', '已停用')}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent text-muted-foreground">
-                            {count} {isZh ? '个技能' : 'skills'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate mt-1">{source.url}</p>
-                      </div>
-                      <button
-                        onClick={() => toggleCustomStoreSource(source.id)}
-                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                        title={source.enabled ? t('common.disable', '停用') : t('common.enable', '启用')}
-                      >
-                        <PowerIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => void loadStoreSource(source.id, true)}
-                        className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
-                        title={t('common.refresh', '刷新')}
-                      >
-                        <Loader2Icon className={`w-4 h-4 ${loadingSourceId === source.id ? 'animate-spin' : ''}`} />
-                      </button>
-                      <button
-                        onClick={() => removeCustomStoreSource(source.id)}
-                        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                        title={t('common.delete', '删除')}
-                      >
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <SkillStoreCustomSources
+              customStoreSources={customStoreSources}
+              isZh={isZh}
+              loadStoreSource={loadStoreSource}
+              loadingSourceId={loadingSourceId}
+              remoteStoreEntries={remoteStoreEntries}
+              removeCustomStoreSource={removeCustomStoreSource}
+              selectStoreSource={selectStoreSource}
+              selectedCustomSource={selectedCustomSource}
+              selectedStoreSourceId={selectedStoreSourceId}
+              t={t}
+              toggleCustomStoreSource={toggleCustomStoreSource}
+            />
           </section>
         )}
       </div>
@@ -997,58 +866,6 @@ export function SkillStore() {
           onClose={() => selectRegistrySkill(null)}
         />
       )}
-    </div>
-  );
-}
-
-interface SkillStoreCardProps {
-  skill: RegistrySkill;
-  isInstalled: boolean;
-  index: number;
-  installingSlug?: string | null;
-  onQuickInstall?: (skill: RegistrySkill, e: React.MouseEvent) => void;
-  onClick: () => void;
-}
-
-function SkillStoreCard({ skill, isInstalled, index, installingSlug, onQuickInstall, onClick }: SkillStoreCardProps) {
-  const { t } = useTranslation();
-  const isInstallingThis = installingSlug === skill.slug;
-
-  return (
-    <div
-      onClick={onClick}
-      style={{ animationDelay: `${index * 30}ms` }}
-      className="group relative flex items-center gap-3 p-3.5 bg-card border border-border rounded-xl hover:border-primary/40 transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 hover:shadow-md"
-    >
-      <SkillIcon iconUrl={skill.icon_url} iconEmoji={skill.icon_emoji} name={skill.name} size="md" />
-
-      <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
-          {skill.name}
-        </h4>
-        <p className="text-[11px] text-muted-foreground truncate mt-0.5">{skill.description}</p>
-      </div>
-
-      <div className="shrink-0">
-        {isInstalled ? (
-          <div className="p-1.5 text-green-500" title={t('skill.imported', 'Imported')}>
-            <CheckIcon className="w-4 h-4" />
-          </div>
-        ) : (
-          <button
-            onClick={(e) => onQuickInstall?.(skill, e)}
-            disabled={isInstallingThis}
-            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all active:scale-90 disabled:opacity-50"
-            title={t('skill.install', 'Install')}
-          >
-            {isInstallingThis ? (
-              <Loader2Icon className="w-4 h-4 animate-spin text-primary" />
-            ) : (
-              <PlusIcon className="w-4 h-4" />
-            )}
-          </button>
-        )}
-      </div>
     </div>
   );
 }

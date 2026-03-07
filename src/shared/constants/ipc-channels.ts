@@ -68,7 +68,10 @@ export const IPC_CHANNELS = {
 
   // Skill Local Repo Storage
   // Skill 本地仓库存储
+  SKILL_LIST_LOCAL_FILES: "skill:listLocalFiles",
+  SKILL_READ_LOCAL_FILE: "skill:readLocalFile",
   SKILL_READ_LOCAL_FILES: "skill:readLocalFiles",
+  SKILL_RENAME_LOCAL_PATH: "skill:renameLocalPath",
   SKILL_WRITE_LOCAL_FILE: "skill:writeLocalFile",
   SKILL_DELETE_LOCAL_FILE: "skill:deleteLocalFile",
   SKILL_CREATE_LOCAL_DIR: "skill:createLocalDir",

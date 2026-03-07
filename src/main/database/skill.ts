@@ -8,6 +8,49 @@ import type {
   SkillFileSnapshot,
 } from "@shared/types";
 
+interface SkillRow {
+  id: string;
+  name: string;
+  description: string | null;
+  content: string | null;
+  mcp_config: string | null;
+  protocol_type: Skill["protocol_type"];
+  version: string | null;
+  author: string | null;
+  tags: string | null;
+  original_tags: string | null;
+  is_favorite: number;
+  source_url: string | null;
+  local_repo_path: string | null;
+  icon_url: string | null;
+  icon_emoji: string | null;
+  icon_background: string | null;
+  category: Skill["category"] | null;
+  is_builtin: number;
+  registry_slug: string | null;
+  content_url: string | null;
+  prerequisites: string | null;
+  compatibility: string | null;
+  current_version: number | null;
+  version_tracking_enabled: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface SkillVersionRow {
+  id: string;
+  skill_id: string;
+  version: number;
+  content: string | null;
+  files_snapshot: string | null;
+  note: string | null;
+  created_at: number;
+}
+
+function parseJsonArray<T>(value: string | null | undefined): T[] | undefined {
+  return value ? (JSON.parse(value) as T[]) : undefined;
+}
+
 export class SkillDB {
   constructor(private db: Database.Database) {}
 
@@ -19,7 +62,7 @@ export class SkillDB {
     const stmt = this.db.prepare(
       "SELECT * FROM skills WHERE LOWER(name) = LOWER(?)",
     );
-    const row = stmt.get(name) as any;
+    const row = stmt.get(name) as SkillRow | undefined;
     return row ? this.rowToSkill(row) : null;
   }
 
@@ -67,14 +110,16 @@ export class SkillDB {
       INSERT INTO skills (
         id, name, description, content, mcp_config,
         protocol_type, version, author, tags, original_tags, is_favorite,
-        source_url, local_repo_path, icon_url, icon_emoji, category, is_builtin,
+        source_url, local_repo_path, icon_url, icon_emoji, icon_background, category, is_builtin,
         registry_slug, content_url, prerequisites, compatibility, current_version,
+        version_tracking_enabled,
         created_at, updated_at
       ) VALUES (
         @id, @name, @description, @content, @mcp_config,
         @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
-        @source_url, @local_repo_path, @icon_url, @icon_emoji, @category, @is_builtin,
+        @source_url, @local_repo_path, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
         @registry_slug, @content_url, @prerequisites, @compatibility, @current_version,
+        @version_tracking_enabled,
         @created_at, @updated_at
       )
     `);
@@ -97,6 +142,7 @@ export class SkillDB {
       "@local_repo_path": data.local_repo_path || null,
       "@icon_url": data.icon_url || null,
       "@icon_emoji": data.icon_emoji || null,
+      "@icon_background": data.icon_background || null,
       "@category": data.category || "general",
       "@is_builtin": data.is_builtin ? 1 : 0,
       "@registry_slug": data.registry_slug || null,
@@ -107,16 +153,11 @@ export class SkillDB {
       "@compatibility": data.compatibility
         ? JSON.stringify(data.compatibility)
         : null,
-      "@current_version": data.currentVersion ?? 1,
+      "@current_version": data.currentVersion ?? 0,
+      "@version_tracking_enabled": data.versionTrackingEnabled ? 1 : 0,
       "@created_at": now,
       "@updated_at": now,
     });
-
-    // Create initial version (unless explicitly skipped, e.g. during backup restore)
-    // 创建初始版本（除非显式跳过，如备份恢复时）
-    if (!options?.skipInitialVersion) {
-      this.createVersion(id, "Initial version");
-    }
 
     return this.getById(id)!;
   }
@@ -127,7 +168,7 @@ export class SkillDB {
    */
   getById(id: string): Skill | null {
     const stmt = this.db.prepare("SELECT * FROM skills WHERE id = ?");
-    const row = stmt.get(id) as any;
+    const row = stmt.get(id) as SkillRow | undefined;
     return row ? this.rowToSkill(row) : null;
   }
 
@@ -139,7 +180,7 @@ export class SkillDB {
     const stmt = this.db.prepare(
       "SELECT * FROM skills ORDER BY updated_at DESC",
     );
-    const rows = stmt.all() as any[];
+    const rows = stmt.all() as SkillRow[];
     return rows.map((row) => this.rowToSkill(row));
   }
 
@@ -167,7 +208,7 @@ export class SkillDB {
 
     const now = Date.now();
     const updates: string[] = ["updated_at = ?"];
-    const values: any[] = [now];
+    const values: Array<string | number | null> = [now];
 
     if (data.name !== undefined) {
       updates.push("name = ?");
@@ -226,6 +267,10 @@ export class SkillDB {
       updates.push("icon_emoji = ?");
       values.push(data.icon_emoji);
     }
+    if (data.icon_background !== undefined) {
+      updates.push("icon_background = ?");
+      values.push(data.icon_background);
+    }
     if (data.category !== undefined) {
       updates.push("category = ?");
       values.push(data.category);
@@ -253,6 +298,10 @@ export class SkillDB {
     if (data.currentVersion !== undefined) {
       updates.push("current_version = ?");
       values.push(data.currentVersion);
+    }
+    if (data.versionTrackingEnabled !== undefined) {
+      updates.push("version_tracking_enabled = ?");
+      values.push(data.versionTrackingEnabled ? 1 : 0);
     }
 
     values.push(id);
@@ -292,6 +341,9 @@ export class SkillDB {
       }),
       ...(data.icon_url !== undefined && { icon_url: data.icon_url }),
       ...(data.icon_emoji !== undefined && { icon_emoji: data.icon_emoji }),
+      ...(data.icon_background !== undefined && {
+        icon_background: data.icon_background,
+      }),
       ...(data.category !== undefined && { category: data.category }),
       ...(data.is_builtin !== undefined && { is_builtin: data.is_builtin }),
       ...(data.registry_slug !== undefined && {
@@ -306,6 +358,9 @@ export class SkillDB {
       }),
       ...(data.currentVersion !== undefined && {
         currentVersion: data.currentVersion,
+      }),
+      ...(data.versionTrackingEnabled !== undefined && {
+        versionTrackingEnabled: data.versionTrackingEnabled,
       }),
     };
 
@@ -332,6 +387,7 @@ export class SkillDB {
   ): SkillVersion | null {
     const skill = existingSkill ?? this.getById(skillId);
     if (!skill) return null;
+    if (!skill.versionTrackingEnabled) return null;
 
     // Use a transaction to atomically insert version + increment counter,
     // preventing UNIQUE(skill_id, version) conflicts from concurrent calls.
@@ -344,7 +400,7 @@ export class SkillDB {
         .get(skillId) as { current_version: number } | undefined;
       if (!freshRow) return null;
 
-      const version = freshRow.current_version ?? 1;
+      const version = (freshRow.current_version ?? 0) + 1;
       const id = uuidv4();
       const now = Date.now();
 
@@ -372,9 +428,9 @@ export class SkillDB {
       // 更新当前版本号
       this.db
         .prepare(
-          "UPDATE skills SET current_version = current_version + 1 WHERE id = ?",
+          "UPDATE skills SET current_version = ? WHERE id = ?",
         )
-        .run(skillId);
+        .run(version, skillId);
 
       return {
         id,
@@ -398,7 +454,7 @@ export class SkillDB {
     const stmt = this.db.prepare(
       "SELECT * FROM skill_versions WHERE skill_id = ? ORDER BY version DESC",
     );
-    const rows = stmt.all(skillId) as any[];
+    const rows = stmt.all(skillId) as SkillVersionRow[];
     return rows.map((row) => this.rowToSkillVersion(row));
   }
 
@@ -410,7 +466,7 @@ export class SkillDB {
     const stmt = this.db.prepare(
       "SELECT * FROM skill_versions WHERE skill_id = ? AND version = ?",
     );
-    const row = stmt.get(skillId, version) as any;
+    const row = stmt.get(skillId, version) as SkillVersionRow | undefined;
     return row ? this.rowToSkillVersion(row) : null;
   }
 
@@ -422,7 +478,7 @@ export class SkillDB {
     const stmt = this.db.prepare(
       "SELECT * FROM skill_versions WHERE skill_id = ? AND version = ?",
     );
-    const row = stmt.get(skillId, version) as any;
+    const row = stmt.get(skillId, version) as SkillVersionRow | undefined;
     if (!row) return null;
 
     const versionData = this.rowToSkillVersion(row);
@@ -493,7 +549,7 @@ export class SkillDB {
    * Convert database row to Skill object
    * 数据库行转 Skill 对象
    */
-  private rowToSkill(row: any): Skill {
+  private rowToSkill(row: SkillRow): Skill {
     return {
       id: row.id,
       name: row.name,
@@ -504,28 +560,24 @@ export class SkillDB {
       protocol_type: row.protocol_type,
       version: row.version,
       author: row.author,
-      tags: JSON.parse(row.tags || "[]"),
+      tags: parseJsonArray<string>(row.tags) ?? [],
       is_favorite: row.is_favorite === 1,
-      currentVersion: row.current_version ?? 1,
+      currentVersion: row.current_version ?? 0,
+      versionTrackingEnabled: row.version_tracking_enabled === 1,
       created_at: row.created_at,
       updated_at: row.updated_at,
       source_url: row.source_url || undefined,
       local_repo_path: row.local_repo_path || undefined,
       icon_url: row.icon_url || undefined,
       icon_emoji: row.icon_emoji || undefined,
+      icon_background: row.icon_background || undefined,
       category: row.category || "general",
       is_builtin: row.is_builtin === 1,
       registry_slug: row.registry_slug || undefined,
       content_url: row.content_url || undefined,
-      prerequisites: row.prerequisites
-        ? JSON.parse(row.prerequisites)
-        : undefined,
-      compatibility: row.compatibility
-        ? JSON.parse(row.compatibility)
-        : undefined,
-      original_tags: row.original_tags
-        ? JSON.parse(row.original_tags)
-        : undefined,
+      prerequisites: parseJsonArray<string>(row.prerequisites),
+      compatibility: parseJsonArray<string>(row.compatibility),
+      original_tags: parseJsonArray<string>(row.original_tags),
     };
   }
 
@@ -533,15 +585,13 @@ export class SkillDB {
    * Convert database row to SkillVersion object
    * 数据库行转 SkillVersion 对象
    */
-  private rowToSkillVersion(row: any): SkillVersion {
+  private rowToSkillVersion(row: SkillVersionRow): SkillVersion {
     return {
       id: row.id,
       skillId: row.skill_id,
       version: row.version,
       content: row.content,
-      filesSnapshot: row.files_snapshot
-        ? JSON.parse(row.files_snapshot)
-        : undefined,
+      filesSnapshot: parseJsonArray<SkillFileSnapshot>(row.files_snapshot),
       note: row.note,
       createdAt: new Date(row.created_at).toISOString(),
     };

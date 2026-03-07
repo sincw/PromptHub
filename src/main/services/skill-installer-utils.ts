@@ -79,8 +79,20 @@ export function validateMCPConfig(config: unknown, name: string): void {
 }
 
 export function gitClone(url: string, destDir: string): Promise<void> {
+  if (!url.trim()) {
+    throw new Error("Git clone URL cannot be empty");
+  }
+  if (url.startsWith("-")) {
+    throw new Error("Git clone URL cannot start with '-'");
+  }
+
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Only HTTPS Git clone URLs are allowed");
+  }
+
   return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["clone", "--depth", "1", url, destDir], {
+    const proc = spawn("git", ["clone", "--depth", "1", "--", url, destDir], {
       stdio: ["ignore", "pipe", "pipe"],
     });
 

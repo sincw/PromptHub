@@ -2,6 +2,8 @@ import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "../../../shared/constants";
 import { SkillInstaller } from "../../services/skill-installer";
 
+const SUPPORTED_MCP_PLATFORMS = new Set(["claude", "cursor"]);
+
 export function registerSkillPlatformHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.SKILL_INSTALL_TO_PLATFORM,
@@ -11,9 +13,12 @@ export function registerSkillPlatformHandlers(): void {
       name: string,
       mcpConfig: unknown,
     ) => {
-      if (typeof platform !== "string" || platform.trim().length === 0) {
+      if (
+        typeof platform !== "string" ||
+        !SUPPORTED_MCP_PLATFORMS.has(platform)
+      ) {
         throw new Error(
-          "skill:installToPlatform requires a non-empty platform",
+          "skill:installToPlatform requires platform to be claude or cursor",
         );
       }
       if (typeof name !== "string" || name.trim().length === 0) {
@@ -35,9 +40,12 @@ export function registerSkillPlatformHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.SKILL_UNINSTALL_FROM_PLATFORM,
     async (_, platform: "claude" | "cursor", name: string) => {
-      if (typeof platform !== "string" || platform.trim().length === 0) {
+      if (
+        typeof platform !== "string" ||
+        !SUPPORTED_MCP_PLATFORMS.has(platform)
+      ) {
         throw new Error(
-          "skill:uninstallFromPlatform requires a non-empty platform",
+          "skill:uninstallFromPlatform requires platform to be claude or cursor",
         );
       }
       if (typeof name !== "string" || name.trim().length === 0) {

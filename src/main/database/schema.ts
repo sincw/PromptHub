@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS skills (
   author TEXT,
   tags TEXT,
   is_favorite INTEGER DEFAULT 0,
-  current_version INTEGER DEFAULT 1,
+  current_version INTEGER DEFAULT 0,
+  version_tracking_enabled INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

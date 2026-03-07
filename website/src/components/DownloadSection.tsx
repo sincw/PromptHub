@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Download } from "lucide-react";
 import { Button } from "./ui/Button";
 import { FaApple, FaWindows, FaLinux } from "react-icons/fa6";
+import { RELEASE_DOWNLOAD_URLS } from "../generated/release";
 
 interface PlatformInfo {
   title: string;
@@ -59,13 +60,13 @@ export const DownloadSection = ({ dict }: DownloadSectionProps) => {
               <Button
                 variant="primary"
                 className="w-full"
-                href="https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-arm64.dmg"
+                href={RELEASE_DOWNLOAD_URLS.macArm64}
               >
                 <Download className="w-4 h-4" />
                 {dict.mac.btn}
               </Button>
               <a
-                href="https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-x64.dmg"
+                href={RELEASE_DOWNLOAD_URLS.macX64}
                 className="block text-xs text-zinc-500 hover:text-white transition-colors"
               >
                 {dict.mac.subBtn}
@@ -92,13 +93,13 @@ export const DownloadSection = ({ dict }: DownloadSectionProps) => {
               <Button
                 variant="primary"
                 className="w-full"
-                href="https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.2-x64.exe"
+                href={RELEASE_DOWNLOAD_URLS.windowsX64}
               >
                 <Download className="w-4 h-4" />
                 {dict.win.btn}
               </Button>
               <a
-                href="https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.4.2-arm64.exe"
+                href={RELEASE_DOWNLOAD_URLS.windowsArm64}
                 className="block text-xs text-zinc-500 hover:text-white transition-colors"
               >
                 {dict.win.subBtn}
@@ -125,13 +126,13 @@ export const DownloadSection = ({ dict }: DownloadSectionProps) => {
               <Button
                 variant="primary"
                 className="w-full"
-                href="https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.4.2-x64.AppImage"
+                href={RELEASE_DOWNLOAD_URLS.linuxAppImage}
               >
                 <Download className="w-4 h-4" />
                 {dict.linux.btn}
               </Button>
               <a
-                href="https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.4.2_amd64.deb"
+                href={RELEASE_DOWNLOAD_URLS.linuxDeb}
                 className="block text-xs text-zinc-500 hover:text-white transition-colors"
               >
                 {dict.linux.subBtn}

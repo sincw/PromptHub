@@ -2,8 +2,11 @@ import { ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../../shared/constants/ipc-channels";
 import type {
   CreateSkillParams,
+  MCPServerConfig,
   SkillFileSnapshot,
   SkillLocalFileEntry,
+  SkillLocalFileTreeEntry,
+  SkillMCPConfig,
   SkillVersion,
   UpdateSkillParams,
 } from "../../shared/types";
@@ -24,7 +27,7 @@ export const skillApi = {
   installToPlatform: (
     platform: "claude" | "cursor",
     name: string,
-    mcpConfig: any,
+    mcpConfig: SkillMCPConfig | MCPServerConfig,
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_INSTALL_TO_PLATFORM,
@@ -79,8 +82,26 @@ export const skillApi = {
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT, url),
   saveToRepo: (skillName: string, sourceDir: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE_TO_REPO, skillName, sourceDir),
+  listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_LIST_LOCAL_FILES, skillId),
+  readLocalFile: (
+    skillId: string,
+    relativePath: string,
+  ): Promise<SkillLocalFileEntry | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_READ_LOCAL_FILE, skillId, relativePath),
   readLocalFiles: (skillId: string): Promise<SkillLocalFileEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_READ_LOCAL_FILES, skillId),
+  renameLocalPath: (
+    skillId: string,
+    oldRelativePath: string,
+    newRelativePath: string,
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_RENAME_LOCAL_PATH,
+      skillId,
+      oldRelativePath,
+      newRelativePath,
+    ),
   writeLocalFile: (skillId: string, relativePath: string, content: string) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE,

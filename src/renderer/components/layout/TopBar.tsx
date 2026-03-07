@@ -17,7 +17,14 @@ import { usePromptStore } from "../../stores/prompt.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useFolderStore } from "../../stores/folder.store";
 import { useSkillStore } from "../../stores/skill.store";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+  useDeferredValue,
+} from "react";
 import { CreatePromptModal } from "../prompt/CreatePromptModal";
 import { QuickAddModal } from "../prompt/QuickAddModal";
 import { CreateSkillModal } from "../skill/CreateSkillModal";
@@ -46,7 +53,10 @@ export function TopBar({
   // Skill store
   const skillSearchQuery = useSkillStore((state) => state.searchQuery);
   const setSkillSearchQuery = useSkillStore((state) => state.setSearchQuery);
-  const getFilteredSkills = useSkillStore((state) => state.getFilteredSkills);
+  const skills = useSkillStore((state) => state.skills);
+  const skillFilterType = useSkillStore((state) => state.filterType);
+  const skillFilterTags = useSkillStore((state) => state.filterTags);
+  const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const selectSkill = useSkillStore((state) => state.selectSkill);
 
   const isDarkMode = useSettingsStore((state) => state.isDarkMode);
@@ -69,6 +79,7 @@ export function TopBar({
   // Unified search query based on mode
   const searchQuery =
     uiViewMode === "skill" ? skillSearchQuery : promptSearchQuery;
+  const deferredSkillSearchQuery = useDeferredValue(skillSearchQuery);
   const setSearchQuery =
     uiViewMode === "skill" ? setSkillSearchQuery : setPromptSearchQuery;
 
@@ -160,8 +171,47 @@ export function TopBar({
   // 计算 Skill 搜索结果
   const skillSearchResults = useMemo(() => {
     if (uiViewMode !== "skill") return [];
-    return getFilteredSkills();
-  }, [uiViewMode, skillSearchQuery, getFilteredSkills]);
+
+    let filtered = skills;
+
+    if (skillFilterType === "favorites") {
+      filtered = filtered.filter((skill) => skill.is_favorite);
+    } else if (skillFilterType === "installed") {
+      filtered = filtered.filter((skill) => Boolean(skill.registry_slug));
+    } else if (skillFilterType === "deployed") {
+      filtered = filtered.filter((skill) => deployedSkillNames.has(skill.name));
+    }
+
+    if (skillFilterTags.length > 0) {
+      filtered = filtered.filter(
+        (skill) =>
+          skill.tags &&
+          skillFilterTags.some((tag) => skill.tags?.includes(tag)),
+      );
+    }
+
+    const query = deferredSkillSearchQuery.trim().toLowerCase();
+    if (!query) return filtered;
+
+    return filtered.filter((skill) => {
+      const nameMatch = skill.name.toLowerCase().includes(query);
+      const descMatch = skill.description?.toLowerCase().includes(query);
+      const tagsMatch = skill.tags?.some((tag) =>
+        tag.toLowerCase().includes(query),
+      );
+      const instructionsMatch = skill.instructions
+        ?.toLowerCase()
+        .includes(query);
+      return nameMatch || descMatch || tagsMatch || instructionsMatch;
+    });
+  }, [
+    deferredSkillSearchQuery,
+    deployedSkillNames,
+    skillFilterTags,
+    skillFilterType,
+    skills,
+    uiViewMode,
+  ]);
 
   // 根据模式选择搜索结果
   const searchResults =

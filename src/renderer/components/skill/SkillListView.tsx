@@ -12,6 +12,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useSkillStore } from "../../stores/skill.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import type { Skill } from "../../../shared/types";
+import type { SkillPlatform } from "../../../shared/constants/platforms";
 
 interface SkillListViewProps {
   skills: Skill[];
@@ -20,11 +21,6 @@ interface SkillListViewProps {
   selectionMode?: boolean;
   selectedSkillIds?: Set<string>;
   onToggleSelection?: (skillId: string) => void;
-}
-
-interface SkillPlatform {
-  id: string;
-  name: string;
 }
 
 /**
@@ -73,19 +69,22 @@ export function SkillListView({
   // Load install status for all skills
   useEffect(() => {
     const loadStatuses = async () => {
-      const statuses: Record<string, Record<string, boolean>> = {};
-      for (const skill of skills) {
-        try {
-          const status = await window.api.skill.getMdInstallStatus(skill.name);
-          statuses[skill.id] = status;
-        } catch (e) {
-          // ignore
-        }
+      const names = skills.map((skill) => skill.name);
+      try {
+        const statusByName =
+          await window.api.skill.getMdInstallStatusBatch(names);
+        const statuses = Object.fromEntries(
+          skills.map((skill) => [skill.id, statusByName[skill.name] ?? {}]),
+        );
+        setPlatformStatuses(statuses);
+      } catch (error) {
+        console.error("Failed to load install status batch:", error);
       }
-      setPlatformStatuses(statuses);
     };
     if (skills.length > 0) {
-      loadStatuses();
+      void loadStatuses();
+    } else {
+      setPlatformStatuses({});
     }
   }, [skills]);
 
@@ -191,6 +190,7 @@ export function SkillListView({
                   <SkillIcon
                     iconUrl={skill.icon_url}
                     iconEmoji={skill.icon_emoji}
+                    backgroundColor={skill.icon_background}
                     name={skill.name}
                     size="md"
                     className={

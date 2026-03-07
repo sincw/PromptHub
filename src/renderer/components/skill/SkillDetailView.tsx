@@ -18,16 +18,15 @@ import {
   CheckSquareIcon,
   SquareIcon,
   FolderOpenIcon,
-  HistoryIcon,
+  LinkIcon,
 } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
 import { EditSkillModal } from "./EditSkillModal";
 import { SkillFileEditor } from "./SkillFileEditor";
-import { SkillVersionHistory } from "./SkillVersionHistory";
-import type { SkillVersion } from "../../../shared/types";
+import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import ReactMarkdown from "react-markdown";
@@ -35,7 +34,12 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSanitize from "rehype-sanitize";
 import "highlight.js/styles/github-dark.css";
-import { restoreSkillVersion, type SkillPlatform } from "./detail-utils";
+import {
+  downloadSkillExport,
+  getErrorMessage,
+  getSkillSourceMeta,
+} from "./detail-utils";
+import { useSkillPlatform } from "./use-skill-platform";
 
 export function SkillDetailView() {
   const { t } = useTranslation();
@@ -44,7 +48,6 @@ export function SkillDetailView() {
   const skills = useSkillStore((state) => state.skills);
   const selectSkill = useSkillStore((state) => state.selectSkill);
   const updateSkill = useSkillStore((state) => state.updateSkill);
-  const loadSkills = useSkillStore((state) => state.loadSkills);
   const skillInstallMethod = useSettingsStore(
     (state) => state.skillInstallMethod,
   );
@@ -60,28 +63,15 @@ export function SkillDetailView() {
   const [isEditing, setIsEditing] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isFileEditorOpen, setIsFileEditorOpen] = useState(false);
-  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+  const [fileEditorHasUnsavedChanges, setFileEditorHasUnsavedChanges] =
+    useState(false);
+  const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = useState(false);
+  const [pendingUnsavedAction, setPendingUnsavedAction] = useState<
+    (() => void) | null
+  >(null);
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
   const [editedInstructions, setEditedInstructions] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
-  // SKILL.md Multi-Platform Installation State
-  // SKILL.md 多平台安装状态
-  const [supportedPlatforms, setSupportedPlatforms] = useState<SkillPlatform[]>(
-    [],
-  );
-  const [detectedPlatforms, setDetectedPlatforms] = useState<string[]>([]);
-  const [skillMdInstallStatus, setSkillMdInstallStatus] = useState<
-    Record<string, boolean>
-  >({});
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(
-    new Set(),
-  );
-  const [isBatchInstalling, setIsBatchInstalling] = useState(false);
-  const [installProgress, setInstallProgress] = useState<{
-    current: number;
-    total: number;
-  } | null>(null);
 
   // Confirmation dialog states
   // 确认对话框状态
@@ -91,84 +81,26 @@ export function SkillDetailView() {
     string | null
   >(null);
 
-  // Load supported platforms on mount
-  // 组件挂载时加载支持的平台
-  useEffect(() => {
-    const loadPlatforms = async () => {
-      try {
-        const platforms = await window.api.skill.getSupportedPlatforms();
-        setSupportedPlatforms(platforms);
-
-        const detected = await window.api.skill.detectPlatforms();
-        setDetectedPlatforms(detected);
-      } catch (e) {
-        console.error("Failed to load platforms:", e);
-      }
-    };
-    loadPlatforms();
-  }, []);
-
   // Refresh status when skill selection changes
   useEffect(() => {
     if (selectedSkill) {
       setEditedInstructions(selectedSkill.instructions || "");
       setIsEditing(false);
-      checkSkillMdInstallStatus();
     }
   }, [selectedSkill?.id]);
-
-  const checkSkillMdInstallStatus = async () => {
-    if (!selectedSkill) return;
-    try {
-      const status = await window.api.skill.getMdInstallStatus(
-        selectedSkill.name,
-      );
-      setSkillMdInstallStatus(status);
-      // Reset selection when status changes
-      // 状态变化时重置选择
-      setSelectedPlatforms(new Set());
-    } catch (e) {
-      console.error("Failed to check SKILL.md install status:", e);
-    }
-  };
-
-  // Filter to only show detected (installed) platforms
-  // 只显示检测到（已安装）的平台
-  const availablePlatforms = useMemo(() => {
-    return supportedPlatforms.filter((p) => detectedPlatforms.includes(p.id));
-  }, [supportedPlatforms, detectedPlatforms]);
-
-  // Get platforms that are not yet installed (can be selected for batch install)
-  // 获取未安装的平台（可被选择进行批量安装）
-  const uninstalledPlatforms = useMemo(() => {
-    return availablePlatforms.filter((p) => !skillMdInstallStatus[p.id]);
-  }, [availablePlatforms, skillMdInstallStatus]);
-
-  // Toggle platform selection
-  // 切换平台选择
-  const togglePlatformSelection = useCallback((platformId: string) => {
-    setSelectedPlatforms((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(platformId)) {
-        newSet.delete(platformId);
-      } else {
-        newSet.add(platformId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  // Select all uninstalled platforms
-  // 全选未安装的平台
-  const selectAllPlatforms = useCallback(() => {
-    setSelectedPlatforms(new Set(uninstalledPlatforms.map((p) => p.id)));
-  }, [uninstalledPlatforms]);
-
-  // Deselect all platforms
-  // 取消全选
-  const deselectAllPlatforms = useCallback(() => {
-    setSelectedPlatforms(new Set());
-  }, []);
+  const {
+    availablePlatforms,
+    batchInstall: installSelectedPlatforms,
+    deselectAllPlatforms,
+    installProgress,
+    installStatus: skillMdInstallStatus,
+    isBatchInstalling,
+    selectedPlatforms,
+    selectAllPlatforms,
+    togglePlatformSelection,
+    uninstallFromPlatform,
+    uninstalledPlatforms,
+  } = useSkillPlatform(selectedSkill, skillInstallMethod);
 
   // Show install confirmation dialog
   // 显示安装确认对话框
@@ -177,52 +109,35 @@ export function SkillDetailView() {
     setConfirmInstallOpen(true);
   };
 
+  const requestCloseFileEditor = (action: () => void) => {
+    if (!fileEditorHasUnsavedChanges) {
+      action();
+      return;
+    }
+
+    setPendingUnsavedAction(() => action);
+    setIsUnsavedDialogOpen(true);
+  };
+
   // Batch install selected platforms (called after confirmation)
   // 批量安装选中的平台（确认后调用）
   const batchInstall = async () => {
-    if (!selectedSkill || selectedPlatforms.size === 0) return;
-
     setConfirmInstallOpen(false);
-    setIsBatchInstalling(true);
-    setInstallProgress({ current: 0, total: selectedPlatforms.size });
 
     try {
-      const skillMdContent = await window.api.skill.export(
-        selectedSkill.id,
-        "skillmd",
-      );
-      const platformIds = Array.from(selectedPlatforms);
-
-      for (let i = 0; i < platformIds.length; i++) {
-        const platformId = platformIds[i];
-        setInstallProgress({ current: i + 1, total: platformIds.length });
-
-        try {
-          if (skillInstallMethod === "symlink") {
-            await window.api.skill.installMdSymlink(
-              selectedSkill.name,
-              skillMdContent,
-              platformId,
-            );
-          } else {
-            await window.api.skill.installMd(
-              selectedSkill.name,
-              skillMdContent,
-              platformId,
-            );
-          }
-        } catch (e) {
-          console.error(`Failed to install to ${platformId}:`, e);
-        }
+      const result = await installSelectedPlatforms();
+      if (result.successCount > 0) {
+        showToast(
+          `${t("skill.installSuccess", "Operation successful")} ${result.successCount}/${result.totalCount}`,
+          "success",
+        );
       }
-
-      await checkSkillMdInstallStatus();
-    } catch (e) {
-      console.error("Batch install failed:", e);
-      alert(`${t("skill.updateFailed")}: ${e}`);
-    } finally {
-      setIsBatchInstalling(false);
-      setInstallProgress(null);
+    } catch (error) {
+      console.error("Batch install failed:", error);
+      showToast(
+        `${t("skill.updateFailed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     }
   };
 
@@ -236,7 +151,7 @@ export function SkillDetailView() {
 
   // Uninstall from a single platform (called after confirmation)
   // 从单个平台卸载（确认后调用）
-  const uninstallFromPlatform = async () => {
+  const confirmUninstallFromPlatform = async () => {
     if (!selectedSkill || !pendingUninstallPlatform) return;
 
     setConfirmUninstallOpen(false);
@@ -244,15 +159,19 @@ export function SkillDetailView() {
     setPendingUninstallPlatform(null);
 
     try {
-      await window.api.skill.uninstallMd(selectedSkill.name, platformId);
-      await checkSkillMdInstallStatus();
-    } catch (e) {
-      console.error(`Failed to uninstall from ${platformId}:`, e);
-      alert(`${t("skill.updateFailed")}: ${e}`);
+      await uninstallFromPlatform(platformId);
+      showToast(t("skill.uninstallSuccess", "Uninstall successful"), "success");
+    } catch (error) {
+      console.error(`Failed to uninstall from ${platformId}:`, error);
+      showToast(
+        `${t("skill.updateFailed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     }
   };
 
   if (!selectedSkill) return null;
+  const sourceMeta = getSkillSourceMeta(selectedSkill);
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -268,8 +187,11 @@ export function SkillDetailView() {
     try {
       await updateSkill(selectedSkill.id, { instructions: editedInstructions });
       setIsEditing(false);
-    } catch (e) {
-      alert("Failed to save instructions");
+    } catch (error) {
+      showToast(
+        `${t("skill.updateFailed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -279,35 +201,17 @@ export function SkillDetailView() {
     if (!selectedSkill) return;
     try {
       const content = await window.api.skill.export(selectedSkill.id, format);
-
-      // Create download
-      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        format === "skillmd"
-          ? `${selectedSkill.name}-SKILL.md`
-          : `${selectedSkill.name}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadSkillExport(content, selectedSkill.name, format);
 
       setCopyStatus({ ...copyStatus, [`export_${format}`]: true });
       setTimeout(() => {
         setCopyStatus({ ...copyStatus, [`export_${format}`]: false });
       }, 2000);
-    } catch (e) {
-      alert(`Export failed: ${e}`);
-    }
-  };
-
-  const handleRestoreVersion = async (version: SkillVersion) => {
-    if (selectedSkill) {
-      await restoreSkillVersion(selectedSkill.id, version, loadSkills);
-      showToast(t("toast.restored"), "success");
-      setIsVersionHistoryOpen(false);
+    } catch (error) {
+      showToast(
+        `${t("skill.exportFailed", "Export failed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     }
   };
 
@@ -324,11 +228,6 @@ export function SkillDetailView() {
               {selectedSkill.name}
             </h2>
             <div className="flex items-center gap-3 mt-1.5">
-              {selectedSkill.version && (
-                <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                  v{selectedSkill.version}
-                </span>
-              )}
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
                 <GlobeIcon className="w-3.5 h-3.5" />
                 {selectedSkill.author || t("skill.localStorage")}
@@ -350,13 +249,6 @@ export function SkillDetailView() {
             title={t("skill.fileEditor", "文件编辑器")}
           >
             <FolderOpenIcon className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setIsVersionHistoryOpen(true)}
-            className="p-2.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full transition-all active:scale-95"
-            title={t("skill.versionHistory", "版本历史")}
-          >
-            <HistoryIcon className="w-5 h-5" />
           </button>
           <button
             onClick={() => selectSkill(null)}
@@ -395,7 +287,7 @@ export function SkillDetailView() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-hide pb-32">
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 pb-32">
         {activeTab === "preview" ? (
           <>
             {/* Description */}
@@ -594,7 +486,7 @@ export function SkillDetailView() {
                     <textarea
                       value={editedInstructions}
                       onChange={(e) => setEditedInstructions(e.target.value)}
-                      className="w-full h-[400px] p-5 bg-background text-sm font-mono border-none focus:ring-0 focus:outline-none resize-none scrollbar-hide"
+                      className="w-full h-[400px] p-5 bg-background text-sm font-mono border-none focus:ring-0 focus:outline-none resize-none overflow-auto"
                       placeholder={t("skill.instructionsPlaceholder")}
                     />
                     <div className="p-3 bg-accent/30 border-t border-border flex justify-end gap-2">
@@ -682,17 +574,35 @@ export function SkillDetailView() {
               </div>
             </section>
 
-            {selectedSkill.source_url && (
+            {sourceMeta && (
               <section>
-                <a
-                  href={selectedSkill.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center gap-3 p-5 bg-github text-white rounded-2xl hover:opacity-90 transition-opacity font-bold shadow-lg"
-                >
-                  <GithubIcon className="w-5 h-5" />
-                  {t("skill.visitRepo", "Visit Skill Repository")}
-                </a>
+                {sourceMeta.kind === "local" ? (
+                  <button
+                    onClick={() => window.electron?.openPath?.(sourceMeta.value)}
+                    className="w-full flex items-center justify-center gap-3 p-5 bg-accent/70 border border-border text-foreground rounded-2xl hover:bg-accent transition-colors font-bold shadow-lg"
+                  >
+                    <FolderOpenIcon className="w-5 h-5" />
+                    {t("skill.openLocalSource", "Open Local Skill Folder")}
+                  </button>
+                ) : (
+                  <a
+                    href={sourceMeta.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`flex items-center justify-center gap-3 p-5 text-white rounded-2xl hover:opacity-90 transition-opacity font-bold shadow-lg ${
+                      sourceMeta.kind === "github" ? "bg-github" : "bg-slate-700"
+                    }`}
+                  >
+                    {sourceMeta.kind === "github" ? (
+                      <GithubIcon className="w-5 h-5" />
+                    ) : (
+                      <LinkIcon className="w-5 h-5" />
+                    )}
+                    {sourceMeta.kind === "github"
+                      ? t("skill.visitRepo", "Visit Skill Repository")
+                      : t("skill.openRemoteSource", "Open Source Link")}
+                  </a>
+                )}
               </section>
             )}
 
@@ -744,16 +654,28 @@ export function SkillDetailView() {
         skillId={selectedSkill.id}
         skillName={selectedSkill.name}
         isOpen={isFileEditorOpen}
-        onClose={() => setIsFileEditorOpen(false)}
-        onSave={() => loadSkills()}
+        onClose={() => {
+          requestCloseFileEditor(() => {
+            setIsFileEditorOpen(false);
+          });
+        }}
+        onUnsavedChange={setFileEditorHasUnsavedChanges}
       />
-
-      {/* Version History Modal */}
-      <SkillVersionHistory
-        isOpen={isVersionHistoryOpen}
-        onClose={() => setIsVersionHistoryOpen(false)}
-        skill={selectedSkill}
-        onRestore={handleRestoreVersion}
+      <UnsavedChangesDialog
+        isOpen={isUnsavedDialogOpen}
+        onClose={() => {
+          setIsUnsavedDialogOpen(false);
+          setPendingUnsavedAction(null);
+        }}
+        onSave={() => {
+          setIsUnsavedDialogOpen(false);
+          setPendingUnsavedAction(null);
+        }}
+        onDiscard={() => {
+          setIsUnsavedDialogOpen(false);
+          pendingUnsavedAction?.();
+          setPendingUnsavedAction(null);
+        }}
       />
 
       {/* Install Confirmation Dialog */}
@@ -768,7 +690,7 @@ export function SkillDetailView() {
             <p>{t("skill.confirmInstallMessage", "将安装技能到以下平台：")}</p>
             <ul className="mt-2 space-y-1">
               {Array.from(selectedPlatforms).map((platformId) => {
-                const platform = supportedPlatforms.find(
+                const platform = availablePlatforms.find(
                   (p) => p.id === platformId,
                 );
                 return platform ? (
@@ -796,7 +718,7 @@ export function SkillDetailView() {
           setConfirmUninstallOpen(false);
           setPendingUninstallPlatform(null);
         }}
-        onConfirm={uninstallFromPlatform}
+        onConfirm={confirmUninstallFromPlatform}
         title={t("skill.confirmUninstallTitle", "确认卸载")}
         message={
           pendingUninstallPlatform ? (
@@ -806,7 +728,7 @@ export function SkillDetailView() {
                 "确定要从 {{platform}} 卸载此技能吗？",
                 {
                   platform:
-                    supportedPlatforms.find(
+                    availablePlatforms.find(
                       (p) => p.id === pendingUninstallPlatform,
                     )?.name || pendingUninstallPlatform,
                 },

@@ -4,6 +4,7 @@ import { CuboidIcon } from 'lucide-react';
 interface SkillIconProps {
   iconUrl?: string;
   iconEmoji?: string;
+  backgroundColor?: string;
   name: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
@@ -43,16 +44,33 @@ function getColorFromName(name: string): string {
  * Skill icon component with fallback chain: URL → Emoji → Initial → Default
  * 技能图标组件，降级链：URL → Emoji → 首字母 → 默认图标
  */
-export function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className = '' }: SkillIconProps) {
+export function SkillIcon({
+  iconUrl,
+  iconEmoji,
+  backgroundColor,
+  name,
+  size = 'md',
+  className = '',
+}: SkillIconProps) {
   const [imgError, setImgError] = useState(false);
   const sizeConfig = SIZE_MAP[size];
   const colorClass = useMemo(() => getColorFromName(name), [name]);
   const initial = name.charAt(0).toUpperCase();
+  const hasCustomBackground = Boolean(backgroundColor);
+  const containerClass = hasCustomBackground
+    ? 'bg-transparent text-slate-900'
+    : colorClass;
+  const containerStyle = backgroundColor
+    ? { backgroundColor }
+    : undefined;
 
   // Priority 1: URL icon
   if (iconUrl && !imgError) {
     return (
-      <div className={`${sizeConfig.container} rounded-xl overflow-hidden flex items-center justify-center ${colorClass} ${className}`}>
+      <div
+        className={`${sizeConfig.container} rounded-xl overflow-hidden flex items-center justify-center ${containerClass} ${className}`}
+        style={containerStyle}
+      >
         <img
           src={iconUrl}
           alt={name}
@@ -67,7 +85,10 @@ export function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className = '
   // Priority 2: Emoji icon
   if (iconEmoji) {
     return (
-      <div className={`${sizeConfig.container} rounded-xl flex items-center justify-center ${colorClass} ${className}`}>
+      <div
+        className={`${sizeConfig.container} rounded-xl flex items-center justify-center ${containerClass} ${className}`}
+        style={containerStyle}
+      >
         <span className={sizeConfig.emoji} role="img" aria-label={name}>
           {iconEmoji}
         </span>
@@ -78,7 +99,10 @@ export function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className = '
   // Priority 3: Name initial with colored background
   if (name) {
     return (
-      <div className={`${sizeConfig.container} rounded-xl flex items-center justify-center font-bold ${colorClass} ${className}`}>
+      <div
+        className={`${sizeConfig.container} rounded-xl flex items-center justify-center font-bold ${containerClass} ${className}`}
+        style={containerStyle}
+      >
         <span className={sizeConfig.text}>{initial}</span>
       </div>
     );
@@ -86,7 +110,10 @@ export function SkillIcon({ iconUrl, iconEmoji, name, size = 'md', className = '
 
   // Priority 4: Default CuboidIcon
   return (
-    <div className={`${sizeConfig.container} rounded-xl flex items-center justify-center bg-primary/10 text-primary ${className}`}>
+    <div
+      className={`${sizeConfig.container} rounded-xl flex items-center justify-center ${hasCustomBackground ? 'bg-transparent text-slate-700' : 'bg-primary/10 text-primary'} ${className}`}
+      style={containerStyle}
+    >
       <CuboidIcon className={sizeConfig.icon} />
     </div>
   );

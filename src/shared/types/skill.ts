@@ -14,6 +14,7 @@ export interface Skill {
   original_tags?: string[]; // tags at import time; user-added tags = tags - original_tags
   is_favorite: boolean;
   currentVersion?: number;
+  versionTrackingEnabled?: boolean;
   created_at: number;
   updated_at: number;
 
@@ -21,6 +22,7 @@ export interface Skill {
   // 技能商店字段
   icon_url?: string; // Skill icon URL (PNG/SVG/WebP)
   icon_emoji?: string; // Emoji icon fallback
+  icon_background?: string; // Icon background color (hex/rgb/css color)
   category?: SkillCategory; // Skill category
   is_builtin?: boolean; // Whether this is a built-in skill from registry
   registry_slug?: string; // Unique slug in the registry
@@ -56,6 +58,90 @@ export interface SkillMCPConfig {
   servers: Record<string, MCPServerConfig>;
 }
 
+export interface SkillChatParams {
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  topK?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  stream?: boolean;
+  enableThinking?: boolean;
+  customParams?: Record<string, string | number | boolean>;
+}
+
+export interface SkillManifest {
+  name?: string;
+  description?: string;
+  version?: string;
+  author?: string;
+  tags?: string[];
+  instructions?: string;
+}
+
+export interface GitHubRepoOwner {
+  login?: string;
+}
+
+export interface GitHubRepoMetadata {
+  default_branch?: string;
+  owner?: GitHubRepoOwner;
+}
+
+export interface GitHubTreeEntry {
+  path?: string;
+  type?: string;
+}
+
+export interface GitHubTreeResponse {
+  tree?: GitHubTreeEntry[];
+}
+
+export interface MarketplaceReferenceEntry {
+  url?: string;
+  index?: string;
+  manifest?: string;
+}
+
+export interface MarketplaceSkillEntry {
+  slug?: string;
+  id?: string;
+  name?: string;
+  title?: string;
+  description?: string;
+  category?: SkillCategory;
+  icon_url?: string;
+  icon_background?: string;
+  iconUrl?: string;
+  icon_emoji?: string;
+  iconEmoji?: string;
+  author?: string;
+  source_url?: string;
+  sourceUrl?: string;
+  repo_url?: string;
+  repoUrl?: string;
+  repository?: string;
+  repo?: string;
+  content_url?: string;
+  contentUrl?: string;
+  skill_url?: string;
+  skillUrl?: string;
+  raw_url?: string;
+  rawUrl?: string;
+  content?: string;
+  tags?: string[];
+  version?: string | number;
+  prerequisites?: string[];
+  compatibility?: string[];
+}
+
+export interface MarketplaceRegistryDocument {
+  skills?: MarketplaceSkillEntry[];
+  marketplaces?: Array<string | MarketplaceReferenceEntry>;
+  sources?: Array<string | MarketplaceReferenceEntry>;
+  registries?: Array<string | MarketplaceReferenceEntry>;
+}
+
 /**
  * Registry skill definition (from built-in or remote registry)
  * 注册表技能定义（来自内置或远程注册表）
@@ -66,6 +152,7 @@ export interface RegistrySkill {
   description: string;
   category: SkillCategory;
   icon_url?: string;
+  icon_background?: string;
   icon_emoji?: string;
   author: string;
   source_url: string;
@@ -124,6 +211,16 @@ export interface SkillLocalFileEntry {
   path: string;
   content: string;
   isDirectory: boolean;
+}
+
+/**
+ * Local repo file tree entry metadata.
+ * 本地仓库文件树元数据。
+ */
+export interface SkillLocalFileTreeEntry {
+  path: string;
+  isDirectory: boolean;
+  size?: number;
 }
 
 /**

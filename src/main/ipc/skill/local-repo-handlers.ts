@@ -46,6 +46,38 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
     },
   );
 
+  ipcMain.handle(IPC_CHANNELS.SKILL_LIST_LOCAL_FILES, async (_, skillId: string) => {
+    if (typeof skillId !== "string" || skillId.trim() === "") {
+      return [];
+    }
+    const skill = db.getById(skillId);
+    if (!skill) return [];
+    const repoPath = await ensureLocalRepoPath(db, skillId);
+    if (repoPath) {
+      return SkillInstaller.listLocalRepoFilesByPath(repoPath);
+    }
+    return SkillInstaller.listLocalRepoFiles(skill.name);
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_READ_LOCAL_FILE,
+    async (_, skillId: string, relativePath: string) => {
+      if (typeof skillId !== "string" || skillId.trim() === "") {
+        return null;
+      }
+      if (typeof relativePath !== "string" || relativePath.trim() === "") {
+        return null;
+      }
+      const skill = db.getById(skillId);
+      if (!skill) return null;
+      const repoPath = await ensureLocalRepoPath(db, skillId);
+      if (repoPath) {
+        return SkillInstaller.readLocalRepoFileByPath(repoPath, relativePath);
+      }
+      return SkillInstaller.readLocalRepoFile(skill.name, relativePath);
+    },
+  );
+
   ipcMain.handle(IPC_CHANNELS.SKILL_READ_LOCAL_FILES, async (_, skillId: string) => {
     if (typeof skillId !== "string" || skillId.trim() === "") {
       return [];
@@ -58,6 +90,42 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
     }
     return SkillInstaller.readLocalRepoFiles(skill.name);
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_RENAME_LOCAL_PATH,
+    async (
+      _,
+      skillId: string,
+      oldRelativePath: string,
+      newRelativePath: string,
+    ) => {
+      if (typeof skillId !== "string" || skillId.trim() === "") {
+        throw new Error("skill:renameLocalPath requires a non-empty skillId");
+      }
+      if (
+        typeof oldRelativePath !== "string" ||
+        oldRelativePath.trim().length === 0
+      ) {
+        throw new Error(
+          "skill:renameLocalPath requires a non-empty oldRelativePath",
+        );
+      }
+      if (
+        typeof newRelativePath !== "string" ||
+        newRelativePath.trim().length === 0
+      ) {
+        throw new Error(
+          "skill:renameLocalPath requires a non-empty newRelativePath",
+        );
+      }
+      const repoPath = await resolveManagedRepoPath({ db }, skillId);
+      return SkillInstaller.renameLocalRepoPathByPath(
+        repoPath,
+        oldRelativePath,
+        newRelativePath,
+      );
+    },
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE,

@@ -15,13 +15,10 @@ import {
   SaveIcon,
   Loader2Icon,
   ChevronRightIcon,
+  PencilIcon,
 } from "lucide-react";
+import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { useToast } from "../ui/Toast";
-import { Textarea } from "../ui/Textarea";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
-import rehypeSanitize from "rehype-sanitize";
 import "./SkillFileEditor.css";
 
 // ─── Types ──────────────────────────────────────────────
@@ -37,6 +34,7 @@ interface SkillFileEditorProps {
   /** "modal" (default for backward compat) renders in a portal overlay;
    *  "inline" renders as a plain panel – no portal, no backdrop, no header. */
   mode?: "modal" | "inline";
+  onUnsavedChange?: (hasUnsaved: boolean) => void;
 }
 
 interface FileEntry {
@@ -45,12 +43,25 @@ interface FileEntry {
   isDirectory: boolean;
 }
 
+interface FileTreeEntry {
+  path: string;
+  isDirectory: boolean;
+  size?: number;
+}
+
 interface TreeNode {
   name: string;
   path: string;
   isDirectory: boolean;
   children: TreeNode[];
   depth: number;
+}
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  path: string | null;
+  isDirectory: boolean;
 }
 
 // ─── Helpers ────────────────────────────────────────────
@@ -93,7 +104,7 @@ function isMarkdownFile(path: string): boolean {
   return ["md", "mdx"].includes(ext);
 }
 
-function buildTree(files: FileEntry[]): TreeNode[] {
+function buildTree(files: FileTreeEntry[]): TreeNode[] {
   const root: TreeNode[] = [];
 
   // Sort: directories first, then alphabetical
@@ -174,16 +185,18 @@ export function SkillFileEditor({
   onClose,
   onSave,
   mode = "modal",
+  onUnsavedChange,
 }: SkillFileEditorProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const isInline = mode === "inline";
 
   // State
-  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [files, setFiles] = useState<FileTreeEntry[]>([]);
+  const [loadedFiles, setLoadedFiles] = useState<Record<string, FileEntry>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingFilePath, setLoadingFilePath] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [editorTab, setEditorTab] = useState<"edit" | "preview">("edit");
   const [modifiedFiles, setModifiedFiles] = useState<Record<string, string>>(
     {},
   );
@@ -193,8 +206,15 @@ export function SkillFileEditor({
   const [newFileDialogOpen, setNewFileDialogOpen] = useState(false);
   const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
   const [deleteDialogFile, setDeleteDialogFile] = useState<string | null>(null);
+  const [renameDialogPath, setRenameDialogPath] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [createParentPath, setCreateParentPath] = useState<string | null>(null);
   const [dialogInput, setDialogInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = useState(false);
+  const [pendingUnsavedAction, setPendingUnsavedAction] = useState<
+    (() => void) | null
+  >(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -202,26 +222,149 @@ export function SkillFileEditor({
   const loadFiles = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await window.api.skill.readLocalFiles(skillId);
+      const result = await window.api.skill.listLocalFiles(skillId);
       setFiles(result);
+      const firstFile =
+        result.find(
+          (entry) =>
+            !entry.isDirectory && entry.path.toLowerCase() === "skill.md",
+        )?.path ||
+        result.find((entry) => !entry.isDirectory)?.path ||
+        null;
+      setSelectedFile((current) => {
+        if (current && result.some((entry) => entry.path === current)) {
+          return current;
+        }
+        return firstFile;
+      });
+      setLoadedFiles((prev) => {
+        const next: Record<string, FileEntry> = {};
+        for (const entry of result) {
+          if (!entry.isDirectory && prev[entry.path]) {
+            next[entry.path] = prev[entry.path];
+          }
+        }
+        return next;
+      });
       // Auto-expand all directories
       const dirs = result.filter((f) => f.isDirectory).map((f) => f.path);
       setExpandedDirs(new Set(dirs));
-    } catch (e) {
-      console.error("Failed to load skill files:", e);
+    } catch (error) {
+      console.error("Failed to load skill files:", error);
+      showToast(
+        `${t("skill.loadFailed", "Load failed")}: ${String(error)}`,
+        "error",
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [skillId]);
+  }, [showToast, skillId, t]);
+
+  const hasAnyUnsaved = useMemo(
+    () => Object.keys(modifiedFiles).length > 0,
+    [modifiedFiles],
+  );
 
   useEffect(() => {
     if (isOpen) {
       loadFiles();
-      setSelectedFile(null);
       setModifiedFiles({});
-      setEditorTab("edit");
     }
   }, [isOpen, loadFiles]);
+
+  useEffect(() => {
+    onUnsavedChange?.(hasAnyUnsaved);
+    (
+      window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean }
+    ).__PROMPTHUB_SKILL_EDITOR_DIRTY = hasAnyUnsaved;
+
+    return () => {
+      (
+        window as Window & { __PROMPTHUB_SKILL_EDITOR_DIRTY?: boolean }
+      ).__PROMPTHUB_SKILL_EDITOR_DIRTY = false;
+    };
+  }, [hasAnyUnsaved, onUnsavedChange]);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const closeContextMenu = () => setContextMenu(null);
+    window.addEventListener("click", closeContextMenu);
+    window.addEventListener("blur", closeContextMenu);
+    return () => {
+      window.removeEventListener("click", closeContextMenu);
+      window.removeEventListener("blur", closeContextMenu);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!isOpen || !hasAnyUnsaved) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [hasAnyUnsaved, isOpen]);
+
+  const discardUnsavedChanges = useCallback(() => {
+    setModifiedFiles({});
+  }, []);
+
+  const runWithUnsavedChangesCheck = useCallback((action: () => void) => {
+    if (!hasAnyUnsaved) {
+      action();
+      return;
+    }
+
+    setPendingUnsavedAction(() => action);
+    setIsUnsavedDialogOpen(true);
+  }, [hasAnyUnsaved]);
+
+  const loadSelectedFileContent = useCallback(
+    async (path: string) => {
+      if (path in modifiedFiles || loadedFiles[path]) {
+        return;
+      }
+      setLoadingFilePath(path);
+      try {
+        const result = await window.api.skill.readLocalFile(skillId, path);
+        if (result && !result.isDirectory) {
+          setLoadedFiles((prev) => ({ ...prev, [path]: result }));
+        }
+      } catch (error) {
+        console.error("Failed to read skill file:", error);
+        showToast(
+          `${t("skill.loadFailed", "Load failed")}: ${String(error)}`,
+          "error",
+        );
+      } finally {
+        setLoadingFilePath((current) => (current === path ? null : current));
+      }
+    },
+    [loadedFiles, modifiedFiles, showToast, skillId, t],
+  );
+
+  useEffect(() => {
+    if (!selectedFile) {
+      return;
+    }
+    const currentMeta = files.find(
+      (file) => file.path === selectedFile && !file.isDirectory,
+    );
+    if (!currentMeta) {
+      return;
+    }
+    void loadSelectedFileContent(selectedFile);
+  }, [files, loadSelectedFileContent, selectedFile]);
 
   // Build tree
   const tree = useMemo(() => buildTree(files), [files]);
@@ -229,8 +372,17 @@ export function SkillFileEditor({
   // Current file data
   const currentFile = useMemo(() => {
     if (!selectedFile) return null;
-    return files.find((f) => f.path === selectedFile && !f.isDirectory) || null;
-  }, [files, selectedFile]);
+    const fileMeta =
+      files.find((f) => f.path === selectedFile && !f.isDirectory) || null;
+    if (!fileMeta) return null;
+    return (
+      loadedFiles[selectedFile] || {
+        path: fileMeta.path,
+        content: "",
+        isDirectory: false,
+      }
+    );
+  }, [files, loadedFiles, selectedFile]);
 
   const currentContent = useMemo(() => {
     if (!selectedFile) return "";
@@ -240,11 +392,6 @@ export function SkillFileEditor({
 
   const isModified = useCallback(
     (path: string) => path in modifiedFiles,
-    [modifiedFiles],
-  );
-
-  const hasAnyUnsaved = useMemo(
-    () => Object.keys(modifiedFiles).length > 0,
     [modifiedFiles],
   );
 
@@ -271,33 +418,56 @@ export function SkillFileEditor({
     if (!selectedFile || !(selectedFile in modifiedFiles)) return;
     setIsSaving(true);
     try {
+      const nextContent = modifiedFiles[selectedFile];
       await window.api.skill.writeLocalFile(
         skillId,
         selectedFile,
-        modifiedFiles[selectedFile],
+        nextContent,
       );
-      // Update local state
       setFiles((prev) =>
-        prev.map((f) =>
-          f.path === selectedFile
-            ? { ...f, content: modifiedFiles[selectedFile] }
-            : f,
+        prev.map((file) =>
+          file.path === selectedFile
+            ? {
+                ...file,
+                size: new TextEncoder().encode(nextContent).length,
+              }
+            : file,
         ),
       );
+      setLoadedFiles((prev) => ({
+        ...prev,
+        [selectedFile]: {
+          path: selectedFile,
+          content: nextContent,
+          isDirectory: false,
+        },
+      }));
       setModifiedFiles((prev) => {
         const next = { ...prev };
         delete next[selectedFile];
         return next;
       });
       showToast(t("skill.fileSaved", "File saved"), "success");
-      onSave?.();
-    } catch (e) {
-      console.error("Failed to save file:", e);
-      showToast(`${t("skill.updateFailed", "Update failed")}: ${e}`, "error");
+      if (onSave) {
+        await onSave();
+      }
+    } catch (error) {
+      console.error("Failed to save file:", error);
+      showToast(
+        `${t("skill.updateFailed", "Update failed")}: ${String(error)}`,
+        "error",
+      );
     } finally {
       setIsSaving(false);
     }
-  }, [selectedFile, modifiedFiles, skillId, showToast, t, onSave]);
+  }, [
+    modifiedFiles,
+    onSave,
+    selectedFile,
+    showToast,
+    skillId,
+    t,
+  ]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -312,18 +482,9 @@ export function SkillFileEditor({
         // Don't close if a dialog is open
         if (newFileDialogOpen || newFolderDialogOpen || deleteDialogFile)
           return;
-        // Warn about unsaved changes before closing
-        // 关闭前提醒用户未保存的修改
-        if (Object.keys(modifiedFiles).length > 0) {
-          const confirmed = window.confirm(
-            t(
-              "skill.unsavedChangesWarning",
-              "You have unsaved changes. Discard and close?",
-            ),
-          );
-          if (!confirmed) return;
-        }
-        onClose();
+        runWithUnsavedChangesCheck(() => {
+          onClose();
+        });
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -336,8 +497,7 @@ export function SkillFileEditor({
     newFileDialogOpen,
     newFolderDialogOpen,
     deleteDialogFile,
-    modifiedFiles,
-    t,
+    runWithUnsavedChangesCheck,
   ]);
 
   // Toggle directory
@@ -355,7 +515,10 @@ export function SkillFileEditor({
 
   // New file
   const handleNewFile = useCallback(async () => {
-    const name = dialogInput.trim();
+    const rawName = dialogInput.trim();
+    const name = createParentPath
+      ? [createParentPath, rawName].filter(Boolean).join("/")
+      : rawName;
     if (!name) return;
     try {
       // If path has intermediate dirs, create them first
@@ -367,18 +530,24 @@ export function SkillFileEditor({
       await window.api.skill.writeLocalFile(skillId, name, "");
       await loadFiles();
       setSelectedFile(name);
-      setEditorTab("edit");
       setNewFileDialogOpen(false);
       setDialogInput("");
-    } catch (e) {
-      console.error("Failed to create file:", e);
-      showToast(`Failed to create file: ${e}`, "error");
+      setLoadedFiles((prev) => ({
+        ...prev,
+        [name]: { path: name, content: "", isDirectory: false },
+      }));
+    } catch (error) {
+      console.error("Failed to create file:", error);
+      showToast(`Failed to create file: ${String(error)}`, "error");
     }
-  }, [dialogInput, skillId, loadFiles, showToast]);
+  }, [createParentPath, dialogInput, skillId, loadFiles, showToast]);
 
   // New folder
   const handleNewFolder = useCallback(async () => {
-    const name = dialogInput.trim();
+    const rawName = dialogInput.trim();
+    const name = createParentPath
+      ? [createParentPath, rawName].filter(Boolean).join("/")
+      : rawName;
     if (!name) return;
     try {
       await window.api.skill.createLocalDir(skillId, name);
@@ -386,11 +555,62 @@ export function SkillFileEditor({
       setExpandedDirs((prev) => new Set([...prev, name]));
       setNewFolderDialogOpen(false);
       setDialogInput("");
-    } catch (e) {
-      console.error("Failed to create folder:", e);
-      showToast(`Failed to create folder: ${e}`, "error");
+    } catch (error) {
+      console.error("Failed to create folder:", error);
+      showToast(`Failed to create folder: ${String(error)}`, "error");
     }
-  }, [dialogInput, skillId, loadFiles, showToast]);
+  }, [createParentPath, dialogInput, skillId, loadFiles, showToast]);
+
+  const handleRenamePath = useCallback(async () => {
+    if (!renameDialogPath) return;
+    const nextName = dialogInput.trim();
+    if (!nextName) return;
+
+    const pathParts = renameDialogPath.split("/");
+    pathParts[pathParts.length - 1] = nextName;
+    const nextPath = pathParts.join("/");
+
+    try {
+      await window.api.skill.renameLocalPath(skillId, renameDialogPath, nextPath);
+      setModifiedFiles((prev) => {
+        if (!(renameDialogPath in prev)) {
+          return prev;
+        }
+        const next = { ...prev, [nextPath]: prev[renameDialogPath] };
+        delete next[renameDialogPath];
+        return next;
+      });
+      setLoadedFiles((prev) => {
+        if (!prev[renameDialogPath]) {
+          return prev;
+        }
+        const next = {
+          ...prev,
+          [nextPath]: { ...prev[renameDialogPath], path: nextPath },
+        };
+        delete next[renameDialogPath];
+        return next;
+      });
+      if (selectedFile === renameDialogPath) {
+        setSelectedFile(nextPath);
+      }
+      await loadFiles();
+      setRenameDialogPath(null);
+      setDialogInput("");
+      showToast(t("skill.fileSaved", "File saved"), "success");
+    } catch (error) {
+      console.error("Failed to rename path:", error);
+      showToast(`Failed to rename: ${String(error)}`, "error");
+    }
+  }, [
+    dialogInput,
+    loadFiles,
+    renameDialogPath,
+    selectedFile,
+    showToast,
+    skillId,
+    t,
+  ]);
 
   // Delete file
   const handleDeleteFile = useCallback(async () => {
@@ -408,11 +628,29 @@ export function SkillFileEditor({
       });
       await loadFiles();
       setDeleteDialogFile(null);
-    } catch (e) {
-      console.error("Failed to delete file:", e);
-      showToast(`Failed to delete file: ${e}`, "error");
+      setLoadedFiles((prev) => {
+        const next = { ...prev };
+        delete next[deleteDialogFile];
+        return next;
+      });
+    } catch (error) {
+      console.error("Failed to delete file:", error);
+      showToast(`Failed to delete file: ${String(error)}`, "error");
     }
   }, [deleteDialogFile, skillId, selectedFile, loadFiles, showToast]);
+
+  const requestSelectFile = useCallback(
+    (path: string) => {
+      if (path === selectedFile) {
+        return;
+      }
+
+      runWithUnsavedChangesCheck(() => {
+        setSelectedFile(path);
+      });
+    },
+    [runWithUnsavedChangesCheck, selectedFile],
+  );
 
   // Open in system file manager
   const handleOpenInExplorer = useCallback(async () => {
@@ -423,8 +661,8 @@ export function SkillFileEditor({
         return;
       }
       window.electron?.openPath?.(repoPath);
-    } catch (e) {
-      console.error("Failed to open in file manager:", e);
+    } catch (error) {
+      console.error("Failed to open in file manager:", error);
     }
   }, [skillId, showToast, t]);
 
@@ -448,6 +686,16 @@ export function SkillFileEditor({
           <button
             className={`skill-file-editor__tree-item skill-file-editor__tree-item--directory ${depthClass}`}
             onClick={() => toggleDir(node.path)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                path: node.path,
+                isDirectory: true,
+              });
+            }}
           >
             <ChevronRightIcon
               className="skill-file-editor__tree-item-icon"
@@ -473,8 +721,17 @@ export function SkillFileEditor({
           isActive ? "skill-file-editor__tree-item--active" : ""
         }`}
         onClick={() => {
-          setSelectedFile(node.path);
-          setEditorTab("edit");
+          requestSelectFile(node.path);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+            path: node.path,
+            isDirectory: false,
+          });
         }}
       >
         {getFileIcon(node.name, false, false)}
@@ -517,6 +774,7 @@ export function SkillFileEditor({
                 className="skill-file-editor__tree-btn"
                 onClick={() => {
                   setDialogInput("");
+                  setCreateParentPath(null);
                   setNewFileDialogOpen(true);
                 }}
                 title={t("skill.newFile", "New File")}
@@ -529,6 +787,7 @@ export function SkillFileEditor({
                 className="skill-file-editor__tree-btn"
                 onClick={() => {
                   setDialogInput("");
+                  setCreateParentPath(null);
                   setNewFolderDialogOpen(true);
                 }}
                 title={t("skill.newFolder", "New Folder")}
@@ -540,7 +799,21 @@ export function SkillFileEditor({
             </div>
           </div>
 
-          <div className="skill-file-editor__tree-list">
+          <div
+            className="skill-file-editor__tree-list"
+            onContextMenu={(event) => {
+              if (event.target !== event.currentTarget) {
+                return;
+              }
+              event.preventDefault();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                path: null,
+                isDirectory: true,
+              });
+            }}
+          >
             {isLoading ? (
               <div className="skill-file-editor__loading">
                 <Loader2Icon style={{ width: "1rem", height: "1rem" }} />
@@ -598,27 +871,11 @@ export function SkillFileEditor({
                 </div>
                 <div className="skill-file-editor__editor-tabs">
                   <button
-                    className={`skill-file-editor__editor-tab ${
-                      editorTab === "edit"
-                        ? "skill-file-editor__editor-tab--active"
-                        : ""
-                    }`}
-                    onClick={() => setEditorTab("edit")}
+                    className="skill-file-editor__editor-tab skill-file-editor__editor-tab--active"
+                    onClick={() => undefined}
                   >
                     {t("prompt.edit", "Edit")}
                   </button>
-                  {isMarkdownFile(selectedFile) && (
-                    <button
-                      className={`skill-file-editor__editor-tab ${
-                        editorTab === "preview"
-                          ? "skill-file-editor__editor-tab--active"
-                          : ""
-                      }`}
-                      onClick={() => setEditorTab("preview")}
-                    >
-                      {t("prompt.preview", "Preview")}
-                    </button>
-                  )}
                   <button
                     className="skill-file-editor__editor-tab"
                     onClick={saveCurrentFile}
@@ -647,42 +904,20 @@ export function SkillFileEditor({
 
               {/* Editor content */}
               <div className="skill-file-editor__editor-content">
-                {editorTab === "edit" ? (
-                  isMarkdownFile(selectedFile) ? (
-                    <Textarea
-                      ref={textareaRef}
-                      value={currentContent}
-                      onChange={(e) => handleContentChange(e.target.value)}
-                      enableMarkdownList
-                      className="skill-file-editor__textarea"
-                      style={{ minHeight: "100%", borderRadius: 0 }}
-                    />
-                  ) : (
-                    <textarea
-                      ref={textareaRef}
-                      className="skill-file-editor__textarea"
-                      value={currentContent}
-                      onChange={(e) => handleContentChange(e.target.value)}
-                      spellCheck={false}
-                    />
-                  )
-                ) : (
-                  <div className="skill-file-editor__preview">
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                      {currentContent ? (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                        >
-                          {currentContent}
-                        </ReactMarkdown>
-                      ) : (
-                        <div className="text-muted-foreground text-sm italic">
-                          {t("skill.noContent", "No content")}
-                        </div>
-                      )}
-                    </div>
+                {loadingFilePath === selectedFile &&
+                !(selectedFile in modifiedFiles) &&
+                !loadedFiles[selectedFile] ? (
+                  <div className="skill-file-editor__loading">
+                    <Loader2Icon style={{ width: "1rem", height: "1rem" }} />
                   </div>
+                ) : (
+                  <textarea
+                    ref={textareaRef}
+                    className="skill-file-editor__textarea"
+                    value={currentContent}
+                    onChange={(e) => handleContentChange(e.target.value)}
+                    spellCheck={false}
+                  />
                 )}
               </div>
 
@@ -788,7 +1023,7 @@ export function SkillFileEditor({
       {/* Delete Confirmation Dialog */}
       <SimpleDialog
         isOpen={!!deleteDialogFile}
-        title={t("skill.deleteFile", "Delete File")}
+        title={t("common.delete", "Delete")}
         onClose={() => setDeleteDialogFile(null)}
       >
         <p
@@ -799,8 +1034,8 @@ export function SkillFileEditor({
           }}
         >
           {t(
-            "skill.deleteFileConfirm",
-            "Are you sure you want to delete this file? This action cannot be undone.",
+            "skill.deletePathConfirm",
+            "Are you sure you want to delete this file or folder? This action cannot be undone.",
           )}
         </p>
         <p
@@ -829,15 +1064,165 @@ export function SkillFileEditor({
           </button>
         </div>
       </SimpleDialog>
+
+      <SimpleDialog
+        isOpen={!!renameDialogPath}
+        title={t("folder.rename", "重命名")}
+        onClose={() => setRenameDialogPath(null)}
+      >
+        <input
+          type="text"
+          className="skill-file-editor__dialog-input"
+          value={dialogInput}
+          onChange={(e) => setDialogInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleRenamePath();
+            if (e.key === "Escape") setRenameDialogPath(null);
+          }}
+          placeholder={t("skill.enterFileName", "Enter file name")}
+          autoFocus
+        />
+        <div className="skill-file-editor__dialog-actions">
+          <button
+            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--cancel"
+            onClick={() => setRenameDialogPath(null)}
+          >
+            {t("common.cancel", "Cancel")}
+          </button>
+          <button
+            className="skill-file-editor__dialog-btn skill-file-editor__dialog-btn--primary"
+            onClick={handleRenamePath}
+            disabled={!dialogInput.trim()}
+          >
+            {t("common.confirm", "Confirm")}
+          </button>
+        </div>
+      </SimpleDialog>
+
+      {contextMenu && (
+        <div
+          className="skill-file-editor__context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {contextMenu.path && !contextMenu.isDirectory && (
+            <>
+              <button
+                className="skill-file-editor__context-item"
+                onClick={() => {
+                  const currentName =
+                    contextMenu.path?.split("/").pop() || contextMenu.path || "";
+                  setDialogInput(currentName);
+                  setRenameDialogPath(contextMenu.path);
+                  setContextMenu(null);
+                }}
+              >
+                <PencilIcon className="w-4 h-4" />
+                {t("folder.rename", "重命名")}
+              </button>
+              <button
+                className="skill-file-editor__context-item skill-file-editor__context-item--danger"
+                onClick={() => {
+                  setDeleteDialogFile(contextMenu.path);
+                  setContextMenu(null);
+                }}
+              >
+                <Trash2Icon className="w-4 h-4" />
+                {t("common.delete", "Delete")}
+              </button>
+            </>
+          )}
+          <button
+            className="skill-file-editor__context-item"
+            onClick={() => {
+              setDialogInput("");
+              setCreateParentPath(
+                contextMenu.path && contextMenu.isDirectory
+                  ? contextMenu.path
+                  : contextMenu.path?.split("/").slice(0, -1).join("/") || null,
+              );
+              setNewFileDialogOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <FilePlusIcon className="w-4 h-4" />
+            {t("skill.newFile", "New File")}
+          </button>
+          <button
+            className="skill-file-editor__context-item"
+            onClick={() => {
+              setDialogInput("");
+              setCreateParentPath(
+                contextMenu.path && contextMenu.isDirectory
+                  ? contextMenu.path
+                  : contextMenu.path?.split("/").slice(0, -1).join("/") || null,
+              );
+              setNewFolderDialogOpen(true);
+              setContextMenu(null);
+            }}
+          >
+            <FolderPlusIcon className="w-4 h-4" />
+            {t("skill.newFolder", "New Folder")}
+          </button>
+          {contextMenu.path && contextMenu.isDirectory && (
+            <>
+              <button
+                className="skill-file-editor__context-item"
+                onClick={() => {
+                  const currentName =
+                    contextMenu.path?.split("/").pop() || contextMenu.path || "";
+                  setDialogInput(currentName);
+                  setRenameDialogPath(contextMenu.path);
+                  setContextMenu(null);
+                }}
+              >
+                <PencilIcon className="w-4 h-4" />
+                {t("folder.rename", "重命名")}
+              </button>
+              <button
+                className="skill-file-editor__context-item skill-file-editor__context-item--danger"
+                onClick={() => {
+                  setDeleteDialogFile(contextMenu.path);
+                  setContextMenu(null);
+                }}
+              >
+                <Trash2Icon className="w-4 h-4" />
+                {t("common.delete", "Delete")}
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 
   // ─── Inline mode: render as a plain panel ─────────────
   if (isInline) {
     return (
-      <div className="skill-file-editor skill-file-editor--inline">
-        {editorBody}
-      </div>
+      <>
+        <div className="skill-file-editor skill-file-editor--inline">
+          {editorBody}
+        </div>
+        <UnsavedChangesDialog
+          isOpen={isUnsavedDialogOpen}
+          onClose={() => {
+            setIsUnsavedDialogOpen(false);
+            setPendingUnsavedAction(null);
+          }}
+          onSave={() => {
+            void saveCurrentFile().finally(() => {
+              setIsUnsavedDialogOpen(false);
+              pendingUnsavedAction?.();
+              setPendingUnsavedAction(null);
+            });
+          }}
+          onDiscard={() => {
+            discardUnsavedChanges();
+            setIsUnsavedDialogOpen(false);
+            pendingUnsavedAction?.();
+            setPendingUnsavedAction(null);
+          }}
+        />
+      </>
     );
   }
 
@@ -848,18 +1233,9 @@ export function SkillFileEditor({
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => {
-          // Warn about unsaved changes before closing via backdrop click
-          // 通过背景点击关闭前提醒用户未保存的修改
-          if (Object.keys(modifiedFiles).length > 0) {
-            const confirmed = window.confirm(
-              t(
-                "skill.unsavedChangesWarning",
-                "You have unsaved changes. Discard and close?",
-              ),
-            );
-            if (!confirmed) return;
-          }
-          onClose?.();
+          runWithUnsavedChangesCheck(() => {
+            onClose?.();
+          });
         }}
       />
 
@@ -885,18 +1261,9 @@ export function SkillFileEditor({
             )}
             <button
               onClick={() => {
-                // Warn about unsaved changes before closing via X button
-                // 通过 X 按钮关闭前提醒用户未保存的修改
-                if (Object.keys(modifiedFiles).length > 0) {
-                  const confirmed = window.confirm(
-                    t(
-                      "skill.unsavedChangesWarning",
-                      "You have unsaved changes. Discard and close?",
-                    ),
-                  );
-                  if (!confirmed) return;
-                }
-                onClose?.();
+                runWithUnsavedChangesCheck(() => {
+                  onClose?.();
+                });
               }}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-lg transition-colors"
             >
@@ -911,5 +1278,29 @@ export function SkillFileEditor({
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return (
+    <>
+      {createPortal(modalContent, document.body)}
+      <UnsavedChangesDialog
+        isOpen={isUnsavedDialogOpen}
+        onClose={() => {
+          setIsUnsavedDialogOpen(false);
+          setPendingUnsavedAction(null);
+        }}
+        onSave={() => {
+          void saveCurrentFile().finally(() => {
+            setIsUnsavedDialogOpen(false);
+            pendingUnsavedAction?.();
+            setPendingUnsavedAction(null);
+          });
+        }}
+        onDiscard={() => {
+          discardUnsavedChanges();
+          setIsUnsavedDialogOpen(false);
+          pendingUnsavedAction?.();
+          setPendingUnsavedAction(null);
+        }}
+      />
+    </>
+  );
 }

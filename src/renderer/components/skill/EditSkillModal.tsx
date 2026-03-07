@@ -2,12 +2,10 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   XIcon,
+  HashIcon,
   SaveIcon,
   LoaderIcon,
   AlertCircleIcon,
-  TagIcon,
-  PlusIcon,
-  XCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   FolderOpenIcon,
@@ -17,19 +15,17 @@ import type { Skill } from "../../../shared/types";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { SkillFileEditor } from "./SkillFileEditor";
 import { SkillIconPicker } from "./SkillIconPicker";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeHighlight from "rehype-highlight";
-
+import { SKILL_NAME_REGEX } from "./detail-utils";
+import {
+  getExistingSkillTags,
+  getUserSkillTags,
+  inferOriginalSkillTags,
+} from "./skill-modal-utils";
 interface EditSkillModalProps {
   isOpen: boolean;
   onClose: () => void;
   skill: Skill | null;
 }
-
-// Skill name validation regex: lowercase alphanumeric with single hyphen separators
-const SKILL_NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 export function EditSkillModal({
   isOpen,
@@ -38,8 +34,7 @@ export function EditSkillModal({
 }: EditSkillModalProps) {
   const { t } = useTranslation();
   const updateSkill = useSkillStore((state) => state.updateSkill);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
+  const existingSkills = useSkillStore((state) => state.skills);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
@@ -47,11 +42,12 @@ export function EditSkillModal({
   // Form fields
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [version, setVersion] = useState("");
   const [author, setAuthor] = useState("");
   const [iconUrl, setIconUrl] = useState<string | undefined>(undefined);
   const [iconEmoji, setIconEmoji] = useState<string | undefined>(undefined);
+  const [iconBackground, setIconBackground] = useState<string | undefined>(
+    undefined,
+  );
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
@@ -60,40 +56,31 @@ export function EditSkillModal({
 
   // Editor view state
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
-  const [instrTab, setInstrTab] = useState<"edit" | "preview">("edit");
   const [isFileEditorOpen, setIsFileEditorOpen] = useState(false);
 
   // Ref to hold save handler (defined after conditional return but needed in useEffect)
   const saveRef = useRef<() => void>(() => {});
+  const existingTags = useMemo(
+    () => getExistingSkillTags(existingSkills),
+    [existingSkills],
+  );
 
   // Initialize form when skill changes
   useEffect(() => {
     if (skill) {
       setName(skill.name || "");
       setDescription(skill.description || "");
-      setInstructions(skill.instructions || skill.content || "");
-      setVersion(skill.version || "");
       setAuthor(skill.author || "");
       setIconUrl(skill.icon_url || undefined);
       setIconEmoji(skill.icon_emoji || undefined);
-      setTags(skill.tags || []);
+      setIconBackground(skill.icon_background || undefined);
+      setTags(getUserSkillTags(skill));
       setError(null);
       setNameError(null);
     }
   }, [skill]);
 
   // All hooks MUST be declared before any conditional return
-  const handleEnterNativeFullscreen = useCallback(() => {
-    setIsNativeFullscreen(true);
-    window.electron?.enterFullscreen?.();
-  }, []);
-
-  const handleExitNativeFullscreen = useCallback(() => {
-    setIsNativeFullscreen(false);
-    window.electron?.exitFullscreen?.();
-  }, []);
-
   // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
@@ -102,13 +89,10 @@ export function EditSkillModal({
         e.preventDefault();
         saveRef.current();
       }
-      if (e.key === "Escape" && isNativeFullscreen) {
-        handleExitNativeFullscreen();
-      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isNativeFullscreen, handleExitNativeFullscreen]);
+  }, [isOpen]);
 
   if (!isOpen || !skill) return null;
 
@@ -116,10 +100,11 @@ export function EditSkillModal({
     return (
       name !== (skill.name || "") ||
       description !== (skill.description || "") ||
-      instructions !== (skill.instructions || skill.content || "") ||
+      author !== (skill.author || "") ||
       iconUrl !== (skill.icon_url || undefined) ||
       iconEmoji !== (skill.icon_emoji || undefined) ||
-      JSON.stringify(tags) !== JSON.stringify(skill.tags || [])
+      iconBackground !== (skill.icon_background || undefined) ||
+      JSON.stringify(tags) !== JSON.stringify(getUserSkillTags(skill))
     );
   };
 
@@ -180,12 +165,11 @@ export function EditSkillModal({
       await updateSkill(skill.id, {
         name,
         description: description || undefined,
-        instructions,
-        content: instructions,
-        version: version || undefined,
         author: author || undefined,
         icon_url: iconUrl,
         icon_emoji: iconEmoji,
+        icon_background: iconBackground,
+        original_tags: inferOriginalSkillTags(skill),
         tags,
       });
 
@@ -206,89 +190,8 @@ export function EditSkillModal({
     setError(null);
     setNameError(null);
     setIsFullscreen(false);
-    setIsNativeFullscreen(false);
-    setInstrTab("edit");
     onClose();
   };
-
-  // Native fullscreen: split-screen editor + preview
-  if (isNativeFullscreen) {
-    return (
-      <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-border bg-muted/30 shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold">
-              {t("skill.instructions", "指令 (SKILL.md)")}
-            </h2>
-            <span className="text-sm text-muted-foreground">
-              {t("common.markdownSupported", "Supports Markdown")}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleExitNativeFullscreen}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-muted text-sm font-medium transition-colors"
-            >
-              <Minimize2Icon className="w-4 h-4" />
-              {t("common.exitFullscreen", "Exit Fullscreen")}
-            </button>
-            <button
-              onClick={() => {
-                handleSave();
-                handleExitNativeFullscreen();
-              }}
-              disabled={isLoading || !!nameError}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-            >
-              <SaveIcon className="w-4 h-4" />
-              {t("common.save", "保存")}
-            </button>
-          </div>
-        </div>
-        {/* Split-screen: left editor + right preview */}
-        <div className="flex-1 flex overflow-hidden">
-          <div className="w-1/2 border-r border-border flex flex-col overflow-hidden">
-            <div className="px-4 py-2 border-b border-border bg-muted/20 text-xs font-medium text-muted-foreground shrink-0">
-              {t("prompt.edit", "编辑")}
-            </div>
-            <textarea
-              ref={textareaRef}
-              className="flex-1 w-full p-6 resize-none bg-background border-none outline-none text-base font-mono leading-relaxed"
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              autoFocus
-              placeholder={t(
-                "skill.instructionsPlaceholder",
-                "输入技能的系统提示词或 SKILL.md 内容...",
-              )}
-            />
-          </div>
-          <div className="w-1/2 flex flex-col overflow-hidden">
-            <div className="px-4 py-2 border-b border-border bg-muted/20 text-xs font-medium text-muted-foreground shrink-0">
-              {t("prompt.preview", "预览")}
-            </div>
-            <div className="flex-1 overflow-auto p-6">
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                {instructions ? (
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                  >
-                    {instructions}
-                  </ReactMarkdown>
-                ) : (
-                  <div className="text-muted-foreground text-sm italic">
-                    {t("skill.noContent", "暂无内容")}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -307,7 +210,7 @@ export function EditSkillModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <h2 className="text-lg font-semibold">
-            {t("skill.edit", "编辑技能")}
+            {t("skill.editMetadata", "编辑技能元数据")}
           </h2>
           <div className="flex items-center gap-2">
             <button
@@ -399,165 +302,120 @@ export function EditSkillModal({
             name={name}
             iconUrl={iconUrl}
             iconEmoji={iconEmoji}
-            onChange={({ iconUrl: nextIconUrl, iconEmoji: nextIconEmoji }) => {
+            iconBackground={iconBackground}
+            onChange={({
+              iconUrl: nextIconUrl,
+              iconEmoji: nextIconEmoji,
+              iconBackground: nextIconBackground,
+            }) => {
               setIconUrl(nextIconUrl);
               setIconEmoji(nextIconEmoji);
+              setIconBackground(nextIconBackground);
             }}
           />
 
-          {/* Version & Author (side by side) */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                {t("skill.version", "版本")}
-              </label>
-              <input
-                type="text"
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-                placeholder="1.0.0"
-                className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                {t("skill.author", "作者")}
-              </label>
-              <input
-                type="text"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                placeholder={t("skill.authorPlaceholder", "作者名称")}
-                className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              {t("skill.author", "作者")}
+            </label>
+            <input
+              type="text"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              placeholder={t("skill.authorPlaceholder", "作者名称")}
+              className="w-full px-4 py-2.5 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
           </div>
 
           {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              {t("skill.tags", "标签")}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">
+              {t("skill.tagsOptional", "标签（可选）")}
             </label>
             <div className="flex flex-wrap gap-2 mb-2">
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary text-white"
                 >
-                  <TagIcon className="w-3 h-3" />
+                  <HashIcon className="w-3 h-3" />
                   {tag}
                   <button
+                    type="button"
                     onClick={() => handleRemoveTag(tag)}
-                    className="ml-0.5 hover:text-destructive transition-colors"
+                    className="ml-1 hover:text-white/70"
                   >
-                    <XCircleIcon className="w-3.5 h-3.5" />
+                    <XIcon className="w-3 h-3" />
                   </button>
                 </span>
               ))}
             </div>
+            {existingTags.length > 0 && (
+              <div className="mb-2">
+                <div className="text-xs text-muted-foreground mb-1.5">
+                  {t("skill.selectExistingTags", "选择已有标签：")}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {existingTags
+                    .filter((existingTag) => !tags.includes(existingTag))
+                    .map((existingTag) => (
+                      <button
+                        key={existingTag}
+                        type="button"
+                        onClick={() => setTags([...tags, existingTag])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-muted hover:bg-accent transition-colors"
+                      >
+                        <HashIcon className="w-3 h-3" />
+                        {existingTag}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 type="text"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
-                placeholder={t("skill.addTag", "添加标签")}
-                className="flex-1 px-3 py-2 bg-muted/50 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                placeholder={t(
+                  "skill.enterTagHint",
+                  "输入新标签后按回车",
+                )}
+                className="flex-1 h-10 px-4 rounded-xl bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-background transition-all duration-200"
               />
               <button
+                type="button"
                 onClick={handleAddTag}
                 disabled={!tagInput.trim()}
                 className="px-3 py-2 bg-accent hover:bg-accent/80 text-foreground rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
-                <PlusIcon className="w-4 h-4" />
+                {t("skill.addTag", "添加标签")}
               </button>
             </div>
           </div>
 
-          {/* Instructions (SKILL.md) with edit/preview tabs */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium">
-                {t("skill.instructions", "指令 (SKILL.md)")}
-              </label>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/50 p-1">
-                  <button
-                    onClick={() => setInstrTab("edit")}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                      instrTab === "edit"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t("prompt.edit", "编辑")}
-                  </button>
-                  <button
-                    onClick={() => setInstrTab("preview")}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                      instrTab === "preview"
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t("prompt.preview", "预览")}
-                  </button>
-                </div>
-                <button
-                  onClick={handleEnterNativeFullscreen}
-                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-                  title={t("common.fullscreen", "Fullscreen Edit")}
-                >
-                  <Maximize2Icon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setIsFileEditorOpen(true)}
-                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-                  title={t("skill.fileEditor", "文件编辑器")}
-                >
-                  <FolderOpenIcon className="w-4 h-4" />
-                </button>
+          <div className="rounded-xl border border-border bg-accent/20 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-medium">
+                  {t("skill.instructionsManagedInFiles", "指令内容在文件编辑器中维护")}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground leading-5">
+                  {t(
+                    "skill.instructionsManagedInFilesHint",
+                    "SKILL.md 和其他文件请在文件页或文件编辑器里直接修改。这里仅编辑名称、描述、作者、标签等元数据。",
+                  )}
+                </p>
               </div>
-            </div>
-            {instrTab === "edit" ? (
-              <textarea
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder={t(
-                  "skill.instructionsPlaceholder",
-                  "输入技能的系统提示词或 SKILL.md 内容...",
-                )}
-                rows={isFullscreen ? 20 : 10}
-                className="w-full px-4 py-3 bg-muted/50 border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-              />
-            ) : (
-              <div
-                className={`p-4 rounded-lg bg-card border border-border text-sm break-words overflow-auto ${
-                  isFullscreen ? "min-h-[400px]" : "min-h-[200px]"
-                }`}
+              <button
+                onClick={() => setIsFileEditorOpen(true)}
+                className="shrink-0 inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
               >
-                {instructions ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                    >
-                      {instructions}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div className="text-muted-foreground text-sm italic">
-                    {t("skill.noContent", "暂无内容")}
-                  </div>
-                )}
-              </div>
-            )}
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {t(
-                "skill.instructionsHint",
-                "支持 Markdown 格式，用于指导 AI 如何使用此技能",
-              )}
-            </p>
+                <FolderOpenIcon className="w-4 h-4" />
+                {t("skill.openFileEditor", "打开文件编辑器")}
+              </button>
+            </div>
           </div>
         </div>
 

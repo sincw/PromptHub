@@ -1,7 +1,17 @@
 import * as fs from "fs/promises";
+import * as dns from "dns/promises";
+import * as http from "http";
+import * as https from "https";
+import * as nodeNet from "net";
 import * as os from "os";
 import * as path from "path";
 import { app } from "electron";
+import type {
+  ScannedSkill,
+  SkillLocalFileEntry,
+  SkillLocalFileTreeEntry,
+  SkillManifest,
+} from "../../shared/types";
 import { SkillDB } from "../database/skill";
 import { parseSkillMd, validateSkillName } from "./skill-validator";
 import {
@@ -15,23 +25,245 @@ import {
   validateMCPConfig,
 } from "./skill-installer-utils";
 
-/**
- * Represents a locally discovered skill (not yet imported)
- * 代表一个本地发现的技能（尚未导入）
- */
-export interface ScannedSkill {
-  name: string;
-  description: string;
-  version?: string;
-  author: string;
-  tags: string[];
-  instructions: string;
-  /** Absolute path to the SKILL.md file */
-  filePath: string;
-  /** Parent directory of the SKILL.md file (skill folder path) */
-  localPath: string;
-  /** All platform directories where this skill was found */
-  platforms: string[];
+function getErrorCode(error: unknown): string | undefined {
+  return typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+const REMOTE_FETCH_TIMEOUT_MS = 30_000;
+const REMOTE_FETCH_MAX_BYTES = 5 * 1024 * 1024;
+const REMOTE_FETCH_MAX_REDIRECTS = 5;
+const IMPORT_FIELD_MAX_LENGTH = 10_000;
+
+interface ResolvedAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+function isPathWithin(basePath: string, targetPath: string): boolean {
+  const relative = path.relative(basePath, targetPath);
+  return !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function isBlockedHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized.endsWith(".localhost") ||
+    normalized === "localhost.localdomain" ||
+    normalized.endsWith(".localdomain")
+  );
+}
+
+function isPrivateIPv4(address: string): boolean {
+  const parts = address.split(".").map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+function isPrivateIPv6(address: string): boolean {
+  const normalized = address.toLowerCase().split("%")[0];
+  if (normalized === "::" || normalized === "::1") {
+    return true;
+  }
+
+  if (normalized.startsWith("::ffff:")) {
+    const mappedAddress = normalized.slice("::ffff:".length);
+    return nodeNet.isIP(mappedAddress) === 4 && isPrivateIPv4(mappedAddress);
+  }
+
+  const firstHextet = normalized.split(":").find((segment) => segment.length > 0);
+  if (!firstHextet) {
+    return false;
+  }
+
+  const value = Number.parseInt(firstHextet, 16);
+  if (Number.isNaN(value)) {
+    return false;
+  }
+
+  return (value & 0xfe00) === 0xfc00 || (value & 0xffc0) === 0xfe80;
+}
+
+function isPrivateAddress(address: string): boolean {
+  const family = nodeNet.isIP(address);
+  if (family === 4) {
+    return isPrivateIPv4(address);
+  }
+  if (family === 6) {
+    return isPrivateIPv6(address);
+  }
+  return false;
+}
+
+function sanitizeImportedString(
+  value: unknown,
+  fallback: string | undefined = "",
+  maxLength = IMPORT_FIELD_MAX_LENGTH,
+): string | undefined {
+  return typeof value === "string" ? value.slice(0, maxLength) : fallback;
+}
+
+function sanitizeImportedTags(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return ["imported"];
+  }
+  const tags = value
+    .filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+    .map((tag) => tag.trim().slice(0, 128));
+  return tags.length > 0 ? tags : ["imported"];
+}
+
+function toRequestPath(parsedUrl: URL): string {
+  return `${parsedUrl.pathname}${parsedUrl.search}`;
+}
+
+function getRequestModule(protocol: string): typeof http | typeof https {
+  return protocol === "https:" ? https : http;
+}
+
+async function resolvePublicAddress(hostname: string): Promise<ResolvedAddress> {
+  if (isBlockedHostname(hostname)) {
+    throw new Error("Access to local network addresses is not allowed");
+  }
+
+  if (nodeNet.isIP(hostname)) {
+    if (isPrivateAddress(hostname)) {
+      throw new Error("Access to internal network addresses is not allowed");
+    }
+    return { address: hostname, family: nodeNet.isIP(hostname) as 4 | 6 };
+  }
+
+  const addresses = await dns.lookup(hostname, { all: true, verbatim: true });
+  if (addresses.length === 0) {
+    throw new Error("Failed to resolve remote host");
+  }
+
+  if (addresses.some((entry) => isPrivateAddress(entry.address))) {
+    throw new Error("Access to internal network addresses is not allowed");
+  }
+
+  const firstAddress = addresses[0];
+  return {
+    address: firstAddress.address,
+    family: firstAddress.family === 6 ? 6 : 4,
+  };
+}
+
+async function fetchRemoteText(
+  targetUrl: string,
+  redirectCount = 0,
+): Promise<string> {
+  if (redirectCount > REMOTE_FETCH_MAX_REDIRECTS) {
+    throw new Error("Too many redirects while fetching remote content");
+  }
+
+  const parsedUrl = new URL(targetUrl);
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Only HTTPS URLs are allowed");
+  }
+
+  const resolvedAddress = await resolvePublicAddress(parsedUrl.hostname);
+  const requestModule = getRequestModule(parsedUrl.protocol);
+
+  return new Promise((resolve, reject) => {
+    const request = requestModule.request(
+      {
+        protocol: parsedUrl.protocol,
+        hostname: resolvedAddress.address,
+        family: resolvedAddress.family,
+        servername: parsedUrl.hostname,
+        port: parsedUrl.port
+          ? Number(parsedUrl.port)
+          : parsedUrl.protocol === "https:"
+            ? 443
+            : 80,
+        path: toRequestPath(parsedUrl),
+        method: "GET",
+        headers: {
+          Host: parsedUrl.host,
+          "User-Agent": "PromptHub/remote-skill-fetch",
+          Accept: "text/plain, application/json;q=0.9, */*;q=0.1",
+        },
+        timeout: REMOTE_FETCH_TIMEOUT_MS,
+      },
+      (response) => {
+        const statusCode = response.statusCode ?? 0;
+        const location = response.headers.location;
+
+        if (
+          statusCode >= 300 &&
+          statusCode < 400 &&
+          typeof location === "string"
+        ) {
+          response.resume();
+          const nextUrl = new URL(location, parsedUrl).toString();
+          void fetchRemoteText(nextUrl, redirectCount + 1).then(resolve).catch(reject);
+          return;
+        }
+
+        if (statusCode !== 200) {
+          response.resume();
+          reject(new Error(`HTTP ${statusCode} fetching remote content`));
+          return;
+        }
+
+        const contentLengthHeader = response.headers["content-length"];
+        const contentLength = Array.isArray(contentLengthHeader)
+          ? Number.parseInt(contentLengthHeader[0], 10)
+          : Number.parseInt(contentLengthHeader ?? "", 10);
+        if (
+          Number.isFinite(contentLength) &&
+          contentLength > REMOTE_FETCH_MAX_BYTES
+        ) {
+          response.resume();
+          reject(new Error("Remote content exceeds size limit"));
+          return;
+        }
+
+        let receivedBytes = 0;
+        const chunks: Buffer[] = [];
+
+        response.on("data", (chunk: Buffer) => {
+          receivedBytes += chunk.length;
+          if (receivedBytes > REMOTE_FETCH_MAX_BYTES) {
+            response.destroy(new Error("Remote content exceeds size limit"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on("end", () => {
+          resolve(Buffer.concat(chunks).toString("utf-8"));
+        });
+        response.on("error", (error) => reject(error));
+      },
+    );
+
+    request.on("timeout", () => {
+      request.destroy(new Error("Remote content request timed out"));
+    });
+    request.on("error", (error) => reject(error));
+    request.end();
+  });
 }
 
 export class SkillInstaller {
@@ -43,6 +275,48 @@ export class SkillInstaller {
     const resolved = path.resolve(absolutePath);
     const relative = path.relative(this.skillsDir, resolved);
     return !relative.startsWith("..") && !path.isAbsolute(relative);
+  }
+
+  private static async resolveRepoBasePath(
+    absoluteBasePath: string,
+    options?: { ensureExists?: boolean },
+  ): Promise<{ resolvedBasePath: string; realBasePath: string }> {
+    const resolvedBasePath = path.resolve(absoluteBasePath);
+    if (!isPathWithin(path.resolve(this.skillsDir), resolvedBasePath)) {
+      throw new Error(
+        "Path traversal detected: base path is outside skills directory",
+      );
+    }
+
+    if (options?.ensureExists) {
+      await fs.mkdir(resolvedBasePath, { recursive: true });
+    }
+
+    const realBasePath = await fs
+      .realpath(resolvedBasePath)
+      .catch(() => resolvedBasePath);
+    if (!isPathWithin(path.resolve(this.skillsDir), realBasePath)) {
+      throw new Error("Managed repo path resolves outside skills directory");
+    }
+
+    return { resolvedBasePath, realBasePath };
+  }
+
+  private static async resolveRepoTargetPath(
+    absoluteBasePath: string,
+    relativePath: string,
+    options?: { ensureBaseExists?: boolean },
+  ): Promise<{ fullPath: string; realBasePath: string }> {
+    this.validateRelativePath(relativePath);
+    const { resolvedBasePath, realBasePath } = await this.resolveRepoBasePath(
+      absoluteBasePath,
+      { ensureExists: options?.ensureBaseExists },
+    );
+    const fullPath = path.resolve(resolvedBasePath, relativePath);
+    if (!isPathWithin(realBasePath, fullPath)) {
+      throw new Error("Path traversal detected: target path escapes repo root");
+    }
+    return { fullPath, realBasePath };
   }
 
   static async init() {
@@ -92,8 +366,8 @@ export class SkillInstaller {
       throw new Error(
         `Skill ${userDir}/${repoName} already exists. Please delete it first.`,
       );
-    } catch (e: any) {
-      if (e.code !== "ENOENT") throw e;
+    } catch (error: unknown) {
+      if (getErrorCode(error) !== "ENOENT") throw error;
     }
 
     try {
@@ -139,7 +413,8 @@ export class SkillInstaller {
         source_url: url,
         local_repo_path: installDir,
         is_favorite: false,
-        tags: manifest.tags || ["github"],
+        tags: [],
+        original_tags: manifest.tags || ["github"],
       });
 
       return skill.id;
@@ -224,24 +499,6 @@ export class SkillInstaller {
                   parsed?.frontmatter.version || manifest.version || undefined;
                 let author =
                   parsed?.frontmatter.author || manifest.author || "Local";
-                let tags = parsed?.frontmatter.tags || ["local", "discovered"];
-
-                // Add source tag based on which platform directory this was found in
-                const matchedPlatform = SKILL_PLATFORMS.find((pl) => {
-                  const dir = pl.skillsDir[platform] || pl.skillsDir.darwin;
-                  const resolved = dir
-                    .replace(/^~/, homeDir)
-                    .replace(/%USERPROFILE%/g, homeDir)
-                    .replace(
-                      /%APPDATA%/g,
-                      path.join(homeDir, "AppData", "Roaming"),
-                    );
-                  return scanPath === resolved;
-                });
-                if (matchedPlatform && !tags.includes(matchedPlatform.id)) {
-                  tags.push(matchedPlatform.id);
-                }
-
                 db.create({
                   name,
                   description,
@@ -251,18 +508,19 @@ export class SkillInstaller {
                   content: instructions,
                   protocol_type: "skill",
                   is_favorite: false,
-                  tags,
+                  tags: [],
+                  original_tags: parsed?.frontmatter.tags || [],
                   local_repo_path: skillFolderPath,
                 });
                 count++;
                 console.log(
                   `Discovered local skill via SKILL.md: ${name} in ${entry.name}`,
                 );
-              } catch (err: any) {
+              } catch (error: unknown) {
                 // 跳过重复名称等非致命错误
                 console.warn(
                   `Failed to import skill "${name}":`,
-                  err?.message || err,
+                  getErrorMessage(error),
                 );
               }
             }
@@ -369,7 +627,7 @@ export class SkillInstaller {
                       undefined,
                     author:
                       parsed?.frontmatter.author || manifest.author || "Local",
-                    tags: parsed?.frontmatter.tags || ["local", "discovered"],
+                    tags: parsed?.frontmatter.tags || [],
                     instructions,
                     filePath: skillMdPath,
                     localPath: skillFolderPath,
@@ -395,6 +653,9 @@ export class SkillInstaller {
     name: string,
     mcpConfig: unknown,
   ): Promise<void> {
+    if (platform !== "claude" && platform !== "cursor") {
+      throw new Error(`Unsupported platform: ${platform}`);
+    }
     // Runtime validation of MCP config structure before writing to platform config
     validateMCPConfig(mcpConfig, name);
 
@@ -417,7 +678,7 @@ export class SkillInstaller {
 
     try {
       const content = await fs.readFile(configPath, "utf-8");
-      const config = JSON.parse(content);
+      const config = JSON.parse(content) as Record<string, unknown>;
 
       // Handle different key variations
       if (!config.mcpServers && !config.mcp_servers && !config.servers) {
@@ -433,17 +694,30 @@ export class SkillInstaller {
       // Merge config
       // mcpConfig is expected to be { servers: { name: config } }
       const configObj = mcpConfig as Record<string, unknown>;
-      const sourceServers = configObj.servers || { [name]: mcpConfig };
+      const sourceServers =
+        configObj.servers && typeof configObj.servers === "object"
+          ? (configObj.servers as Record<string, unknown>)
+          : { [name]: mcpConfig };
+      const sourceServerEntries = Object.entries(sourceServers);
+      if (
+        sourceServerEntries.length !== 1 ||
+        sourceServerEntries[0][0] !== name
+      ) {
+        throw new Error(
+          "MCP config must contain exactly one server entry matching the skill name",
+        );
+      }
+      await fs.copyFile(configPath, `${configPath}.bak`);
       config[serversKey] = {
-        ...config[serversKey],
-        ...(sourceServers as Record<string, unknown>),
+        ...(config[serversKey] as Record<string, unknown>),
+        [name]: sourceServerEntries[0][1],
       };
 
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
       console.log(`Successfully installed skill ${name} to ${platform}`);
-    } catch (e) {
-      console.error(`Failed to install to ${platform}:`, e);
-      throw e;
+    } catch (error) {
+      console.error(`Failed to install to ${platform}:`, error);
+      throw error;
     }
   }
 
@@ -523,14 +797,24 @@ export class SkillInstaller {
     }
   }
 
-  private static async readManifest(dir: string): Promise<any> {
+  private static async readManifest(dir: string): Promise<SkillManifest> {
     try {
       const content = await fs.readFile(
         path.join(dir, "manifest.json"),
         "utf-8",
       );
-      return JSON.parse(content);
-    } catch (e) {
+      const parsed = JSON.parse(content) as Record<string, unknown>;
+      return {
+        name: sanitizeImportedString(parsed.name, undefined),
+        description: sanitizeImportedString(parsed.description, undefined),
+        version: sanitizeImportedString(parsed.version, undefined, 256),
+        author: sanitizeImportedString(parsed.author, undefined, 256),
+        tags: Array.isArray(parsed.tags)
+          ? parsed.tags.filter((tag): tag is string => typeof tag === "string")
+          : undefined,
+        instructions: sanitizeImportedString(parsed.instructions, undefined),
+      };
+    } catch {
       return {};
     }
   }
@@ -658,13 +942,13 @@ export class SkillInstaller {
       if (!stat.isDirectory()) {
         throw new Error(`Invalid sourceDir: not a directory: ${sourceDir}`);
       }
-    } catch (e: any) {
-      if (e.code === "ENOENT") {
+    } catch (error: unknown) {
+      if (getErrorCode(error) === "ENOENT") {
         throw new Error(
           `Invalid sourceDir: directory does not exist: ${sourceDir}`,
         );
       }
-      throw e;
+      throw error;
     }
 
     await this.init();
@@ -766,26 +1050,15 @@ export class SkillInstaller {
    */
   static async readLocalRepoFilesByPath(
     absolutePath: string,
-  ): Promise<{ path: string; content: string; isDirectory: boolean }[]> {
-    // Security: validate the path is inside skillsDir to prevent path traversal
-    // 安全校验：确保路径在 skillsDir 内，防止目录遍历攻击
-    const skillsDir = this.skillsDir;
-    const resolved = path.resolve(absolutePath);
-    const relative = path.relative(skillsDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      console.error(`[Security] Path traversal blocked: ${absolutePath}`);
-      throw new Error(
-        "Path traversal detected: path is outside skills directory",
-      );
-    }
+  ): Promise<SkillLocalFileEntry[]> {
+    const { realBasePath } = await this.resolveRepoBasePath(absolutePath);
 
     if (!(await this.fileExists(absolutePath))) {
       return [];
     }
 
     const baseDir = absolutePath;
-    const results: { path: string; content: string; isDirectory: boolean }[] =
-      [];
+    const results: SkillLocalFileEntry[] = [];
 
     const walk = async (dir: string, depth: number): Promise<void> => {
       if (depth > SkillInstaller.MAX_WALK_DEPTH) return;
@@ -796,6 +1069,14 @@ export class SkillInstaller {
         if (results.length >= SkillInstaller.MAX_WALK_FILES) return;
 
         const fullPath = path.join(dir, entry.name);
+        const lstat = await fs.lstat(fullPath);
+        if (lstat.isSymbolicLink()) {
+          continue;
+        }
+        const realFullPath = await fs.realpath(fullPath).catch(() => fullPath);
+        if (!isPathWithin(realBasePath, realFullPath)) {
+          continue;
+        }
         const relativePath = path.relative(baseDir, fullPath);
 
         if (entry.isDirectory()) {
@@ -821,6 +1102,118 @@ export class SkillInstaller {
 
     await walk(baseDir, 0);
     return results;
+  }
+
+  static async listLocalRepoFiles(
+    skillName: string,
+  ): Promise<SkillLocalFileTreeEntry[]> {
+    this.validateSkillName(skillName);
+    await this.init();
+    const absolutePath = path.join(this.skillsDir, skillName);
+    return this.listLocalRepoFilesByPath(absolutePath);
+  }
+
+  static async listLocalRepoFilesByPath(
+    absolutePath: string,
+  ): Promise<SkillLocalFileTreeEntry[]> {
+    const { realBasePath } = await this.resolveRepoBasePath(absolutePath);
+
+    if (!(await this.fileExists(absolutePath))) {
+      return [];
+    }
+
+    const baseDir = absolutePath;
+    const results: SkillLocalFileTreeEntry[] = [];
+
+    const walk = async (dir: string, depth: number): Promise<void> => {
+      if (depth > SkillInstaller.MAX_WALK_DEPTH) return;
+      if (results.length >= SkillInstaller.MAX_WALK_FILES) return;
+
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (results.length >= SkillInstaller.MAX_WALK_FILES) return;
+
+        const fullPath = path.join(dir, entry.name);
+        const lstat = await fs.lstat(fullPath);
+        if (lstat.isSymbolicLink()) {
+          continue;
+        }
+        const realFullPath = await fs.realpath(fullPath).catch(() => fullPath);
+        if (!isPathWithin(realBasePath, realFullPath)) {
+          continue;
+        }
+        const relativePath = path.relative(baseDir, fullPath);
+
+        if (entry.isDirectory()) {
+          results.push({ path: relativePath, isDirectory: true });
+          await walk(fullPath, depth + 1);
+        } else {
+          const stat = await fs.stat(fullPath);
+          results.push({
+            path: relativePath,
+            isDirectory: false,
+            size: stat.size,
+          });
+        }
+      }
+    };
+
+    await walk(baseDir, 0);
+    return results;
+  }
+
+  static async readLocalRepoFile(
+    skillName: string,
+    relativePath: string,
+  ): Promise<SkillLocalFileEntry | null> {
+    this.validateSkillName(skillName);
+    await this.init();
+    const absolutePath = path.join(this.skillsDir, skillName);
+    return this.readLocalRepoFileByPath(absolutePath, relativePath);
+  }
+
+  static async readLocalRepoFileByPath(
+    absoluteBasePath: string,
+    relativePath: string,
+  ): Promise<SkillLocalFileEntry | null> {
+    const { fullPath, realBasePath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      relativePath,
+    );
+    if (!(await this.fileExists(fullPath))) {
+      return null;
+    }
+
+    const lstat = await fs.lstat(fullPath);
+    if (lstat.isSymbolicLink()) {
+      throw new Error("Symlinked files are not allowed in managed repos");
+    }
+    const realFullPath = await fs.realpath(fullPath).catch(() => fullPath);
+    if (!isPathWithin(realBasePath, realFullPath)) {
+      throw new Error("Repo file path resolves outside managed repo");
+    }
+    const stat = await fs.stat(fullPath);
+    if (stat.isDirectory()) {
+      return { path: relativePath, content: "", isDirectory: true };
+    }
+
+    const ext = path.extname(relativePath).toLowerCase();
+    let content: string;
+    if (this.TEXT_EXTENSIONS.has(ext)) {
+      if (stat.size > 1_048_576) {
+        content = "[file too large]";
+      } else {
+        content = await fs.readFile(fullPath, "utf-8");
+      }
+    } else {
+      content = "[binary file]";
+    }
+
+    return {
+      path: relativePath,
+      content,
+      isDirectory: false,
+    };
   }
 
   /**
@@ -854,19 +1247,12 @@ export class SkillInstaller {
     relativePath: string,
     content: string,
   ): Promise<void> {
-    this.validateRelativePath(relativePath);
-    // Security: ensure absoluteBasePath is inside skillsDir
-    const skillsDir = this.skillsDir;
-    const resolved = path.resolve(absoluteBasePath);
-    const relative = path.relative(skillsDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error(
-        "Path traversal detected: base path is outside skills directory",
-      );
-    }
-
     await this.init();
-    const fullPath = path.join(resolved, relativePath);
+    const { fullPath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      relativePath,
+      { ensureBaseExists: true },
+    );
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     await fs.writeFile(fullPath, content, "utf-8");
   }
@@ -894,18 +1280,11 @@ export class SkillInstaller {
     absoluteBasePath: string,
     relativePath: string,
   ): Promise<void> {
-    this.validateRelativePath(relativePath);
-    const skillsDir = this.skillsDir;
-    const resolved = path.resolve(absoluteBasePath);
-    const relative = path.relative(skillsDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error(
-        "Path traversal detected: base path is outside skills directory",
-      );
-    }
-
-    const fullPath = path.join(resolved, relativePath);
-    await fs.rm(fullPath, { force: true });
+    const { fullPath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      relativePath,
+    );
+    await fs.rm(fullPath, { recursive: true, force: true });
   }
 
   /**
@@ -932,19 +1311,32 @@ export class SkillInstaller {
     absoluteBasePath: string,
     relativePath: string,
   ): Promise<void> {
-    this.validateRelativePath(relativePath);
-    const skillsDir = this.skillsDir;
-    const resolved = path.resolve(absoluteBasePath);
-    const relative = path.relative(skillsDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error(
-        "Path traversal detected: base path is outside skills directory",
-      );
-    }
-
     await this.init();
-    const fullPath = path.join(resolved, relativePath);
+    const { fullPath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      relativePath,
+      { ensureBaseExists: true },
+    );
     await fs.mkdir(fullPath, { recursive: true });
+  }
+
+  static async renameLocalRepoPathByPath(
+    absoluteBasePath: string,
+    oldRelativePath: string,
+    newRelativePath: string,
+  ): Promise<void> {
+    const { fullPath: oldFullPath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      oldRelativePath,
+    );
+    const { fullPath: newFullPath } = await this.resolveRepoTargetPath(
+      absoluteBasePath,
+      newRelativePath,
+      { ensureBaseExists: true },
+    );
+
+    await fs.mkdir(path.dirname(newFullPath), { recursive: true });
+    await fs.rename(oldFullPath, newFullPath);
   }
 
   /**
@@ -1058,21 +1450,23 @@ export class SkillInstaller {
     absoluteBasePath: string,
     filesSnapshot: { relativePath: string; content: string }[],
   ): Promise<void> {
-    const skillsDir = this.skillsDir;
-    const resolved = path.resolve(absoluteBasePath);
-    const relative = path.relative(skillsDir, resolved);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error(
-        "Path traversal detected: base path is outside skills directory",
-      );
-    }
+    const { resolvedBasePath } = await this.resolveRepoBasePath(
+      absoluteBasePath,
+      { ensureExists: true },
+    );
 
-    await fs.rm(resolved, { recursive: true, force: true });
-    await fs.mkdir(resolved, { recursive: true });
+    await fs.rm(resolvedBasePath, { recursive: true, force: true });
+    await fs.mkdir(resolvedBasePath, { recursive: true });
+    const realBasePath = await fs
+      .realpath(resolvedBasePath)
+      .catch(() => resolvedBasePath);
 
     for (const file of filesSnapshot) {
       this.validateRelativePath(file.relativePath);
-      const fullPath = path.join(resolved, file.relativePath);
+      const fullPath = path.resolve(resolvedBasePath, file.relativePath);
+      if (!isPathWithin(realBasePath, fullPath)) {
+        throw new Error("Path traversal detected while restoring repo files");
+      }
       await fs.mkdir(path.dirname(fullPath), { recursive: true });
       await fs.writeFile(fullPath, file.content, "utf-8");
     }
@@ -1129,6 +1523,9 @@ export class SkillInstaller {
     tags?: string[];
     instructions?: string;
     protocol_type?: string;
+    icon_url?: string;
+    icon_emoji?: string;
+    icon_background?: string;
   }): string {
     const exportData = {
       name: skill.name,
@@ -1138,6 +1535,9 @@ export class SkillInstaller {
       tags: skill.tags || [],
       instructions: skill.instructions || "",
       protocol_type: skill.protocol_type || "skill",
+      icon_url: skill.icon_url || "",
+      icon_emoji: skill.icon_emoji || "",
+      icon_background: skill.icon_background || "",
       exported_at: new Date().toISOString(),
       format_version: "1.0",
     };
@@ -1154,22 +1554,48 @@ export class SkillInstaller {
     db: SkillDB,
   ): Promise<string> {
     try {
-      const data = JSON.parse(jsonContent);
-
-      if (!data.name) {
+      const data = JSON.parse(jsonContent) as Record<string, unknown>;
+      const name = sanitizeImportedString(data.name).trim();
+      if (!name) {
         throw new Error("Invalid skill JSON: missing name");
       }
+      const instructions = sanitizeImportedString(data.instructions);
+      const description = sanitizeImportedString(data.description);
+      const version = sanitizeImportedString(data.version, "1.0.0", 256);
+      const author = sanitizeImportedString(data.author, "Imported", 256);
+      const iconUrl = sanitizeImportedString(data.icon_url, undefined, 500000);
+      const iconEmoji = sanitizeImportedString(data.icon_emoji, undefined, 32);
+      const iconBackground = sanitizeImportedString(
+        data.icon_background,
+        undefined,
+        64,
+      );
+      const protocolTypeValue = sanitizeImportedString(
+        data.protocol_type,
+        "skill",
+        32,
+      );
+      const protocolType =
+        protocolTypeValue === "skill" ||
+        protocolTypeValue === "mcp" ||
+        protocolTypeValue === "claude-code"
+          ? protocolTypeValue
+          : "skill";
+      const tags = sanitizeImportedTags(data.tags);
 
       const skill = db.create({
-        name: data.name,
-        description: data.description || "",
-        version: data.version || "1.0.0",
-        author: data.author || "Imported",
-        instructions: data.instructions || "",
-        content: data.instructions || "",
-        protocol_type: data.protocol_type || "skill",
-        tags: data.tags || ["imported"],
+        name,
+        description,
+        version,
+        author,
+        instructions,
+        content: instructions,
+        protocol_type: protocolType,
+        tags,
         is_favorite: false,
+        icon_url: iconUrl,
+        icon_emoji: iconEmoji,
+        icon_background: iconBackground,
       });
 
       return skill.id;
@@ -1357,8 +1783,8 @@ export class SkillInstaller {
         if (stat.isSymbolicLink() || stat.isDirectory() || stat.isFile()) {
           await fs.rm(platformSkillDir, { recursive: true, force: true });
         }
-      } catch (e: any) {
-        if (e.code !== "ENOENT") throw e;
+      } catch (error: unknown) {
+        if (getErrorCode(error) !== "ENOENT") throw error;
       }
 
       // Create directory symlink
@@ -1380,49 +1806,10 @@ export class SkillInstaller {
    * 从远程 URL 获取 SKILL.md 内容
    */
   static async fetchRemoteContent(url: string): Promise<string> {
-    // Security: validate URL to prevent SSRF attacks
-    // 安全：校验 URL 防止 SSRF 攻击
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      throw new Error(
-        `Unsupported protocol: ${parsed.protocol}. Only HTTP(S) is allowed.`,
-      );
-    }
-    // Block internal/private network addresses
-    // 阻止内网/私有网络地址
-    const hostname = parsed.hostname;
-    if (
-      /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.|169\.254\.)/.test(
-        hostname,
-      ) ||
-      hostname === "localhost" ||
-      hostname === "[::1]"
-    ) {
-      throw new Error("Access to internal network addresses is not allowed");
-    }
     try {
-      const { net } = await import("electron");
-      return new Promise((resolve, reject) => {
-        const request = net.request(url);
-        let body = "";
-        request.on("response", (response) => {
-          if (response.statusCode !== 200) {
-            reject(new Error(`HTTP ${response.statusCode} fetching ${url}`));
-            return;
-          }
-          response.on("data", (chunk) => {
-            body += chunk.toString();
-          });
-          response.on("end", () => {
-            resolve(body);
-          });
-          response.on("error", (err) => reject(err));
-        });
-        request.on("error", (err) => reject(err));
-        request.end();
-      });
+      return await fetchRemoteText(url);
     } catch (error) {
-      console.error(`Failed to fetch remote content from ${url}:`, error);
+      console.error("Failed to fetch remote content from remote URL:", error);
       throw error;
     }
   }
