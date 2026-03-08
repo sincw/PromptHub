@@ -43,23 +43,18 @@ for (const manifestPath of manifestPaths) {
   let content = fs.readFileSync(manifestPath, "utf8");
   let patched = false;
 
-  // Match each file entry block: "- url: ...\n    sha512: ...\n    size: ..."
+  // Match each file entry block:
+  //   - url: <filename>
+  //     sha512: <hash>
+  //     size: <bytes>
+  //
+  // Groups: 1=url, 2=old sha512 hash, 3=old size
   const entryRegex =
-    /(- url:\s*)(.+)((?:\r?\n)(\s*sha512:\s*))(.+)((?:\r?\n)(\s*size:\s*))(\d+)/g;
+    /(- url:\s*)(.+)((?:\r?\n)\s*sha512:\s*)(.+)((?:\r?\n)\s*size:\s*)(\d+)/g;
 
   content = content.replace(
     entryRegex,
-    (
-      _match,
-      urlPrefix,
-      url,
-      nlSha,
-      shaPrefix,
-      oldSha,
-      nlSize,
-      sizePrefix,
-      oldSize,
-    ) => {
+    (_match, urlPrefix, url, shaBlock, oldSha, sizeBlock, oldSize) => {
       const fileName = url.trim();
       const assetPath = path.join(manifestDir, fileName);
 
@@ -80,12 +75,12 @@ for (const manifestPath of manifestPaths) {
         patched = true;
       }
 
-      return `${urlPrefix}${url}${nlSha}${shaPrefix}${actualSha}${nlSize}${sizePrefix}${actualSize}`;
+      // shaBlock already contains "\n    sha512: ", sizeBlock contains "\n    size: "
+      return `${urlPrefix}${url}${shaBlock}${actualSha}${sizeBlock}${actualSize}`;
     },
   );
 
-  // Also fix the top-level sha512 field (path/sha512 pair for the primary file)
-  // The top-level "path:" and "sha512:" fields reference the primary download.
+  // Also fix the top-level sha512 field (path/sha512 pair for the primary file).
   const topPathMatch = content.match(/^path:\s*(.+)$/m);
   if (topPathMatch) {
     const primaryFile = topPathMatch[1].trim();
