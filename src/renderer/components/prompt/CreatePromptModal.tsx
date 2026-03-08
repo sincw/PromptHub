@@ -249,14 +249,7 @@ export function CreatePromptModal({
     setNotes("");
     setShowEnglishVersion(false);
     onClose();
-  }, [
-    formState,
-    onCreate,
-    addSourceHistory,
-    onClose,
-    setImages,
-    setVideos,
-  ]);
+  }, [formState, onCreate, addSourceHistory, onClose, setImages, setVideos]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim();
@@ -310,9 +303,7 @@ export function CreatePromptModal({
       <div className="fixed inset-0 z-[9999] bg-background flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-muted/30 shrink-0">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold">
-              {fullscreenTitle}
-            </h2>
+            <h2 className="text-lg font-semibold">{fullscreenTitle}</h2>
             <span className="text-sm text-muted-foreground">
               {t("common.markdownSupported")}
             </span>
@@ -473,128 +464,133 @@ export function CreatePromptModal({
                   </p>
                 </div>
 
-                {/* 参考媒体 */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-foreground">
-                    {t("prompt.referenceMedia")}
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    {images.map((img, index) => (
-                      <div
-                        key={`img-${index}`}
-                        className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border"
-                      >
-                        <img
-                          src={`local-image://${img}`}
-                          alt={`preview-${index}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          onClick={() => handleRemoveImage(index)}
-                          className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                {/* 参考媒体 — 仅在非 image 类型时显示在属性面板内（image 类型时提升到面板外） */}
+                {promptType !== "image" && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      {t("prompt.referenceMedia")}
+                    </label>
+                    <div className="flex flex-wrap gap-3">
+                      {images.map((img, index) => (
+                        <div
+                          key={`img-${index}`}
+                          className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border"
                         >
-                          <XIcon className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    {videos.map((video, index) => (
-                      <div
-                        key={`vid-${index}`}
-                        className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border bg-black"
-                      >
-                        <video
-                          src={`local-video://${video}`}
-                          className="w-full h-full object-cover opacity-70"
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <PlayIcon className="w-6 h-6 text-white/80" />
+                          <img
+                            src={`local-image://${img}`}
+                            alt={`preview-${index}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            onClick={() => handleRemoveImage(index)}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <XIcon className="w-3 h-3" />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleRemoveVideo(index)}
-                          className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      ))}
+                      {videos.map((video, index) => (
+                        <div
+                          key={`vid-${index}`}
+                          className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border bg-black"
                         >
-                          <XIcon className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={handleSelectImage}
-                      className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
-                    >
-                      <ImageIcon className="w-6 h-6 mb-1" />
-                      <span className="text-[10px] leading-tight">
-                        {t("prompt.uploadImage", "Upload/Add Link")}
-                      </span>
-                    </button>
-                    <button
-                      onClick={handleSelectVideo}
-                      className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
-                    >
-                      <VideoIcon className="w-6 h-6 mb-1" />
-                      <span className="text-[10px] leading-tight">
-                        {t("prompt.uploadVideo", "Upload Video")}
-                      </span>
-                    </button>
-                  </div>
-                  {!showUrlInput ? (
-                    <button
-                      onClick={() => setShowUrlInput(true)}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      {t("prompt.addImageByUrl", "Add by URL")}
-                    </button>
-                  ) : (
-                    <div className="flex gap-2 mt-2">
-                      <input
-                        type="text"
-                        placeholder="https://example.com/image.jpg"
-                        value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        className="flex-1 h-8 px-3 rounded-lg bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        onKeyDown={(e) => {
-                          if (
-                            e.key === "Enter" &&
-                            imageUrl &&
-                            !isDownloadingImage
-                          ) {
-                            handleUrlUpload(imageUrl);
-                            setImageUrl("");
-                            setShowUrlInput(false);
-                          }
-                          if (e.key === "Escape") {
-                            setShowUrlInput(false);
-                            setImageUrl("");
-                          }
-                        }}
-                      />
+                          <video
+                            src={`local-video://${video}`}
+                            className="w-full h-full object-cover opacity-70"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <PlayIcon className="w-6 h-6 text-white/80" />
+                          </div>
+                          <button
+                            onClick={() => handleRemoveVideo(index)}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <XIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
                       <button
-                        onClick={() => {
-                          if (imageUrl && !isDownloadingImage) {
-                            handleUrlUpload(imageUrl);
-                            setImageUrl("");
-                            setShowUrlInput(false);
-                          }
-                        }}
-                        disabled={isDownloadingImage || !imageUrl}
-                        className="h-8 px-3 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={handleSelectImage}
+                        className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
                       >
-                        {isDownloadingImage
-                          ? t("common.loading", "Loading...")
-                          : t("common.confirm", "Confirm")}
+                        <ImageIcon className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] leading-tight">
+                          {t("prompt.uploadImage", "Upload/Add Link")}
+                        </span>
                       </button>
                       <button
-                        onClick={() => {
-                          setShowUrlInput(false);
-                          setImageUrl("");
-                        }}
-                        disabled={isDownloadingImage}
-                        className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 disabled:opacity-50"
+                        onClick={handleSelectVideo}
+                        className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
                       >
-                        {t("common.cancel", "Cancel")}
+                        <VideoIcon className="w-6 h-6 mb-1" />
+                        <span className="text-[10px] leading-tight">
+                          {t("prompt.uploadVideo", "Upload Video")}
+                        </span>
                       </button>
                     </div>
-                  )}
-                </div>
+                    <p className="text-[11px] text-muted-foreground/70">
+                      {t("prompt.mediaUploadHint")}
+                    </p>
+                    {!showUrlInput ? (
+                      <button
+                        onClick={() => setShowUrlInput(true)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {t("prompt.addImageByUrl", "Add by URL")}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="text"
+                          placeholder="https://example.com/image.jpg"
+                          value={imageUrl}
+                          onChange={(e) => setImageUrl(e.target.value)}
+                          className="flex-1 h-8 px-3 rounded-lg bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Enter" &&
+                              imageUrl &&
+                              !isDownloadingImage
+                            ) {
+                              handleUrlUpload(imageUrl);
+                              setImageUrl("");
+                              setShowUrlInput(false);
+                            }
+                            if (e.key === "Escape") {
+                              setShowUrlInput(false);
+                              setImageUrl("");
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            if (imageUrl && !isDownloadingImage) {
+                              handleUrlUpload(imageUrl);
+                              setImageUrl("");
+                              setShowUrlInput(false);
+                            }
+                          }}
+                          disabled={isDownloadingImage || !imageUrl}
+                          className="h-8 px-3 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isDownloadingImage
+                            ? t("common.loading", "Loading...")
+                            : t("common.confirm", "Confirm")}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowUrlInput(false);
+                            setImageUrl("");
+                          }}
+                          disabled={isDownloadingImage}
+                          className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 disabled:opacity-50"
+                        >
+                          {t("common.cancel", "Cancel")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* 文件夹 */}
                 <div className="space-y-1.5">
@@ -749,6 +745,134 @@ export function CreatePromptModal({
               </div>
             )}
           </div>
+
+          {/* 参考媒体 — image 类型时提升到属性面板外，作为一级 UI 元素 */}
+          {promptType === "image" && (
+            <div className="space-y-2 border border-border/50 rounded-xl bg-muted/20 p-4">
+              <label className="block text-sm font-medium text-foreground">
+                {t("prompt.referenceMedia")}
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {images.map((img, index) => (
+                  <div
+                    key={`img-${index}`}
+                    className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border"
+                  >
+                    <img
+                      src={`local-image://${img}`}
+                      alt={`preview-${index}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      onClick={() => handleRemoveImage(index)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {videos.map((video, index) => (
+                  <div
+                    key={`vid-${index}`}
+                    className="relative group w-24 h-24 rounded-lg overflow-hidden border border-border bg-black"
+                  >
+                    <video
+                      src={`local-video://${video}`}
+                      className="w-full h-full object-cover opacity-70"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <PlayIcon className="w-6 h-6 text-white/80" />
+                    </div>
+                    <button
+                      onClick={() => handleRemoveVideo(index)}
+                      className="absolute top-1 right-1 p-1 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XIcon className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={handleSelectImage}
+                  className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
+                >
+                  <ImageIcon className="w-6 h-6 mb-1" />
+                  <span className="text-[10px] leading-tight">
+                    {t("prompt.uploadImage", "Upload/Add Link")}
+                  </span>
+                </button>
+                <button
+                  onClick={handleSelectVideo}
+                  className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-primary/50 flex flex-col items-center justify-center text-muted-foreground hover:text-primary transition-colors text-center p-2"
+                >
+                  <VideoIcon className="w-6 h-6 mb-1" />
+                  <span className="text-[10px] leading-tight">
+                    {t("prompt.uploadVideo", "Upload Video")}
+                  </span>
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                {t("prompt.mediaUploadHint")}
+              </p>
+              {!showUrlInput ? (
+                <button
+                  onClick={() => setShowUrlInput(true)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {t("prompt.addImageByUrl", "Add by URL")}
+                </button>
+              ) : (
+                <div className="flex gap-2 mt-2">
+                  <input
+                    type="text"
+                    placeholder="https://example.com/image.jpg"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    className="flex-1 h-8 px-3 rounded-lg bg-muted/50 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    onKeyDown={(e) => {
+                      if (
+                        e.key === "Enter" &&
+                        imageUrl &&
+                        !isDownloadingImage
+                      ) {
+                        handleUrlUpload(imageUrl);
+                        setImageUrl("");
+                        setShowUrlInput(false);
+                      }
+                      if (e.key === "Escape") {
+                        setShowUrlInput(false);
+                        setImageUrl("");
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (imageUrl && !isDownloadingImage) {
+                        handleUrlUpload(imageUrl);
+                        setImageUrl("");
+                        setShowUrlInput(false);
+                      }
+                    }}
+                    disabled={isDownloadingImage || !imageUrl}
+                    className="h-8 px-3 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isDownloadingImage
+                      ? t("common.loading", "Loading...")
+                      : t("common.confirm", "Confirm")}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUrlInput(false);
+                      setImageUrl("");
+                    }}
+                    disabled={isDownloadingImage}
+                    className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 disabled:opacity-50"
+                  >
+                    {t("common.cancel", "Cancel")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 英文版本切换 / Toggle English Version (Hide if language is English) */}
           {!i18n.language.startsWith("en") && (
