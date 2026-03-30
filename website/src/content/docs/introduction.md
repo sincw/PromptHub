@@ -4,13 +4,13 @@ title: 项目概览
 
 # PromptHub
 
-开源免费的 AI Prompt 与 Skill 管理工具。管理你的 Prompt 和 SKILL.md 技能，一键安装到 Claude Code、Cursor、Windsurf、Codex 等 12+ 主流 AI 编程工具。
+开源免费的 AI Prompt 与 Skill 管理工具。管理你的 Prompt 和 SKILL.md 技能，一键安装到 Claude Code、Cursor、Windsurf、Codex、Qoder、CodeBuddy 等 15+ 主流 AI 编程工具。
 
 ## 核心特性
 
-### 🧩 Skill 技能管理（v0.4.6）
+### 🧩 Skill 技能管理（v0.4.7）
 
-内建 20+ 精选 AI 代理技能，支持一键安装到 12+ 平台。本地扫描发现已有 SKILL.md，支持 Symlink/复制模式、AI 翻译、标签筛选。
+内建 20+ 精选 AI 代理技能，支持一键安装到 15+ 平台。本地扫描发现已有 SKILL.md，支持 Symlink/复制模式、平台目标目录覆写、AI 翻译、标签筛选。
 
 ### 本地优先
 
@@ -45,7 +45,7 @@ title: 项目概览
 - **运行时**: Electron 33
 - **前端**: React 18 + TypeScript
 - **样式**: Tailwind CSS
-- **数据库**: SQLite (better-sqlite3)
+- **数据库**: SQLite (WASM)
 - **状态管理**: Zustand
 
 ## 系统要求

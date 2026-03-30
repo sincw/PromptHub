@@ -4,13 +4,13 @@ title: Overview
 
 # PromptHub
 
-An open-source AI Prompt & Skill management tool. Manage your prompts and SKILL.md skills, one-click install to Claude Code, Cursor, Windsurf, Codex and 12+ mainstream AI coding tools.
+An open-source AI Prompt & Skill management tool. Manage your prompts and SKILL.md skills, one-click install to Claude Code, Cursor, Windsurf, Codex, Qoder, CodeBuddy and 15+ mainstream AI coding tools.
 
 ## Key Features
 
-### 🧩 Skill Management (v0.4.6)
+### 🧩 Skill Management (v0.4.7)
 
-Built-in store with 20+ curated AI agent skills. One-click install to 12+ platforms. Local scan to discover existing SKILL.md files. Supports Symlink/copy modes, AI translation, and tag filtering.
+Built-in store with 20+ curated AI agent skills. One-click install to 15+ platforms. Local scan discovers existing SKILL.md files. Supports Symlink/copy modes, per-platform target directory overrides, AI translation, and tag filtering.
 
 ### Local-First
 
@@ -45,7 +45,7 @@ Export to JSON, YAML, or CSV. Easily integrate into your workflow or codebase.
 - **Runtime**: Electron 33
 - **Frontend**: React 18 + TypeScript
 - **Styling**: Tailwind CSS
-- **Database**: SQLite (better-sqlite3)
+- **Database**: SQLite (WASM)
 - **State Management**: Zustand
 
 ## System Requirements

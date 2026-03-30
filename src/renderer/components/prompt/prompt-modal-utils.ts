@@ -21,6 +21,13 @@ export interface PromptFormData {
   notes: string;
 }
 
+export interface PromptBilingualFields {
+  systemPrompt: string;
+  systemPromptEn: string;
+  userPrompt: string;
+  userPromptEn: string;
+}
+
 export function createPromptFormData(
   source?: Partial<Prompt> | Partial<CreatePromptDTO> | null,
   defaults?: Partial<PromptFormData>,
@@ -90,6 +97,26 @@ export function getExistingPromptTags(prompts: Prompt[]): string[] {
   return [...new Set(prompts.flatMap((prompt) => prompt.tags))].sort((a, b) =>
     a.localeCompare(b),
   );
+}
+
+export function promoteMainEnglishToEnglishVersion(
+  fields: PromptBilingualFields,
+): PromptBilingualFields {
+  const hasEnglishVersion = !!(fields.systemPromptEn || fields.userPromptEn);
+  const combinedMain = [fields.systemPrompt, fields.userPrompt]
+    .filter(Boolean)
+    .join(" ");
+
+  if (hasEnglishVersion || !isPureEnglish(combinedMain)) {
+    return fields;
+  }
+
+  return {
+    systemPrompt: "",
+    userPrompt: "",
+    systemPromptEn: fields.systemPrompt,
+    userPromptEn: fields.userPrompt,
+  };
 }
 
 export function isPureEnglish(text: string): boolean {

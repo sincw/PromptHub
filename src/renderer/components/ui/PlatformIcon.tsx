@@ -27,10 +27,14 @@ import ampIcon from "../../assets/platforms/amp.png";
 import openclawIcon from "../../assets/platforms/openclaw.png";
 import qoderIcon from "../../assets/platforms/qoder.png";
 import qoderworkIcon from "../../assets/platforms/qoderwork.png";
+import codebuddyLightIcon from "../../assets/platforms/codebuddy-light.svg";
+import codebuddyDarkIcon from "../../assets/platforms/codebuddy-dark.svg";
+
+type PlatformIconSource = string | { light: string; dark: string };
 
 // Platform icon mapping
 // 平台图标映射
-const PLATFORM_ICONS: Record<string, string> = {
+const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   claude: claudeIcon,
   cursor: cursorIcon,
   copilot: copilotIcon,
@@ -45,6 +49,10 @@ const PLATFORM_ICONS: Record<string, string> = {
   openclaw: openclawIcon,
   qoder: qoderIcon,
   qoderwork: qoderworkIcon,
+  codebuddy: {
+    light: codebuddyLightIcon,
+    dark: codebuddyDarkIcon,
+  },
 };
 
 // Fallback Lucide icons for platforms without PNG
@@ -64,6 +72,7 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   openclaw: <BugIcon />,
   qoder: <BotIcon />,
   qoderwork: <BotIcon />,
+  codebuddy: <BotIcon />,
 };
 
 interface PlatformIconProps {
@@ -114,19 +123,42 @@ export function PlatformIcon({
       }`}
       style={{ width: size, height: size }}
     >
-      <img
-        src={iconSrc}
-        alt={`${platformId} icon`}
-        width={size}
-        height={size}
-        className={`object-contain ${
-          platformId === "copilot"
-            ? "brightness-0 dark:brightness-0 dark:invert"
-            : ""
-        }`}
-        onError={() => setImageError(true)}
-        loading="lazy"
-      />
+      {typeof iconSrc === "string" ? (
+        <img
+          src={iconSrc}
+          alt={`${platformId} icon`}
+          width={size}
+          height={size}
+          className={`object-contain ${
+            platformId === "copilot"
+              ? "brightness-0 dark:brightness-0 dark:invert"
+              : ""
+          }`}
+          onError={() => setImageError(true)}
+          loading="lazy"
+        />
+      ) : (
+        <>
+          <img
+            src={iconSrc.light}
+            alt={`${platformId} icon`}
+            width={size}
+            height={size}
+            className="object-contain dark:hidden"
+            onError={() => setImageError(true)}
+            loading="lazy"
+          />
+          <img
+            src={iconSrc.dark}
+            alt={`${platformId} icon`}
+            width={size}
+            height={size}
+            className="hidden object-contain dark:block"
+            onError={() => setImageError(true)}
+            loading="lazy"
+          />
+        </>
+      )}
     </span>
   );
 }

@@ -1,8 +1,10 @@
 import { spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
+import { initDatabase } from "../database";
 import type { MCPServerConfig } from "../../shared/types/skill";
 import type { SkillPlatform } from "../../shared/constants/platforms";
+import type { Settings } from "../../shared/types";
 
 export function validateMCPServerConfig(
   config: unknown,
@@ -123,7 +125,45 @@ export function resolvePlatformPath(template: string): string {
     .replace(/%APPDATA%/gi, path.join(home, "AppData", "Roaming"));
 }
 
-export function getPlatformSkillsDir(platform: SkillPlatform): string {
+function readCustomSkillPlatformPaths(): Record<string, string> {
+  try {
+    const db = initDatabase();
+    const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+    const row = stmt.get("customSkillPlatformPaths") as
+      | { value: string }
+      | undefined;
+
+    if (!row?.value) {
+      return {};
+    }
+
+    const parsed = JSON.parse(row.value) as Settings["customSkillPlatformPaths"];
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([key, value]) => typeof key === "string" && typeof value === "string",
+      ),
+    );
+  } catch (error) {
+    console.warn("Failed to read custom skill platform paths:", error);
+    return {};
+  }
+}
+
+export function getPlatformSkillsDir(
+  platform: SkillPlatform,
+  overrides?: Record<string, string>,
+): string {
+  const overridePath =
+    overrides?.[platform.id] ?? readCustomSkillPlatformPaths()[platform.id];
+
+  if (typeof overridePath === "string" && overridePath.trim()) {
+    return resolvePlatformPath(overridePath.trim());
+  }
+
   const osKey = process.platform as "darwin" | "win32" | "linux";
   const template = platform.skillsDir[osKey] || platform.skillsDir.linux;
   return resolvePlatformPath(template);

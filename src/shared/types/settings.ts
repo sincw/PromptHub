@@ -8,6 +8,7 @@ export interface Settings {
   language: Language;
   autoSave: boolean;
   defaultFolderId?: string;
+  customSkillPlatformPaths?: Record<string, string>;
   // Security
   // 安全相关
   security?: {
@@ -23,4 +24,5 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   language: 'zh',
   autoSave: true,
+  customSkillPlatformPaths: {},
 };

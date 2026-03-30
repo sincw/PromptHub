@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import i18n, { changeLanguage } from "../i18n";
+import type { Settings } from "../../shared/types";
 
 const SUPPORTED_LANGUAGES = [
   "zh",
@@ -266,6 +267,9 @@ interface SettingsState {
   // Custom skill scan paths / 自定义 Skill 扫描路径
   customSkillScanPaths: string[];
 
+  // Custom platform skill paths / 自定义平台 Skill 目录
+  customSkillPlatformPaths: Record<string, string>;
+
   // Skill install method / Skill 安装方式
   skillInstallMethod: "symlink" | "copy";
 
@@ -327,8 +331,22 @@ interface SettingsState {
   setCustomSkillScanPaths: (paths: string[]) => void;
   addCustomSkillScanPath: (path: string) => void;
   removeCustomSkillScanPath: (path: string) => void;
+  setCustomSkillPlatformPath: (platformId: string, path: string) => void;
+  resetCustomSkillPlatformPath: (platformId: string) => void;
   // Skill install method action / Skill 安装方式操作
   setSkillInstallMethod: (method: "symlink" | "copy") => void;
+}
+
+function syncSettingsToMain(settings: Partial<Settings>): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  void window.api?.settings
+    ?.set(settings)
+    .catch((error: unknown) =>
+      console.warn("Failed to sync settings to main process:", error),
+    );
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -397,6 +415,7 @@ export const useSettingsStore = create<SettingsState>()(
         translationMode: "immersive" as TranslationMode,
         sourceHistory: [],
         customSkillScanPaths: [],
+        customSkillPlatformPaths: {},
         skillInstallMethod: "symlink" as const,
 
         setCreationMode: (mode) => setTouched({ creationMode: mode }),
@@ -726,26 +745,44 @@ export const useSettingsStore = create<SettingsState>()(
 
         // Custom skill scan paths actions / 自定义 Skill 扫描路径操作
         setCustomSkillScanPaths: (paths) =>
-          set({ customSkillScanPaths: paths }),
+          setTouched({ customSkillScanPaths: paths }),
         addCustomSkillScanPath: (path) =>
-          set((state) => ({
-            customSkillScanPaths: state.customSkillScanPaths.includes(path)
-              ? state.customSkillScanPaths
-              : [...state.customSkillScanPaths, path],
-          })),
+          setTouched({
+            customSkillScanPaths: get().customSkillScanPaths.includes(path)
+              ? get().customSkillScanPaths
+              : [...get().customSkillScanPaths, path],
+          }),
         removeCustomSkillScanPath: (path) =>
-          set((state) => ({
-            customSkillScanPaths: state.customSkillScanPaths.filter(
+          setTouched({
+            customSkillScanPaths: get().customSkillScanPaths.filter(
               (p) => p !== path,
             ),
-          })),
+          }),
+        setCustomSkillPlatformPath: (platformId, pathValue) => {
+          const normalizedPath = pathValue.trim();
+          const nextPaths = { ...get().customSkillPlatformPaths };
+          if (normalizedPath) {
+            nextPaths[platformId] = normalizedPath;
+          } else {
+            delete nextPaths[platformId];
+          }
+          setTouched({ customSkillPlatformPaths: nextPaths });
+          syncSettingsToMain({ customSkillPlatformPaths: nextPaths });
+        },
+        resetCustomSkillPlatformPath: (platformId) => {
+          const nextPaths = { ...get().customSkillPlatformPaths };
+          delete nextPaths[platformId];
+          setTouched({ customSkillPlatformPaths: nextPaths });
+          syncSettingsToMain({ customSkillPlatformPaths: nextPaths });
+        },
         // Skill install method action / Skill 安装方式操作
-        setSkillInstallMethod: (method) => set({ skillInstallMethod: method }),
+        setSkillInstallMethod: (method) =>
+          setTouched({ skillInstallMethod: method }),
       };
     },
     {
       name: "prompthub-settings",
-      version: 1,
+      version: 2,
       migrate: (state) => {
         if (!state || typeof state !== "object") {
           return state as SettingsState;
@@ -757,7 +794,19 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.tagsSectionHeight = DEFAULT_TAGS_SECTION_HEIGHT;
         }
+        if (
+          !next.customSkillPlatformPaths ||
+          typeof next.customSkillPlatformPaths !== "object" ||
+          Array.isArray(next.customSkillPlatformPaths)
+        ) {
+          next.customSkillPlatformPaths = {};
+        }
         return next;
+      },
+      onRehydrateStorage: () => (state) => {
+        syncSettingsToMain({
+          customSkillPlatformPaths: state?.customSkillPlatformPaths || {},
+        });
       },
     },
   ),

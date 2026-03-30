@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { PlusIcon, TrashIcon, InfoIcon } from "lucide-react";
+import { InfoIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useSettingsStore } from "../../stores/settings.store";
+
 import { SKILL_PLATFORMS } from "../../../shared/constants/platforms";
+import { useSettingsStore } from "../../stores/settings.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { SettingSection } from "./shared";
 
@@ -10,16 +11,21 @@ interface SkillSettingsProps {
   onNavigate: (section: string) => void;
 }
 
+function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
+  const platform = navigator.userAgent.toLowerCase();
+  if (platform.includes("win")) return "win32";
+  if (platform.includes("mac")) return "darwin";
+  return "linux";
+}
+
 export function SkillSettings({ onNavigate }: SkillSettingsProps) {
   const { t } = useTranslation();
   const settings = useSettingsStore();
-
-  // Skill scan path input state / Skill 扫描路径输入状态
   const [newScanPath, setNewScanPath] = useState("");
+  const currentPlatformKey = getCurrentPlatformKey();
 
   return (
     <div className="space-y-6">
-      {/* Skill 安装方式 */}
       <SettingSection
         title={t("settings.skillInstallMethod", "Skill 安装方式")}
       >
@@ -71,18 +77,81 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
         </div>
       </SettingSection>
 
-      {/* 自定义扫描路径 */}
       <SettingSection
-        title={t("settings.customSkillScanPaths", "自定义扫描路径")}
+        title={t("settings.platformSkillPaths", "平台目标目录")}
       >
         <div className="p-4 space-y-3">
           <p className="text-xs text-muted-foreground">
             {t(
-              "settings.customSkillScanPathsDesc",
-              "添加您的 Skill 文件所在目录，扫描时将自动包含这些路径。",
+              "settings.platformSkillPathsDesc",
+              "为每个 AI 工具覆写默认 Skill 目录。这里会同时影响扫描、分发、卸载和安装状态检测。",
             )}
           </p>
-          {/* 输入框 + 添加按钮 */}
+          <div className="rounded-lg border border-border overflow-hidden">
+            {SKILL_PLATFORMS.map((platform) => {
+              const overridePath =
+                settings.customSkillPlatformPaths[platform.id] || "";
+
+              return (
+                <div
+                  key={platform.id}
+                  className="px-3 py-3 border-b border-border/70 last:border-0 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <PlatformIcon platformId={platform.id} size={16} />
+                    <span className="text-sm font-medium text-foreground">
+                      {platform.name}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {t("settings.defaultPathLabel", "默认路径")}:
+                    <span className="ml-1 font-mono">
+                      {platform.skillsDir[currentPlatformKey]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={overridePath}
+                      onChange={(e) =>
+                        settings.setCustomSkillPlatformPath(
+                          platform.id,
+                          e.target.value,
+                        )
+                      }
+                      placeholder={t(
+                        "settings.platformSkillPathPlaceholder",
+                        "留空则使用默认路径，例如 ~/.trae-cn/skills",
+                      )}
+                      className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                    <button
+                      onClick={() =>
+                        settings.resetCustomSkillPlatformPath(platform.id)
+                      }
+                      disabled={!overridePath}
+                      className="h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground disabled:opacity-50 disabled:hover:border-border disabled:hover:text-muted-foreground transition-colors"
+                    >
+                      {t("settings.resetPlatformSkillPath", "恢复默认")}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </SettingSection>
+
+      <SettingSection
+        title={t("settings.extraSkillScanPaths", "额外扫描目录")}
+      >
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "settings.extraSkillScanPathsDesc",
+              "添加额外的 Skill 目录用于导入和发现。这里不会覆盖平台默认目录。",
+            )}
+          </p>
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -113,12 +182,11 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
               {t("common.add", "添加")}
             </button>
           </div>
-          {/* 已添加的路径列表 */}
-          {settings.customSkillScanPaths.length > 0 && (
+          {settings.customSkillScanPaths.length > 0 ? (
             <div className="rounded-lg border border-border overflow-hidden">
               {settings.customSkillScanPaths.map((path, idx) => (
                 <div
-                  key={idx}
+                  key={`${path}-${idx}`}
                   className="flex items-center justify-between px-3 py-2.5 border-b border-border/70 last:border-0 hover:bg-muted/20 transition-colors"
                 >
                   <span className="text-sm font-mono text-foreground truncate flex-1 mr-3">
@@ -134,8 +202,7 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
                 </div>
               ))}
             </div>
-          )}
-          {settings.customSkillScanPaths.length === 0 && (
+          ) : (
             <p className="text-xs text-muted-foreground/60 italic">
               {t("settings.noCustomPaths", "暂未添加自定义路径")}
             </p>
@@ -143,43 +210,6 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
         </div>
       </SettingSection>
 
-      {/* 内置扫描路径（只读） */}
-      <SettingSection
-        title={t("settings.builtinSkillScanPaths", "内置扫描路径（只读）")}
-      >
-        <div className="p-4 space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "settings.builtinSkillScanPathsDesc",
-              "以下是 PromptHub 自动扫描的 AI 工具 Skill 目录。",
-            )}
-          </p>
-          <div className="rounded-lg border border-border overflow-hidden">
-            {SKILL_PLATFORMS.map((platform) => (
-              <div
-                key={platform.id}
-                className="flex items-center justify-between px-3 py-2.5 border-b border-border/70 last:border-0"
-              >
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <PlatformIcon
-                    platformId={platform.id}
-                    size={16}
-                    className="flex-shrink-0"
-                  />
-                  <span className="text-sm font-medium text-foreground flex-shrink-0 mr-2">
-                    {platform.name}
-                  </span>
-                  <span className="text-xs font-mono text-muted-foreground truncate">
-                    {platform.skillsDir.darwin}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </SettingSection>
-
-      {/* Skill 备份提示 */}
       <div className="flex items-start gap-2.5 p-4 rounded-xl bg-muted/50 border border-border/50">
         <InfoIcon className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground">

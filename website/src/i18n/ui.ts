@@ -22,7 +22,7 @@ export const ui = {
       version: HERO_VERSION_BADGE.zh,
       titleStart: "AI Prompt & Skill",
       titleEnd: "一站式管理工作台",
-      desc: "Prompt 管理 · 技能商店 · 多平台安装 · 版本控制 · 多模型测试 —— 管理 Prompt 与 SKILL.md，一键安装到 12+ AI 编程工具。",
+      desc: "Prompt 管理 · 技能商店 · 多平台安装 · 版本控制 · 多模型测试 —— 管理 Prompt 与 SKILL.md，一键安装到 15+ AI 编程工具。",
       download: "下载客户端",
       github: "开源协议",
       imgAlt: "PromptHub 精美界面预览",
@@ -30,7 +30,7 @@ export const ui = {
     seo: {
       title: "PromptHub - 开源 AI Prompt 与 Skill 管理工具",
       description:
-        "PromptHub 是一款开源、本地优先的 AI Prompt 与 Skill 管理工具。内建技能商店，支持一键安装 SKILL.md 到 Claude Code、Cursor、Windsurf 等 12+ 平台。版本控制、多模型测试、WebDAV 同步，隐私优先。",
+        "PromptHub 是一款开源、本地优先的 AI Prompt 与 Skill 管理工具。内建技能商店，支持一键安装 SKILL.md 到 Claude Code、Cursor、Windsurf、Qoder、CodeBuddy 等 15+ 平台。版本控制、多模型测试、WebDAV 同步，隐私优先。",
       keywords:
         "PromptHub, Prompt管理, Skill管理, SKILL.md, AI技能, 开源, 本地优先, Claude Code, Cursor, Windsurf, 版本控制, 大模型工具",
       author: "PromptHub Team",
@@ -40,7 +40,7 @@ export const ui = {
       titleHighlight: "AI 工程师",
       titleEnd: "而生",
       subtitle:
-        "管理 Prompt 与 SKILL.md 技能，一键安装到 Claude Code、Cursor、Windsurf 等 12+ 平台。",
+        "管理 Prompt 与 SKILL.md 技能，一键安装到 Claude Code、Cursor、Windsurf、Qoder、CodeBuddy 等 15+ 平台。",
       items: [
         {
           title: "极致私有：离线是最好的加密",
@@ -51,8 +51,8 @@ export const ui = {
           desc: "内建精选技能库，覆盖代码审查、文档写作、测试生成等场景。来自 Anthropic、OpenAI 等官方源，开箱即用。",
         },
         {
-          title: "多平台安装：一键分发到 12+ 工具",
-          desc: "支持将 SKILL.md 安装到 Claude Code、Cursor、Windsurf、Codex、Kiro 等主流 AI 编程工具，Symlink 或复制模式自由选择。",
+          title: "多平台安装：一键分发到 15+ 工具",
+          desc: "支持将 SKILL.md 安装到 Claude Code、Cursor、Windsurf、Codex、Kiro、Qoder、CodeBuddy 等主流 AI 编程工具，Symlink、复制和平台目标目录覆写都可自由组合。",
         },
         {
           title: "同屏对比：一眼识破模型优劣",
@@ -212,7 +212,7 @@ export const ui = {
       version: HERO_VERSION_BADGE.en,
       titleStart: "AI Prompt & Skill",
       titleEnd: "Management Hub.",
-      desc: "Prompt Management · Skill Store · Multi-Platform Install · Version Control · Multi-Model Arena — Manage prompts & SKILL.md, one-click install to 12+ AI coding tools.",
+      desc: "Prompt Management · Skill Store · Multi-Platform Install · Version Control · Multi-Model Arena — Manage prompts & SKILL.md, one-click install to 15+ AI coding tools.",
       download: "Download Free",
       github: "Source Code",
       imgAlt: "PromptHub Interface Preview",
@@ -220,7 +220,7 @@ export const ui = {
     seo: {
       title: "PromptHub - Open Source AI Prompt & Skill Manager",
       description:
-        "PromptHub is an open-source, local-first AI Prompt & Skill management tool. Built-in skill store with one-click install to Claude Code, Cursor, Windsurf, Codex and 12+ platforms. Version control, multi-model testing, WebDAV sync. Privacy first.",
+        "PromptHub is an open-source, local-first AI Prompt & Skill management tool. Built-in skill store with one-click install to Claude Code, Cursor, Windsurf, Codex, Qoder, CodeBuddy and 15+ platforms. Version control, multi-model testing, WebDAV sync. Privacy first.",
       keywords:
         "PromptHub, Prompt Management, Skill Management, SKILL.md, AI Skills, Open Source, Local-first, Claude Code, Cursor, Windsurf, Version Control, LLM Testing",
     },
@@ -229,7 +229,7 @@ export const ui = {
       titleHighlight: "AI Engineers",
       titleEnd: "",
       subtitle:
-        "Manage prompts & SKILL.md skills, one-click install to Claude Code, Cursor, Windsurf and 12+ platforms.",
+        "Manage prompts & SKILL.md skills, one-click install to Claude Code, Cursor, Windsurf, Qoder, CodeBuddy and 15+ platforms.",
       items: [
         {
           title: "Local-First Privacy",
@@ -240,8 +240,8 @@ export const ui = {
           desc: "Built-in curated skill library covering code review, doc writing, test generation and more. From Anthropic, OpenAI and other official sources, ready to use.",
         },
         {
-          title: "Multi-Platform Install: 12+ Tools",
-          desc: "Install SKILL.md to Claude Code, Cursor, Windsurf, Codex, Kiro and other mainstream AI coding tools. Choose between Symlink or copy mode.",
+          title: "Multi-Platform Install: 15+ Tools",
+          desc: "Install SKILL.md to Claude Code, Cursor, Windsurf, Codex, Kiro, Qoder, CodeBuddy and other mainstream AI coding tools. Combine symlink, copy, and per-platform target directory overrides.",
         },
         {
           title: "Multi-Model Arena",

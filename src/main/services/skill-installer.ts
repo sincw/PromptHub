@@ -293,8 +293,6 @@ export class SkillInstaller {
     path: string;
     platformName: string;
   }> {
-    const homeDir = os.homedir();
-    const osPlatform = process.platform as "darwin" | "win32" | "linux";
     const scanEntries: Array<{ path: string; platformName: string }> = [
       {
         path: this.skillsDir,
@@ -303,16 +301,7 @@ export class SkillInstaller {
     ];
 
     for (const p of SKILL_PLATFORMS) {
-      const dir = p.skillsDir[osPlatform] || p.skillsDir.darwin;
-      if (!dir) {
-        continue;
-      }
-
-      const resolved = dir
-        .replace(/^~/, homeDir)
-        .replace(/%USERPROFILE%/g, homeDir)
-        .replace(/%APPDATA%/g, path.join(homeDir, "AppData", "Roaming"));
-
+      const resolved = getPlatformSkillsDir(p);
       if (!scanEntries.find((entry) => entry.path === resolved)) {
         scanEntries.push({ path: resolved, platformName: p.name });
       }

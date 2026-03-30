@@ -44,6 +44,7 @@ import {
   getLanguageName,
   hasPromptFormChanges,
   isPureEnglish,
+  promoteMainEnglishToEnglishVersion,
 } from "./prompt-modal-utils";
 import { usePromptMediaManager } from "./usePromptMediaManager";
 import { usePromptNativeFullscreen } from "./usePromptNativeFullscreen";
@@ -99,8 +100,11 @@ export function EditPromptModal({
   const sourceHistory = useSettingsStore((state) => state.sourceHistory);
   const addSourceHistory = useSettingsStore((state) => state.addSourceHistory);
   const aiModels = useSettingsStore((state) => state.aiModels);
-  const defaultModel = aiModels.find((m) => m.isDefault);
-  const canTranslate = !!defaultModel;
+  const translationModel = useMemo(() => {
+    const chatModels = aiModels.filter((model) => model.type === "chat");
+    return chatModels.find((model) => model.isDefault) ?? chatModels[0] ?? null;
+  }, [aiModels]);
+  const canTranslate = !!translationModel;
 
   // Detect if main content is pure English (strict: no CJK allowed)
   // 检测主内容是否为纯英文（严格：不允许中日韩字符）
@@ -320,6 +324,20 @@ export function EditPromptModal({
   // 获取所有已存在的标签
   const existingTags = useMemo(() => getExistingPromptTags(prompts), [prompts]);
 
+  const translateToEnglishDisabledReason = !canTranslate
+    ? t("toast.configAI", "请先在设置中配置 AI 模型")
+    : !systemPrompt && !userPrompt
+      ? t("prompt.noContentToTranslate", "没有内容可翻译")
+      : isMainContentEnglish
+        ? t("prompt.alreadyEnglish", "内容已是英文")
+        : "";
+
+  const translateFromEnglishDisabledReason = !canTranslate
+    ? t("toast.configAI", "请先在设置中配置 AI 模型")
+    : !systemPromptEn && !userPromptEn && !isMainContentEnglish
+      ? t("prompt.noEnglishContentToTranslate", "没有英文内容可翻译")
+      : "";
+
   // 当 prompt 变化时更新表单
   useEffect(() => {
     if (isOpen) {
@@ -365,7 +383,7 @@ export function EditPromptModal({
   };
 
   const handleTranslateToEnglish = async () => {
-    if (!canTranslate || !defaultModel) {
+    if (!canTranslate || !translationModel) {
       showToast(t("toast.configAI") || "请先配置 AI", "error");
       return;
     }
@@ -391,10 +409,10 @@ export function EditPromptModal({
 
       const result = await chatCompletion(
         {
-          provider: defaultModel.provider,
-          apiKey: defaultModel.apiKey,
-          apiUrl: defaultModel.apiUrl,
-          model: defaultModel.model,
+          provider: translationModel.provider,
+          apiKey: translationModel.apiKey,
+          apiUrl: translationModel.apiUrl,
+          model: translationModel.model,
         },
         [
           { role: "system", content: systemInstruction },
@@ -447,7 +465,7 @@ export function EditPromptModal({
   // When main content is English (auto-detected), use it as the English source
   // 当主内容被检测为纯英文时，自动将其作为英文源进行翻译
   const handleTranslateFromEnglish = async () => {
-    if (!canTranslate || !defaultModel) {
+    if (!canTranslate || !translationModel) {
       showToast(t("toast.configAI") || "请先配置 AI", "error");
       return;
     }
@@ -490,10 +508,10 @@ export function EditPromptModal({
 
       const result = await chatCompletion(
         {
-          provider: defaultModel.provider,
-          apiKey: defaultModel.apiKey,
-          apiUrl: defaultModel.apiUrl,
-          model: defaultModel.model,
+          provider: translationModel.provider,
+          apiKey: translationModel.apiKey,
+          apiUrl: translationModel.apiUrl,
+          model: translationModel.model,
         },
         [
           { role: "system", content: instruction },
@@ -543,6 +561,34 @@ export function EditPromptModal({
     } finally {
       setIsTranslating(false);
     }
+  };
+
+  const handleToggleEnglishVersion = () => {
+    if (showEnglishVersion) {
+      setShowEnglishVersion(false);
+      return;
+    }
+
+    const promoted = promoteMainEnglishToEnglishVersion({
+      systemPrompt,
+      systemPromptEn,
+      userPrompt,
+      userPromptEn,
+    });
+
+    if (
+      promoted.systemPrompt !== systemPrompt ||
+      promoted.userPrompt !== userPrompt ||
+      promoted.systemPromptEn !== systemPromptEn ||
+      promoted.userPromptEn !== userPromptEn
+    ) {
+      setSystemPrompt(promoted.systemPrompt);
+      setUserPrompt(promoted.userPrompt);
+      setSystemPromptEn(promoted.systemPromptEn);
+      setUserPromptEn(promoted.userPromptEn);
+    }
+
+    setShowEnglishVersion(true);
   };
 
   const handleAddTag = () => {
@@ -1254,9 +1300,8 @@ export function EditPromptModal({
                       : "bg-primary/10 text-primary hover:bg-primary/20"
                   }`}
                   title={
-                    isMainContentEnglish
-                      ? t("prompt.alreadyEnglish", "内容已是英文")
-                      : t("prompt.translateToEnglish", "一键翻译生成英文版")
+                    translateToEnglishDisabledReason ||
+                    t("prompt.translateToEnglish", "一键翻译生成英文版")
                   }
                 >
                   {isTranslating ? (
@@ -1282,12 +1327,13 @@ export function EditPromptModal({
                       : "bg-primary/10 text-primary hover:bg-primary/20"
                   }`}
                   title={
-                    isMainContentEnglish
+                    translateFromEnglishDisabledReason ||
+                    (isMainContentEnglish
                       ? t(
                           "prompt.translateDetectedEnglish",
                           "检测到英文内容，翻译为当前语言",
                         )
-                      : t("prompt.translateFromEnglish", "从英文翻译到当前语言")
+                      : t("prompt.translateFromEnglish", "从英文翻译到当前语言"))
                   }
                 >
                   {isTranslating ? (
@@ -1298,7 +1344,7 @@ export function EditPromptModal({
                   EN →
                 </button>
                 <button
-                  onClick={() => setShowEnglishVersion(!showEnglishVersion)}
+                  onClick={handleToggleEnglishVersion}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     showEnglishVersion
                       ? "bg-primary text-white"

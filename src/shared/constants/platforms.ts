@@ -162,6 +162,16 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
       linux: "~/.qoderwork/skills",
     },
   },
+  {
+    id: "codebuddy",
+    name: "CodeBuddy",
+    icon: "Code",
+    skillsDir: {
+      darwin: "~/.codebuddy/skills",
+      win32: "%USERPROFILE%\\.codebuddy\\skills",
+      linux: "~/.codebuddy/skills",
+    },
+  },
 ];
 
 /**
