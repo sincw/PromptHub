@@ -54,7 +54,7 @@ import type {
 
 function getFetchModelsFeedback(
   result: FetchModelsResult,
-  t: (key: string) => string,
+  t: (key: string, options?: Record<string, unknown>) => string,
   apiUrl?: string,
 ): { message: string; type: "error" | "warning" | "info" } {
   if (result.success && result.models.length === 0) {
@@ -95,7 +95,7 @@ function getFetchModelsFeedback(
 
 function getConnectionErrorMessage(
   message: string,
-  t: (key: string) => string,
+  t: (key: string, options?: Record<string, unknown>) => string,
   apiUrl?: string,
 ): string {
   const normalized = message.toLowerCase();

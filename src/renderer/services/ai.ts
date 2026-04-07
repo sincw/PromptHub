@@ -174,6 +174,17 @@ function createResponseLike(response: AITransportResponse): ResponseLike {
   };
 }
 
+function createFetchResponseLike(response: Response): ResponseLike {
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+    text: async () => response.text(),
+    json: async <T = unknown>() => response.json() as Promise<T>,
+  };
+}
+
 function createStreamState(): StreamState {
   return {
     fullContent: "",
@@ -585,7 +596,7 @@ export async function chatCompletion(
       };
     }
 
-    return { response };
+    return { response: createFetchResponseLike(response) };
   };
 
   try {
