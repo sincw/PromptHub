@@ -125,11 +125,9 @@ export function isProtectedInstallDir(
   const normalized = resolvePlatformPath(targetPath, platform).toLowerCase();
 
   if (platform === "win32") {
-    return [
-      "\\windows\\",
-      "\\program files\\",
-      "\\program files (x86)\\",
-    ].some((segment) => normalized.includes(segment));
+    return ["\\windows\\", "\\program files\\", "\\program files (x86)\\"].some(
+      (segment) => normalized.includes(segment),
+    );
   }
 
   if (platform === "darwin") {
@@ -157,7 +155,11 @@ export function isDefaultPerUserInstallDir(
 
 export function isPathWritable(targetPath: string): boolean {
   try {
-    fs.mkdirSync(targetPath, { recursive: true });
+    // Only test writability of existing directories — never create directories
+    // as a side effect of a read-only probe.
+    if (!fs.existsSync(targetPath)) {
+      return false;
+    }
     fs.accessSync(targetPath, fs.constants.W_OK);
     return true;
   } catch {
@@ -213,9 +215,18 @@ export function resolveInitialUserDataPath(
 
   if (
     installScopedPath &&
-    deps.isPathWritable(dirnamePlatformPath(installScopedPath, options.platform))
+    deps.isPathWritable(
+      dirnamePlatformPath(installScopedPath, options.platform),
+    )
   ) {
-    return installScopedPath;
+    // Only use the install-scoped path if it already contains user data.
+    // Without this guard, upgrades from older versions (which never wrote
+    // data-path.json or the NSIS InstallerState registry key) would silently
+    // create a brand-new empty data directory next to the executable, causing
+    // the user's existing data in %APPDATA%/PromptHub to become invisible.
+    if (deps.hasExistingAppData(installScopedPath)) {
+      return installScopedPath;
+    }
   }
 
   return options.defaultUserDataPath;

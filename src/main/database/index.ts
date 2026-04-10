@@ -43,6 +43,31 @@ function clearStaleLock(dbPath: string): void {
 }
 
 /**
+ * Create a timestamped backup of the database file before running migrations.
+ * Returns the backup path on success, or null if no backup was needed/possible.
+ */
+function backupDatabaseBeforeMigration(dbPath: string): string | null {
+  try {
+    if (!fs.existsSync(dbPath)) {
+      return null;
+    }
+    const stat = fs.statSync(dbPath);
+    // Only back up non-empty databases (empty = freshly created)
+    if (stat.size === 0) {
+      return null;
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupPath = `${dbPath}.backup-${timestamp}`;
+    fs.copyFileSync(dbPath, backupPath);
+    console.log(`[DB] Pre-migration backup created: ${backupPath}`);
+    return backupPath;
+  } catch (err) {
+    console.warn("[DB] Failed to create pre-migration backup:", err);
+    return null;
+  }
+}
+
+/**
  * Initialize database
  */
 export function initDatabase(): Database.Database {
@@ -51,6 +76,7 @@ export function initDatabase(): Database.Database {
   const dbPath = getDbPath();
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   clearStaleLock(dbPath);
+  backupDatabaseBeforeMigration(dbPath);
   db = new Database(dbPath);
 
   // Enable foreign key constraints

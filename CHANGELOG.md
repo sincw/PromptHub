@@ -4,8 +4,8 @@
 
 - 🛡️ **Skill 安全评估**：新增静态风险扫描器，可对已安装 Skill、商店 Skill 和 CLI 扫描结果输出 `safe / warn / high-risk / blocked` 风险等级与命中规则摘要
   - **Skill Safety Assessment**: Added a static risk scanner that evaluates installed Skills, store Skills, and CLI scan results with `safe / warn / high-risk / blocked` risk levels plus matched-rule summaries
-- 🏪 **商店安装前安全检查**：商店详情页支持手动“先检查再添加”，设置里可选“添加前自动评估”，默认关闭；`high-risk` 需要二次确认，`blocked` 直接拦截
-  - **Store Safety Check Before Install**: Store detail pages now support manual “scan before add”, settings can optionally enable “auto-assess before install” (off by default), `high-risk` installs require explicit confirmation, and `blocked` installs are rejected
+- 🏪 **商店安装前安全检查**：商店详情页支持手动"先检查再添加"，设置里可选"添加前自动评估"，默认关闭；`high-risk` 需要二次确认，`blocked` 直接拦截
+  - **Store Safety Check Before Install**: Store detail pages now support manual "scan before add", settings can optionally enable "auto-assess before install" (off by default), `high-risk` installs require explicit confirmation, and `blocked` installs are rejected
 - 🖥️ **CLI 安全扫描输出**：`prompthub skill scan` 现在会返回安全评估结果，方便脚本化审查本地 skill 仓库
   - **CLI Safety Scan Output**: `prompthub skill scan` now returns safety assessment results so local skill repositories can be audited in scripts and automation
 
@@ -13,8 +13,13 @@
 
 - 🔒 **恶意模式检测**：扫描器会检查危险 shell 片段、提权与持久化命令、凭据路径读取、编码执行、可疑工作流文件与来源风险
   - **Malicious Pattern Detection**: The scanner inspects dangerous shell fragments, privilege-escalation and persistence commands, credential-path access, encoded execution, suspicious workflow files, and source risk signals
-- 🔒 **商店高风险安装护栏**：对 `high-risk` 和 `blocked` 级别 skill 增加安装前护栏，避免“安装成功但用户毫无感知”的情况
+- 🔒 **商店高风险安装护栏**：对 `high-risk` 和 `blocked` 级别 skill 增加安装前护栏，避免"安装成功但用户毫无感知"的情况
   - **High-Risk Store Install Guardrails**: Added pre-install guardrails for `high-risk` and `blocked` Skills so unsafe installs are not silently accepted
+
+### 修复 / Fixed
+
+- 🔴 **Windows 自动更新后数据丢失修复**：修复从旧版本（<0.5.0）通过应用内自动更新到 0.5.0 后，数据路径解析可能错误地选择安装目录下的空 `data/` 子目录而忽略 `%APPDATA%/PromptHub` 中已有数据的严重 bug；`resolveInitialUserDataPath` 现在仅在 install-scoped 路径中已有用户数据时才选用它；`isPathWritable` 不再有创建目录的副作用；`initDatabase` 在运行迁移前会自动备份已有数据库
+  - **Windows Auto-Update Data Loss Fix**: Fixed a critical bug where upgrading from pre-0.5.0 via in-app auto-update could incorrectly resolve the data path to an empty `data/` subdirectory next to the executable, ignoring existing data in `%APPDATA%/PromptHub`; `resolveInitialUserDataPath` now only selects the install-scoped path when it already contains user data; `isPathWritable` no longer creates directories as a side effect; `initDatabase` now backs up the existing database before running migrations
 
 ### 优化 / Improvements
 
