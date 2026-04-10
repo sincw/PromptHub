@@ -1,3 +1,12 @@
+## [0.5.1] - 2026-04-10
+
+### 新功能 / Added
+
+- 🔄 **自动数据恢复**：应用启动时自动检测当前数据库是否为空，如果在其他已知路径（`%APPDATA%/PromptHub`、安装目录 `data/` 等）发现旧数据，弹出恢复对话框让用户一键恢复；支持数据库、图片/视频/技能目录和配置文件的完整迁移；恢复成功后应用自动重启
+  - **Automatic Data Recovery**: On startup the app now detects whether the current database is empty and, if existing data is found at other known paths (`%APPDATA%/PromptHub`, install-scoped `data/`, etc.), shows a recovery dialog for one-click restoration; supports full migration of the database, image/video/skill directories, and config files; the app restarts automatically after successful recovery
+
+---
+
 ## [0.5.0] - 2026-04-09
 
 ### 新功能 / Added

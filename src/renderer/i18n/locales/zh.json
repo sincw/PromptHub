@@ -1212,5 +1212,21 @@
     "analysisResult": "AI 分析结果",
     "suggestedFolder": "建议文件夹",
     "create": "创建"
+  },
+  "recovery": {
+    "title": "可恢复数据",
+    "description": "当前数据库为空，但在其他位置发现了已有数据。这可能是应用更新后导致的。",
+    "sourceLabel": "数据位置：",
+    "promptCount": "{{count}} 个 Prompt",
+    "folderCount": "{{count}} 个文件夹",
+    "skillCount": "{{count}} 个技能",
+    "dbSize": "数据库大小：{{size}}",
+    "recover": "恢复数据",
+    "dismiss": "全新开始",
+    "recovering": "正在恢复数据...",
+    "success": "数据恢复成功！应用即将重启。",
+    "restarting": "应用正在重启...",
+    "failed": "恢复失败：{{error}}",
+    "confirmDismiss": "确定要使用空数据库吗？原有数据仍保留在原位置，之后可以手动恢复。"
   }
 }

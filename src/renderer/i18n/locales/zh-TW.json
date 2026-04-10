@@ -1180,5 +1180,21 @@
     "analysisResult": "AI 分析結果",
     "suggestedFolder": "建議資料夾",
     "create": "建立"
+  },
+  "recovery": {
+    "title": "可復原資料",
+    "description": "目前資料庫為空，但在其他位置發現了現有資料。這可能是應用程式更新後造成的。",
+    "sourceLabel": "資料位置：",
+    "promptCount": "{{count}} 個 Prompt",
+    "folderCount": "{{count}} 個資料夾",
+    "skillCount": "{{count}} 個技能",
+    "dbSize": "資料庫大小：{{size}}",
+    "recover": "復原資料",
+    "dismiss": "全新開始",
+    "recovering": "正在復原資料...",
+    "success": "資料復原成功！應用程式即將重新啟動。",
+    "restarting": "應用程式正在重新啟動...",
+    "failed": "復原失敗：{{error}}",
+    "confirmDismiss": "確定要使用空白資料庫嗎？原有資料仍保留在原位置，之後可以手動復原。"
   }
 }

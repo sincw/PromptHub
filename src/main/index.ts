@@ -15,6 +15,12 @@ import path from "path";
 import fs from "fs";
 import Database from "./database/sqlite";
 import { initDatabase, closeDatabase } from "./database";
+import {
+  isDatabaseEmpty,
+  detectRecoverableDatabases,
+  performDatabaseRecovery,
+} from "./database";
+import type { RecoverableDatabase } from "./database";
 import { registerAllIPC } from "./ipc";
 import { getMinimizeOnLaunchSetting } from "./ipc/settings.ipc";
 import { createMenu } from "./menu";
@@ -651,6 +657,109 @@ ipcMain.handle("data:getStatus", () => {
       path.resolve(configuredPath) !== path.resolve(currentPath),
   };
 });
+
+// Data recovery: check for recoverable databases at known locations
+// 数据恢复：在已知位置检查可恢复的数据库
+let cachedRecoveryResult: RecoverableDatabase[] | null = null;
+
+ipcMain.handle("data:checkRecovery", () => {
+  if (cachedRecoveryResult !== null) {
+    return cachedRecoveryResult;
+  }
+
+  if (!appDb || !isDatabaseEmpty(appDb)) {
+    cachedRecoveryResult = [];
+    return [];
+  }
+
+  const currentPath = app.getPath("userData");
+  const candidatePaths = getRecoveryCandidatePaths(currentPath);
+  const results = detectRecoverableDatabases(currentPath, candidatePaths);
+  cachedRecoveryResult = results;
+  return results;
+});
+
+ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
+  if (typeof sourcePath !== "string" || sourcePath.trim().length === 0) {
+    return { success: false, error: "sourcePath is required" };
+  }
+
+  const currentPath = app.getPath("userData");
+
+  // Close current database before overwriting
+  closeDatabase();
+
+  const result = performDatabaseRecovery(sourcePath, currentPath);
+
+  if (result.success) {
+    // Clear cache so next check sees the recovered data
+    cachedRecoveryResult = null;
+
+    // Schedule a relaunch so the app starts fresh with the recovered database.
+    // A short delay gives the renderer time to show a success message.
+    setTimeout(() => {
+      app.relaunch();
+      app.quit();
+    }, 1500);
+
+    return {
+      success: true,
+      needsRestart: true,
+    };
+  }
+
+  // If recovery failed, re-open the original database
+  const db = initDatabase();
+  appDb = db;
+
+  return result;
+});
+
+ipcMain.handle("data:dismissRecovery", () => {
+  cachedRecoveryResult = [];
+  return { success: true };
+});
+
+/**
+ * Build the list of candidate paths where a previous database might reside.
+ * On Windows this includes %APPDATA%/PromptHub (the Electron default).
+ */
+function getRecoveryCandidatePaths(currentPath: string): string[] {
+  const candidates: string[] = [];
+  const platform = process.platform;
+
+  // The default Electron userData path (%APPDATA%/PromptHub on Windows,
+  // ~/Library/Application Support/PromptHub on macOS)
+  const appDataDefault = path.join(app.getPath("appData"), "PromptHub");
+  candidates.push(appDataDefault);
+
+  // On Windows, also check common portable/install-scoped locations
+  if (platform === "win32") {
+    // Check sibling "data" directory of install location
+    if (app.isPackaged) {
+      const installDir = path.dirname(process.execPath);
+      candidates.push(path.join(installDir, "data"));
+    }
+
+    // Check default per-user install location
+    const localAppData =
+      process.env.LOCALAPPDATA ||
+      path.join(app.getPath("home"), "AppData", "Local");
+    candidates.push(path.join(localAppData, "Programs", "PromptHub", "data"));
+  }
+
+  // Deduplicate and exclude current path
+  const normalizedCurrent = path.resolve(currentPath).toLowerCase();
+  const seen = new Set<string>();
+  return candidates.filter((p) => {
+    const normalized = path.resolve(p).toLowerCase();
+    if (normalized === normalizedCurrent || seen.has(normalized)) {
+      return false;
+    }
+    seen.add(normalized);
+    return true;
+  });
+}
 
 // Migrate data to a new directory
 // 迁移数据到新目录

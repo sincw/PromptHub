@@ -1180,5 +1180,21 @@
     "analysisResult": "KI-Analyseergebnis",
     "suggestedFolder": "Vorgeschlagener Ordner",
     "create": "Erstellen"
+  },
+  "recovery": {
+    "title": "Wiederherstellbare Daten verfügbar",
+    "description": "Ihre aktuelle Datenbank ist leer, aber wir haben vorhandene Daten an einem anderen Speicherort gefunden. Dies kann nach einem App-Update passiert sein.",
+    "sourceLabel": "Daten gefunden unter:",
+    "promptCount": "{{count}} Prompts",
+    "folderCount": "{{count}} Ordner",
+    "skillCount": "{{count}} Skills",
+    "dbSize": "Datenbankgröße: {{size}}",
+    "recover": "Daten wiederherstellen",
+    "dismiss": "Neu beginnen",
+    "recovering": "Daten werden wiederhergestellt...",
+    "success": "Daten erfolgreich wiederhergestellt! Die App wird neu gestartet.",
+    "restarting": "Die App wird neu gestartet...",
+    "failed": "Wiederherstellung fehlgeschlagen: {{error}}",
+    "confirmDismiss": "Sind Sie sicher, dass Sie mit einer leeren Datenbank beginnen möchten? Ihre alten Daten bleiben am ursprünglichen Speicherort erhalten und können später manuell wiederhergestellt werden."
   }
 }

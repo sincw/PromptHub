@@ -94,6 +94,11 @@ export const IPC_CHANNELS = {
   SKILL_DELETE_ALL: "skill:deleteAll",
   SKILL_INSERT_VERSION_DIRECT: "skill:version:insertDirect",
 
+  // Data Recovery
+  DATA_CHECK_RECOVERY: "data:checkRecovery",
+  DATA_PERFORM_RECOVERY: "data:performRecovery",
+  DATA_DISMISS_RECOVERY: "data:dismissRecovery",
+
   // Image
   DIALOG_SELECT_IMAGE: "dialog:selectImage",
   IMAGE_SAVE: "image:save",

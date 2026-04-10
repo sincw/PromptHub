@@ -17,6 +17,7 @@ import { DndContext, DragEndEvent, pointerWithin } from "@dnd-kit/core";
 import i18n from "./i18n";
 import { UpdateDialog, UpdateStatus } from "./components/UpdateDialog";
 import { CloseDialog } from "./components/ui/CloseDialog";
+import { DataRecoveryDialog } from "./components/ui/DataRecoveryDialog";
 
 // Lazy load heavy components for better initial load performance
 // 懒加载大型组件以提升初始加载性能
@@ -73,6 +74,18 @@ function App() {
   // Close dialog state (Windows)
   // 关闭对话框状态（Windows）
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+
+  // Data recovery state
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [recoverableDatabases, setRecoverableDatabases] = useState<
+    Array<{
+      sourcePath: string;
+      promptCount: number;
+      folderCount: number;
+      skillCount: number;
+      dbSizeBytes: number;
+    }>
+  >([]);
 
   // Update status (used for TopBar indicator)
   // 更新状态（用于顶部栏显示更新提示）
@@ -236,7 +249,10 @@ function App() {
     const handleWindowVisibilityChanged = (isVisible: boolean) => {
       isWindowVisibleRef.current = isVisible;
     };
-    window.api?.on?.("window:visibility-changed", handleWindowVisibilityChanged);
+    window.api?.on?.(
+      "window:visibility-changed",
+      handleWindowVisibilityChanged,
+    );
     window.electron?.isVisible?.().then((isVisible) => {
       if (typeof isVisible === "boolean") {
         isWindowVisibleRef.current = isVisible;
@@ -528,6 +544,17 @@ function App() {
         await fetchPrompts();
         await fetchFolders();
         console.log("✅ App initialized");
+
+        // Check for recoverable data after init
+        try {
+          const recoverable = await window.electron?.checkRecovery?.();
+          if (recoverable && recoverable.length > 0) {
+            setRecoverableDatabases(recoverable);
+            setShowRecoveryDialog(true);
+          }
+        } catch (recoveryErr) {
+          console.warn("Recovery check failed:", recoveryErr);
+        }
       } catch (error) {
         console.error("❌ Init failed:", error);
         // Retry once for timeout errors
@@ -567,10 +594,7 @@ function App() {
     // Periodic auto sync
     // 定时自动同步
     const settings = useSettingsStore.getState();
-    if (
-      settings.webdavAutoSyncInterval > 0 &&
-      hasValidWebDAVConfig(settings)
-    ) {
+    if (settings.webdavAutoSyncInterval > 0 && hasValidWebDAVConfig(settings)) {
       const intervalMs = settings.webdavAutoSyncInterval * 60 * 1000;
       console.log(
         `🔄 Auto sync interval: ${settings.webdavAutoSyncInterval} minutes`,
@@ -592,7 +616,10 @@ function App() {
         "visibilitychange",
         handleBackgroundTaskResume,
       );
-      window.api?.off?.("window:visibility-changed", handleBackgroundTaskResume);
+      window.api?.off?.(
+        "window:visibility-changed",
+        handleBackgroundTaskResume,
+      );
       window.removeEventListener("focus", handleBackgroundTaskResume);
       window.removeEventListener("online", handleBackgroundTaskResume);
     };
@@ -661,6 +688,13 @@ function App() {
         <CloseDialog
           isOpen={showCloseDialog}
           onClose={() => setShowCloseDialog(false)}
+        />
+
+        {/* Data recovery dialog */}
+        <DataRecoveryDialog
+          isOpen={showRecoveryDialog}
+          onClose={() => setShowRecoveryDialog(false)}
+          databases={recoverableDatabases}
         />
 
         {/* Use EditPromptModal for importing, passing clipboard data as initialData */}

@@ -1180,5 +1180,21 @@
     "analysisResult": "AI 分析結果",
     "suggestedFolder": "推奨フォルダ",
     "create": "作成"
+  },
+  "recovery": {
+    "title": "復元可能なデータがあります",
+    "description": "現在のデータベースは空ですが、別の場所に既存のデータが見つかりました。アプリの更新後に発生した可能性があります。",
+    "sourceLabel": "データの場所：",
+    "promptCount": "{{count}} 件のプロンプト",
+    "folderCount": "{{count}} 件のフォルダ",
+    "skillCount": "{{count}} 件のスキル",
+    "dbSize": "データベースサイズ：{{size}}",
+    "recover": "データを復元",
+    "dismiss": "新規で開始",
+    "recovering": "データを復元中...",
+    "success": "データの復元に成功しました！アプリが再起動します。",
+    "restarting": "アプリを再起動しています...",
+    "failed": "復元に失敗しました：{{error}}",
+    "confirmDismiss": "空のデータベースで開始してもよろしいですか？元のデータは元の場所に残り、後で手動で復元できます。"
   }
 }

@@ -146,6 +146,12 @@ contextBridge.exposeInMainWorld("electron", {
   getDataPath: () => ipcRenderer.invoke("data:getPath"),
   getDataPathStatus: () => ipcRenderer.invoke("data:getStatus"),
   migrateData: (newPath: string) => ipcRenderer.invoke("data:migrate", newPath),
+  // Data recovery
+  // 数据恢复
+  checkRecovery: () => ipcRenderer.invoke("data:checkRecovery"),
+  performRecovery: (sourcePath: string) =>
+    ipcRenderer.invoke("data:performRecovery", sourcePath),
+  dismissRecovery: () => ipcRenderer.invoke("data:dismissRecovery"),
   // Updater
   // 更新器
   updater: {
@@ -338,6 +344,22 @@ declare global {
         needsRestart?: boolean;
         error?: string;
       }>;
+      // Data recovery
+      checkRecovery?: () => Promise<
+        Array<{
+          sourcePath: string;
+          promptCount: number;
+          folderCount: number;
+          skillCount: number;
+          dbSizeBytes: number;
+        }>
+      >;
+      performRecovery?: (sourcePath: string) => Promise<{
+        success: boolean;
+        needsRestart?: boolean;
+        error?: string;
+      }>;
+      dismissRecovery?: () => Promise<{ success: boolean }>;
       updater?: {
         check: (
           useMirror?: boolean,

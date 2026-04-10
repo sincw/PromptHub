@@ -1180,5 +1180,21 @@
     "analysisResult": "Résultat de l'analyse IA",
     "suggestedFolder": "Dossier suggéré",
     "create": "Créer"
+  },
+  "recovery": {
+    "title": "Données récupérables disponibles",
+    "description": "Votre base de données actuelle est vide, mais nous avons trouvé des données existantes à un autre emplacement. Cela peut être dû à une mise à jour de l'application.",
+    "sourceLabel": "Données trouvées à :",
+    "promptCount": "{{count}} prompts",
+    "folderCount": "{{count}} dossiers",
+    "skillCount": "{{count}} compétences",
+    "dbSize": "Taille de la base de données : {{size}}",
+    "recover": "Récupérer les données",
+    "dismiss": "Recommencer à zéro",
+    "recovering": "Récupération des données en cours...",
+    "success": "Données récupérées avec succès ! L'application va redémarrer.",
+    "restarting": "L'application redémarre...",
+    "failed": "Échec de la récupération : {{error}}",
+    "confirmDismiss": "Êtes-vous sûr de vouloir commencer avec une base de données vide ? Vos anciennes données resteront à leur emplacement d'origine et pourront être récupérées manuellement plus tard."
   }
 }

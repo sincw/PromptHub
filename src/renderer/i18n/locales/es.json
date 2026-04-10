@@ -1180,5 +1180,21 @@
     "analysisResult": "Resultado del análisis de IA",
     "suggestedFolder": "Carpeta sugerida",
     "create": "Crear"
+  },
+  "recovery": {
+    "title": "Datos recuperables disponibles",
+    "description": "Su base de datos actual está vacía, pero encontramos datos existentes en otra ubicación. Esto puede haber ocurrido después de una actualización de la aplicación.",
+    "sourceLabel": "Datos encontrados en:",
+    "promptCount": "{{count}} prompts",
+    "folderCount": "{{count}} carpetas",
+    "skillCount": "{{count}} habilidades",
+    "dbSize": "Tamaño de la base de datos: {{size}}",
+    "recover": "Recuperar datos",
+    "dismiss": "Empezar de cero",
+    "recovering": "Recuperando datos...",
+    "success": "¡Datos recuperados con éxito! La aplicación se reiniciará.",
+    "restarting": "La aplicación se está reiniciando...",
+    "failed": "Error en la recuperación: {{error}}",
+    "confirmDismiss": "¿Está seguro de que desea comenzar con una base de datos vacía? Sus datos antiguos permanecerán en la ubicación original y podrán recuperarse manualmente más tarde."
   }
 }
