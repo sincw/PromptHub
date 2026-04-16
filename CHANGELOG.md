@@ -1,3 +1,21 @@
+## [0.5.2] - 2026-04-16
+
+### 修复 / Fixed
+
+- 🛡️ **升级前自动备份 data 目录**：应用内安装更新前，现会自动为当前 `userData` 目录创建本地快照备份；备份失败时会阻止安装，避免升级过程中出现“没有任何兜底”的数据风险
+  - **Automatic Pre-Upgrade Data Snapshot**: Before installing an in-app update, PromptHub now creates a local snapshot of the current `userData` directory; if the backup fails, installation is blocked so upgrades are never attempted without a rollback path
+- 🔄 **旧数据恢复链路补强**：当当前数据库为空时，应用会继续扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类因数据路径切换造成“看起来数据丢失”的升级场景
+  - **Legacy Data Recovery Hardening**: When the current database is empty, the app scans known legacy data locations and offers one-click recovery, covering upgrade paths like `0.4.7 -> 0.4.8` where data appeared missing because the storage path changed
+- 🔗 **Symlink 安装失败自动回退复制模式**：在 Windows 或不支持符号链接的文件系统上，如果创建 Skill 平台软链接返回 `EPERM`、`EACCES` 或 `ENOTSUP`，现在会自动降级为复制安装，而不是直接失败
+  - **Symlink Install Fallback to Copy Mode**: On Windows or filesystems that do not support symlinks, Skill deployment now falls back to copy mode when symlink creation returns `EPERM`, `EACCES`, or `ENOTSUP`, instead of failing the install outright
+
+### 维护 / Maintenance
+
+- 🔖 **版本与发版文档同步**：统一同步项目主版本、README/多语言 README、官网发布元数据与下载链接到 `v0.5.2`
+  - **Version and Release Docs Sync**: Synced the project version, README/localized READMEs, website release metadata, and download links to `v0.5.2`
+
+---
+
 ## [0.5.1] - 2026-04-10
 
 ### 新功能 / Added

@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import http from "http";
+import { createUpgradeDataSnapshot } from "./services/upgrade-backup";
 
 // Simplified update info type (for IPC transmission)
 // 简化的更新信息类型（用于 IPC 传输）
@@ -789,7 +790,16 @@ export function registerUpdaterIPC() {
   // Install update and restart
   // 安装更新并重启
   ipcMain.handle("updater:install", async () => {
-    if (!isDev) {
+    if (isDev) {
+      return { success: false, error: "Install disabled in development mode" };
+    }
+
+    try {
+      const backup = await createUpgradeDataSnapshot(
+        app.getPath("userData"),
+        app.getVersion(),
+      );
+
       if (isMac) {
         // macOS: open the downloaded DMG for manual installation
         // macOS: 打开已下载的 DMG 文件让用户手动安装
@@ -802,13 +812,28 @@ export function registerUpdaterIPC() {
           // 回退：打开下载文件夹
           shell.openPath(app.getPath("downloads"));
         }
-        return { success: true, manual: true };
-      } else {
-        // Windows/Linux: auto install
-        // Windows/Linux: 自动安装
-        autoUpdater.quitAndInstall(false, true);
-        return { success: true, manual: false };
+        return {
+          success: true,
+          manual: true,
+          backupPath: backup.backupPath,
+        };
       }
+
+      // Windows/Linux: auto install
+      // Windows/Linux: 自动安装
+      autoUpdater.quitAndInstall(false, true);
+      return {
+        success: true,
+        manual: false,
+        backupPath: backup.backupPath,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("[Updater] Failed to create upgrade backup:", error);
+      return {
+        success: false,
+        error: `Automatic upgrade backup failed: ${message}`,
+      };
     }
   });
 

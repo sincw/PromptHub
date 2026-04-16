@@ -89,6 +89,8 @@ playwright-report/
 *.db
 *.sqlite
 *.sqlite3
+apps/web/data/
+apps/web/data-first-run-*/
 
 # ========================
 # Temporary files

@@ -4,7 +4,10 @@ import path from "path";
 
 import type Database from "../database/sqlite";
 import { SkillDB } from "../database/skill";
+import { PromptDB } from "../database/prompt";
+import { FolderDB } from "../database/folder";
 import type { CreateSkillParams } from "@prompthub/shared/types";
+import type { Folder, Prompt, PromptVersion } from "@prompthub/shared/types";
 
 interface E2ESkillFileSeed {
   relativePath: string;
@@ -24,6 +27,9 @@ interface E2ESkillSeed {
 
 interface E2ESeedDocument {
   settings?: Record<string, unknown>;
+  folders?: Folder[];
+  prompts?: Prompt[];
+  versions?: PromptVersion[];
   skills?: E2ESkillSeed[];
 }
 
@@ -186,6 +192,26 @@ function writeSeedSettings(
   transaction();
 }
 
+function writeSeedPromptData(
+  db: Database.Database,
+  seed: E2ESeedDocument,
+): void {
+  const folderDb = new FolderDB(db);
+  const promptDb = new PromptDB(db);
+
+  for (const folder of seed.folders ?? []) {
+    folderDb.insertFolderDirect(folder);
+  }
+
+  for (const prompt of seed.prompts ?? []) {
+    promptDb.insertPromptDirect(prompt);
+  }
+
+  for (const version of seed.versions ?? []) {
+    promptDb.insertVersionDirect(version);
+  }
+}
+
 function resolveSeedFiles(skill: E2ESkillSeed): E2ESkillFileSeed[] {
   if (Array.isArray(skill.files) && skill.files.length > 0) {
     return skill.files;
@@ -248,6 +274,7 @@ export function applyE2ESeed(
   }
 
   writeSeedSettings(db, seed.settings);
+  writeSeedPromptData(db, seed);
 
   if (!seed.skills?.length) {
     return;

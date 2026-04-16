@@ -1,11 +1,38 @@
+## [0.5.2] - 2026-04-16
+
+### 修复 / Fixed
+
+- 🛡️ **升级前自动备份 data 目录**：应用内安装更新前，现会自动为当前 `userData` 目录创建本地快照备份；备份失败时会阻止安装，避免升级过程中出现“没有任何兜底”的数据风险
+  - **Automatic Pre-Upgrade Data Snapshot**: Before installing an in-app update, PromptHub now creates a local snapshot of the current `userData` directory; if the backup fails, installation is blocked so upgrades are never attempted without a rollback path
+- 🔄 **旧数据恢复链路补强**：当当前数据库为空时，应用会继续扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类因数据路径切换造成“看起来数据丢失”的升级场景
+  - **Legacy Data Recovery Hardening**: When the current database is empty, the app scans known legacy data locations and offers one-click recovery, covering upgrade paths like `0.4.7 -> 0.4.8` where data appeared missing because the storage path changed
+- 🔗 **Symlink 安装失败自动回退复制模式**：在 Windows 或不支持符号链接的文件系统上，如果创建 Skill 平台软链接返回 `EPERM`、`EACCES` 或 `ENOTSUP`，现在会自动降级为复制安装，而不是直接失败
+  - **Symlink Install Fallback to Copy Mode**: On Windows or filesystems that do not support symlinks, Skill deployment now falls back to copy mode when symlink creation returns `EPERM`, `EACCES`, or `ENOTSUP`, instead of failing the install outright
+
+### 维护 / Maintenance
+
+- 🔖 **版本与发版文档同步**：统一同步项目主版本、README/多语言 README、官网发布元数据与下载链接到 `v0.5.2`
+  - **Version and Release Docs Sync**: Synced the project version, README/localized READMEs, website release metadata, and download links to `v0.5.2`
+
+---
+
+## [0.5.1] - 2026-04-10
+
+### 新功能 / Added
+
+- 🔄 **自动数据恢复**：应用启动时自动检测当前数据库是否为空，如果在其他已知路径（`%APPDATA%/PromptHub`、安装目录 `data/` 等）发现旧数据，弹出恢复对话框让用户一键恢复；支持数据库、图片/视频/技能目录和配置文件的完整迁移；恢复成功后应用自动重启
+  - **Automatic Data Recovery**: On startup the app now detects whether the current database is empty and, if existing data is found at other known paths (`%APPDATA%/PromptHub`, install-scoped `data/`, etc.), shows a recovery dialog for one-click restoration; supports full migration of the database, image/video/skill directories, and config files; the app restarts automatically after successful recovery
+
+---
+
 ## [0.5.0] - 2026-04-09
 
 ### 新功能 / Added
 
 - 🛡️ **Skill 安全评估**：新增静态风险扫描器，可对已安装 Skill、商店 Skill 和 CLI 扫描结果输出 `safe / warn / high-risk / blocked` 风险等级与命中规则摘要
   - **Skill Safety Assessment**: Added a static risk scanner that evaluates installed Skills, store Skills, and CLI scan results with `safe / warn / high-risk / blocked` risk levels plus matched-rule summaries
-- 🏪 **商店安装前安全检查**：商店详情页支持手动“先检查再添加”，设置里可选“添加前自动评估”，默认关闭；`high-risk` 需要二次确认，`blocked` 直接拦截
-  - **Store Safety Check Before Install**: Store detail pages now support manual “scan before add”, settings can optionally enable “auto-assess before install” (off by default), `high-risk` installs require explicit confirmation, and `blocked` installs are rejected
+- 🏪 **商店安装前安全检查**：商店详情页支持手动"先检查再添加"，设置里可选"添加前自动评估"，默认关闭；`high-risk` 需要二次确认，`blocked` 直接拦截
+  - **Store Safety Check Before Install**: Store detail pages now support manual "scan before add", settings can optionally enable "auto-assess before install" (off by default), `high-risk` installs require explicit confirmation, and `blocked` installs are rejected
 - 🖥️ **CLI 安全扫描输出**：`prompthub skill scan` 现在会返回安全评估结果，方便脚本化审查本地 skill 仓库
   - **CLI Safety Scan Output**: `prompthub skill scan` now returns safety assessment results so local skill repositories can be audited in scripts and automation
 
@@ -13,13 +40,20 @@
 
 - 🔒 **恶意模式检测**：扫描器会检查危险 shell 片段、提权与持久化命令、凭据路径读取、编码执行、可疑工作流文件与来源风险
   - **Malicious Pattern Detection**: The scanner inspects dangerous shell fragments, privilege-escalation and persistence commands, credential-path access, encoded execution, suspicious workflow files, and source risk signals
-- 🔒 **商店高风险安装护栏**：对 `high-risk` 和 `blocked` 级别 skill 增加安装前护栏，避免“安装成功但用户毫无感知”的情况
+- 🔒 **商店高风险安装护栏**：对 `high-risk` 和 `blocked` 级别 skill 增加安装前护栏，避免"安装成功但用户毫无感知"的情况
   - **High-Risk Store Install Guardrails**: Added pre-install guardrails for `high-risk` and `blocked` Skills so unsafe installs are not silently accepted
+
+### 修复 / Fixed
+
+- 🔴 **Windows 自动更新后数据丢失修复**：修复从旧版本（<0.5.0）通过应用内自动更新到 0.5.0 后，数据路径解析可能错误地选择安装目录下的空 `data/` 子目录而忽略 `%APPDATA%/PromptHub` 中已有数据的严重 bug；`resolveInitialUserDataPath` 现在仅在 install-scoped 路径中已有用户数据时才选用它；`isPathWritable` 不再有创建目录的副作用；`initDatabase` 在运行迁移前会自动备份已有数据库
+  - **Windows Auto-Update Data Loss Fix**: Fixed a critical bug where upgrading from pre-0.5.0 via in-app auto-update could incorrectly resolve the data path to an empty `data/` subdirectory next to the executable, ignoring existing data in `%APPDATA%/PromptHub`; `resolveInitialUserDataPath` now only selects the install-scoped path when it already contains user data; `isPathWritable` no longer creates directories as a side effect; `initDatabase` now backs up the existing database before running migrations
 
 ### 优化 / Improvements
 
-- ⚙️ **批量复查与设置开关**：设置页新增“立即复查已安装 Skills”，并支持自动复查已安装 Skill 与安装前自动评估的独立开关
-  - **Batch Rescan and Settings Toggles**: Added “Rescan Installed Skills Now” in settings plus separate toggles for automatic installed-skill rescans and pre-install store assessment
+- ⚙️ **批量复查与设置开关**：设置页新增"立即复查已安装 Skills"，并支持自动复查已安装 Skill 与安装前自动评估的独立开关
+  - **Batch Rescan and Settings Toggles**: Added "Rescan Installed Skills Now" in settings plus separate toggles for automatic installed-skill rescans and pre-install store assessment
+- 🛡️ **安全报告弹窗增加评分维度区块**：Safety Report 弹窗新增三个评分维度（内容模式 / 来源可信度 / 仓库结构），每个维度显示命中 findings 数量与 hover 说明，底部附评分公式说明（`blocked 0–10 · high-risk 20–40 · warn 50–70 · safe 80–100`）；扫描按钮文字随状态动态变化（未扫描 / 扫描中 / `风险等级 - Safe` 等）
+  - **Safety Report Modal: Scoring Dimensions Panel**: The Safety Report modal now shows three scoring dimensions (Content patterns / Source trust / Repository structure), each with a finding count and hover description, plus a score-formula footer (`blocked 0–10 · high-risk 20–40 · caution 50–70 · safe 80–100`); the scan button label also updates dynamically based on scan state and result level
 - 🌍 **文档与多语言同步到 `v0.5.0`**：更新 CHANGELOG、README、多语言 README 与官网发布元数据，补充 Skill 安全评估相关说明
   - **Docs and Localization Synced to `v0.5.0`**: Updated the changelog, README, localized READMEs, and website release metadata with the new Skill safety assessment details
 

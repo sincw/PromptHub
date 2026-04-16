@@ -5,6 +5,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { useSettingsStore } from '../stores/settings.store';
+import { downloadCompressedBackup } from "../services/database-backup";
+import {
+  getManualBackupStatus,
+  recordManualBackup,
+} from "../services/backup-status";
 
 export interface UpdateInfo {
   version: string;
@@ -27,6 +32,12 @@ export type UpdateStatus =
   | { status: 'downloaded'; info: UpdateInfo }
   | { status: 'error'; error: string };
 
+function isStableUpgradeState(
+  status: UpdateStatus | null,
+): status is Extract<UpdateStatus, { status: 'available' | 'downloaded' }> {
+  return status?.status === 'available' || status?.status === 'downloaded';
+}
+
 interface UpdateDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,6 +53,11 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   const [useMirror, setUseMirror] = useState<boolean>(useUpdateMirror);
   const [currentVersion, setCurrentVersion] = useState<string>('');
   const [platform, setPlatform] = useState<string>('');
+  const [lastManualBackupAt, setLastManualBackupAt] = useState<string | null>(null);
+  const [lastManualBackupVersion, setLastManualBackupVersion] = useState<string | null>(null);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [hasAcknowledgedBackup, setHasAcknowledgedBackup] = useState(false);
 
   useEffect(() => {
     if (initialStatus) {
@@ -54,6 +70,10 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     // 获取当前版本和平台
     window.electron?.updater?.getVersion().then(setCurrentVersion);
     window.electron?.updater?.getPlatform?.().then(setPlatform);
+    getManualBackupStatus().then((status) => {
+      setLastManualBackupAt(status.lastManualBackupAt);
+      setLastManualBackupVersion(status.lastManualBackupVersion);
+    });
 
     // Listen for update status
     // 监听更新状态
@@ -107,15 +127,27 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   // 当对话框打开时，总是强制检查更新（不使用缓存）
   useEffect(() => {
     if (isOpen) {
+      setHasAcknowledgedBackup(false);
       // Force check every time the dialog opens
       // Using global mirror setting by default
-      handleCheckUpdate(useUpdateMirror);
+      getManualBackupStatus().then((status) => {
+        setLastManualBackupAt(status.lastManualBackupAt);
+        setLastManualBackupVersion(status.lastManualBackupVersion);
+      });
+      void handleCheckUpdate(useUpdateMirror, {
+        preserveVisibleStatus: isStableUpgradeState(initialStatus),
+      });
     }
-  }, [isOpen]);
+  }, [initialStatus, isOpen, useUpdateMirror]);
 
-  const handleCheckUpdate = async (mirror: boolean) => {
+  const handleCheckUpdate = async (
+    mirror: boolean,
+    options?: { preserveVisibleStatus?: boolean },
+  ) => {
     setUseMirror(mirror);
-    setUpdateStatus({ status: 'checking' });
+    if (!options?.preserveVisibleStatus) {
+      setUpdateStatus({ status: 'checking' });
+    }
     const result = await window.electron?.updater?.check(mirror);
     // If update check returns an error (e.g. in dev), set error status
     // 如果检查更新返回错误（例如开发环境），设置错误状态
@@ -131,10 +163,100 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   };
 
   const handleInstall = async () => {
-    await window.electron?.updater?.install();
+    if (!canInstallUpgrade) {
+      return;
+    }
+    setIsInstalling(true);
+    try {
+      const result = await window.electron?.updater?.install();
+      if (result && !result.success) {
+        setUpdateStatus({
+          status: 'error',
+          error: result.error || 'Automatic upgrade backup failed',
+        });
+      }
+    } finally {
+      setIsInstalling(false);
+    }
+  };
+
+  const handleBackupBeforeUpgrade = async () => {
+    if (!currentVersion) {
+      return;
+    }
+
+    setIsCreatingBackup(true);
+    try {
+      await downloadCompressedBackup();
+      const status = await recordManualBackup(currentVersion);
+      setLastManualBackupAt(status.lastManualBackupAt);
+      setLastManualBackupVersion(status.lastManualBackupVersion);
+    } finally {
+      setIsCreatingBackup(false);
+    }
   };
 
   if (!isOpen) return null;
+
+  const hasCurrentVersionManualBackup =
+    !!currentVersion &&
+    !!lastManualBackupAt &&
+    lastManualBackupVersion === currentVersion;
+  const canInstallUpgrade =
+    hasCurrentVersionManualBackup && hasAcknowledgedBackup;
+
+  const renderBackupGate = () => (
+    <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+      <div className="flex items-start gap-3">
+        <ZapIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="flex-1">
+          <p className="text-sm font-medium text-foreground">
+            {t('settings.backupRequiredForUpgrade')}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground whitespace-pre-line">
+            {t('settings.backupRequiredForUpgradeDesc')}
+          </p>
+          {hasCurrentVersionManualBackup && lastManualBackupAt ? (
+            <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+              {t('settings.backupReadyForUpgrade', { time: lastManualBackupAt })}
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              {t('settings.backupMissingForUpgrade', { version: currentVersion })}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={handleBackupBeforeUpgrade}
+          disabled={isCreatingBackup}
+          className="flex items-center justify-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted/60 transition-colors disabled:opacity-50"
+        >
+          {isCreatingBackup ? (
+            <Loader2Icon className="h-4 w-4 animate-spin" />
+          ) : (
+            <DownloadIcon className="h-4 w-4" />
+          )}
+          {t('settings.backupBeforeUpgrade')}
+        </button>
+      </div>
+      <label className="mt-3 flex items-start gap-2 text-xs text-foreground">
+        <input
+          type="checkbox"
+          checked={hasAcknowledgedBackup}
+          onChange={(event) => setHasAcknowledgedBackup(event.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+        />
+        <span>{t('settings.backupConfirmUpgrade')}</span>
+      </label>
+      {!hasAcknowledgedBackup && (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          {t('settings.backupConfirmRequired')}
+        </p>
+      )}
+    </div>
+  );
 
   const renderContent = () => {
     if (!updateStatus) {
@@ -189,10 +311,12 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                 </ReactMarkdown>
               </div>
             )}
+            {renderBackupGate()}
             <div className="flex gap-2">
               <button
                 onClick={handleDownload}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+                disabled={isCreatingBackup}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <DownloadIcon className="w-4 h-4" />
                 {t('settings.downloadUpdate')}
@@ -267,11 +391,13 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                 </p>
               </div>
             )}
+            {renderBackupGate()}
             <div className="flex flex-col gap-2">
               <div className="flex gap-2">
                 <button
                   onClick={handleInstall}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
+                  disabled={isCreatingBackup || isInstalling || !canInstallUpgrade}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isMac ? (
                     <>
@@ -279,7 +405,12 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
                       {t('settings.openDownloadFolder')}
                     </>
                   ) : (
-                    t('settings.installNow')
+                    <>
+                      {isInstalling ? (
+                        <Loader2Icon className="w-4 h-4 animate-spin" />
+                      ) : null}
+                      {t('settings.installNow')}
+                    </>
                   )}
                 </button>
                 <button
