@@ -6,7 +6,7 @@ It is intended for personal use, home lab deployments, or small single-instance 
 
 It is not the hosted commercial PromptHub Cloud stack. Keep the boundary clear:
 
-- `apps/web`: self-hosted, simple auth, local SQLite, user-managed deployment
+- `apps/web`: self-hosted, simple auth, workspace files + SQLite index, user-managed deployment
 - `prompthub-cloud`: official hosted SaaS, team/billing/multi-tenant/cloud operations
 
 ## Product Scope
@@ -107,7 +107,7 @@ Useful root-level commands:
 
 ## Docker
 
-`apps/web` already includes a production [Dockerfile](/Users/lingxiaotian/Programs/personal/PromptHub/apps/web/Dockerfile) and a ready-to-use [docker-compose.yml](/Users/lingxiaotian/Programs/personal/PromptHub/apps/web/docker-compose.yml).
+`apps/web` already includes a production [Dockerfile](./Dockerfile) and a ready-to-use [docker-compose.yml](./docker-compose.yml).
 
 When a release tag is built in CI, PromptHub also publishes a container image to GHCR:
 

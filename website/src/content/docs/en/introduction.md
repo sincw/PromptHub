@@ -14,7 +14,7 @@ Built-in store with 20+ curated AI agent skills. One-click install to 15+ platfo
 
 ### Local-First
 
-All data is stored in a local SQLite database. Works completely offline. Your prompts never leave your device.
+PromptHub keeps your data on your own machine with workspace files as the source of truth and SQLite as the local index. It works offline by default, and your prompts stay private unless you explicitly sync or export them.
 
 ### Professional Editor
 

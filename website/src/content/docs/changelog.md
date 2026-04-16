@@ -1,13 +1,31 @@
 ## [0.5.2] - 2026-04-16
 
+### 新功能 / Added
+
+- 🌐 **自部署 PromptHub Web**：新增轻量级 self-hosted 网页版，支持首次 `/setup` 初始化管理员、Prompt / Folder / Skill / Media / Settings 浏览器访问，以及 Docker、Docker Compose 与 GHCR 镜像部署
+  - **Self-Hosted PromptHub Web**: Added a lightweight self-hosted web edition with first-run `/setup` bootstrap, browser access for Prompts / Folders / Skills / Media / Settings, plus Docker, Docker Compose, and GHCR image deployment
+- 🔁 **桌面版直连自部署网页版备份 / 恢复**：桌面版 `设置 -> 数据` 现可直接连接 PromptHub Web，执行测试连接、上传、下载、启动拉取与定时推送，作为单用户场景下比 WebDAV 更直接的备份源 / 恢复源
+  - **Desktop Backup / Restore via Self-Hosted Web**: Desktop can now connect directly to PromptHub Web from `Settings -> Data` for connection tests, upload, download, startup pull, and scheduled push, providing a simpler backup/restore target than WebDAV for single-user setups
+
 ### 修复 / Fixed
 
 - 🛡️ **升级前自动备份 data 目录**：应用内安装更新前，现会自动为当前 `userData` 目录创建本地快照备份；备份失败时会阻止安装，避免升级过程中出现“没有任何兜底”的数据风险
   - **Automatic Pre-Upgrade Data Snapshot**: Before installing an in-app update, PromptHub now creates a local snapshot of the current `userData` directory; if the backup fails, installation is blocked so upgrades are never attempted without a rollback path
 - 🔄 **旧数据恢复链路补强**：当当前数据库为空时，应用会继续扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类因数据路径切换造成“看起来数据丢失”的升级场景
   - **Legacy Data Recovery Hardening**: When the current database is empty, the app scans known legacy data locations and offers one-click recovery, covering upgrade paths like `0.4.7 -> 0.4.8` where data appeared missing because the storage path changed
+- 🧠 **自部署同步改为安全合并**：桌面版与自部署网页版的 Prompt / Folder / Skill 双向同步改为按稳定 `id` 和 `updatedAt` 合并，双方各自新增的内容会保留；同一条记录冲突时以更新时间更新的一端为准；删除不会自动传播，避免误删放大
+  - **Merge-Safe Self-Hosted Sync**: Desktop and self-hosted web now merge Prompt / Folder / Skill data by stable `id` and `updatedAt`, preserving records added on either side; conflicts on the same record resolve to the newer update; deletions do not auto-propagate to avoid accidental data loss
 - 🔗 **Symlink 安装失败自动回退复制模式**：在 Windows 或不支持符号链接的文件系统上，如果创建 Skill 平台软链接返回 `EPERM`、`EACCES` 或 `ENOTSUP`，现在会自动降级为复制安装，而不是直接失败
   - **Symlink Install Fallback to Copy Mode**: On Windows or filesystems that do not support symlinks, Skill deployment now falls back to copy mode when symlink creation returns `EPERM`, `EACCES`, or `ENOTSUP`, instead of failing the install outright
+
+### 优化 / Improvements
+
+- 🗂️ **文件真源 + SQLite 索引**：桌面版与自部署网页版的 Prompt 主数据链统一为 workspace 文件真源 + SQLite 索引，支持从 workspace 自动回灌数据库，并把 settings、media 等数据继续收敛到同一工作区结构
+  - **File Truth + SQLite Index**: Desktop and self-hosted web now converge on workspace files as the source of truth with SQLite as the index layer, including automatic database rebuild from workspace files and a more unified workspace layout for settings and media
+- 📦 **自部署交付链补齐**：补齐 web 专用 README、根脚本、CI 校验、GHCR 镜像发布与 compose 部署说明，self-hosted web 不再是“代码存在但没有正式交付链”的状态
+  - **Self-Hosted Delivery Pipeline**: Added dedicated web docs, root scripts, CI verification, GHCR image publishing, and compose deployment guidance so the self-hosted web app now has a real delivery pipeline
+- 🧪 **桌面版 ↔ 自部署网页版联调回归**：补齐桌面版与本地 self-hosted web 的连接、上传、下载、启动拉取与同步合并回归测试
+  - **Desktop ↔ Self-Hosted Web Regression Coverage**: Added regression coverage for desktop-to-web connection, upload, download, startup pull, and merge-safe sync flows against a local self-hosted PromptHub Web instance
 
 ### 维护 / Maintenance
 

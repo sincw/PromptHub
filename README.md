@@ -179,7 +179,7 @@
 
 除了桌面版，PromptHub 现在也提供轻量级的自部署网页版，适合作为个人浏览器工作区，或作为桌面版的备份源 / 恢复源。
 
-- Web 部署说明：[`apps/web/README.md`](/Users/lingxiaotian/Programs/personal/PromptHub/apps/web/README.md)
+- Web 部署说明：[`apps/web/README.md`](./apps/web/README.md)
 - 支持 Docker / Docker Compose / GHCR 镜像部署
 - 桌面版可在 `设置 -> 数据` 中直接连接自部署网页版，并执行测试连接、上传、下载、启动拉取、定时推送
 

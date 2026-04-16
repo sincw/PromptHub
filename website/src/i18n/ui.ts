@@ -342,7 +342,7 @@ export const ui = {
         },
         {
           q: "Where is my data stored?",
-          a: "All data is stored in a local SQLite database on your machine. Your prompts stay private by default.",
+          a: "Your data stays on your machine with local workspace files plus a SQLite index. Your prompts stay private by default.",
         },
         {
           q: "Which AI models are supported?",

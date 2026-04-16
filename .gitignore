@@ -91,9 +91,14 @@ playwright-report/
 *.sqlite3
 apps/web/data/
 apps/web/data-first-run-*/
+packages/db/src/index.js
+packages/db/src/index.js.map
+packages/shared/types/index.js
+packages/shared/types/index.js.map
 
 # ========================
 # Temporary files
 # ========================
 *.tmp
 *.temp
+*.tsbuildinfo
