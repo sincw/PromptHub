@@ -231,6 +231,13 @@ interface SettingsState {
   // 是否启用加密（实验性）
   webdavEncryptionPassword: string; // Encryption password
   // 加密密码
+  selfHostedSyncEnabled: boolean;
+  selfHostedSyncUrl: string;
+  selfHostedSyncUsername: string;
+  selfHostedSyncPassword: string;
+  selfHostedSyncOnStartup: boolean;
+  selfHostedSyncOnStartupDelay: number;
+  selfHostedAutoSyncInterval: number;
 
   // Update settings
   // 更新设置
@@ -269,6 +276,7 @@ interface SettingsState {
 
   // Custom platform skill paths / 自定义平台 Skill 目录
   customSkillPlatformPaths: Record<string, string>;
+  skillPlatformOrder: string[];
 
   // Skill install method / Skill 安装方式
   skillInstallMethod: "symlink" | "copy";
@@ -310,6 +318,13 @@ interface SettingsState {
   setWebdavIncrementalSync: (enabled: boolean) => void;
   setWebdavEncryptionEnabled: (enabled: boolean) => void;
   setWebdavEncryptionPassword: (password: string) => void;
+  setSelfHostedSyncEnabled: (enabled: boolean) => void;
+  setSelfHostedSyncUrl: (url: string) => void;
+  setSelfHostedSyncUsername: (username: string) => void;
+  setSelfHostedSyncPassword: (password: string) => void;
+  setSelfHostedSyncOnStartup: (enabled: boolean) => void;
+  setSelfHostedSyncOnStartupDelay: (delay: number) => void;
+  setSelfHostedAutoSyncInterval: (interval: number) => void;
   setAutoCheckUpdate: (enabled: boolean) => void;
   setUseUpdateMirror: (enabled: boolean) => void;
   setTagsSectionHeight: (height: number) => void;
@@ -339,6 +354,12 @@ interface SettingsState {
   removeCustomSkillScanPath: (path: string) => void;
   setCustomSkillPlatformPath: (platformId: string, path: string) => void;
   resetCustomSkillPlatformPath: (platformId: string) => void;
+  setSkillPlatformOrder: (order: string[]) => void;
+  moveSkillPlatformOrder: (
+    platformId: string,
+    direction: "up" | "down",
+  ) => void;
+  resetSkillPlatformOrder: () => void;
   // Skill install method action / Skill 安装方式操作
   setSkillInstallMethod: (method: "symlink" | "copy") => void;
   setAutoScanInstalledSkills: (enabled: boolean) => void;
@@ -408,6 +429,13 @@ export const useSettingsStore = create<SettingsState>()(
         webdavIncrementalSync: true,
         webdavEncryptionEnabled: false,
         webdavEncryptionPassword: "",
+        selfHostedSyncEnabled: false,
+        selfHostedSyncUrl: "",
+        selfHostedSyncUsername: "",
+        selfHostedSyncPassword: "",
+        selfHostedSyncOnStartup: false,
+        selfHostedSyncOnStartupDelay: 10,
+        selfHostedAutoSyncInterval: 0,
         autoCheckUpdate: true,
         useUpdateMirror: false,
         tagsSectionHeight: DEFAULT_TAGS_SECTION_HEIGHT,
@@ -425,6 +453,7 @@ export const useSettingsStore = create<SettingsState>()(
         sourceHistory: [],
         customSkillScanPaths: [],
         customSkillPlatformPaths: {},
+        skillPlatformOrder: [],
         skillInstallMethod: "symlink" as const,
         autoScanInstalledSkills: false,
         autoScanStoreSkillsBeforeInstall: false,
@@ -610,6 +639,21 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ webdavEncryptionEnabled: enabled }),
         setWebdavEncryptionPassword: (password) =>
           setTouched({ webdavEncryptionPassword: password }),
+        setSelfHostedSyncEnabled: (enabled) =>
+          setTouched({ selfHostedSyncEnabled: enabled }),
+        setSelfHostedSyncUrl: (url) => setTouched({ selfHostedSyncUrl: url }),
+        setSelfHostedSyncUsername: (username) =>
+          setTouched({ selfHostedSyncUsername: username }),
+        setSelfHostedSyncPassword: (password) =>
+          setTouched({ selfHostedSyncPassword: password }),
+        setSelfHostedSyncOnStartup: (enabled) =>
+          setTouched({ selfHostedSyncOnStartup: enabled }),
+        setSelfHostedSyncOnStartupDelay: (delay) =>
+          setTouched({
+            selfHostedSyncOnStartupDelay: Math.max(0, Math.min(60, delay)),
+          }),
+        setSelfHostedAutoSyncInterval: (interval) =>
+          setTouched({ selfHostedAutoSyncInterval: Math.max(0, interval) }),
         setAutoCheckUpdate: (enabled) =>
           setTouched({ autoCheckUpdate: enabled }),
         setUseUpdateMirror: (enabled) =>
@@ -803,6 +847,41 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ customSkillPlatformPaths: nextPaths });
           syncSettingsToMain({ customSkillPlatformPaths: nextPaths });
         },
+        setSkillPlatformOrder: (order) => {
+          const nextOrder = order.filter(
+            (platformId, index) =>
+              typeof platformId === "string" &&
+              platformId.trim().length > 0 &&
+              order.indexOf(platformId) === index,
+          );
+          setTouched({ skillPlatformOrder: nextOrder });
+          syncSettingsToMain({ skillPlatformOrder: nextOrder });
+        },
+        moveSkillPlatformOrder: (platformId, direction) => {
+          const currentOrder = [...get().skillPlatformOrder];
+          const currentIndex = currentOrder.indexOf(platformId);
+          if (currentIndex === -1) {
+            return;
+          }
+
+          const targetIndex =
+            direction === "up" ? currentIndex - 1 : currentIndex + 1;
+          if (targetIndex < 0 || targetIndex >= currentOrder.length) {
+            return;
+          }
+
+          [currentOrder[currentIndex], currentOrder[targetIndex]] = [
+            currentOrder[targetIndex],
+            currentOrder[currentIndex],
+          ];
+
+          setTouched({ skillPlatformOrder: currentOrder });
+          syncSettingsToMain({ skillPlatformOrder: currentOrder });
+        },
+        resetSkillPlatformOrder: () => {
+          setTouched({ skillPlatformOrder: [] });
+          syncSettingsToMain({ skillPlatformOrder: [] });
+        },
         // Skill install method action / Skill 安装方式操作
         setSkillInstallMethod: (method) =>
           setTouched({ skillInstallMethod: method }),
@@ -840,6 +919,14 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.customSkillPlatformPaths = {};
         }
+        if (
+          !Array.isArray(next.skillPlatformOrder) ||
+          next.skillPlatformOrder.some(
+            (platformId) => typeof platformId !== "string",
+          )
+        ) {
+          next.skillPlatformOrder = [];
+        }
         if (typeof next.autoScanInstalledSkills !== "boolean") {
           next.autoScanInstalledSkills = false;
         }
@@ -851,6 +938,7 @@ export const useSettingsStore = create<SettingsState>()(
       onRehydrateStorage: () => (state) => {
         syncSettingsToMain({
           customSkillPlatformPaths: state?.customSkillPlatformPaths || {},
+          skillPlatformOrder: state?.skillPlatformOrder || [],
         });
       },
     },

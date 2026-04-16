@@ -25,6 +25,35 @@ import { SkillDB } from "../../../src/main/database/skill";
 
 let tmpDir: string;
 
+const SKILL_MIGRATION_COLUMNS = [
+  "source_url TEXT",
+  "local_repo_path TEXT",
+  "icon_url TEXT",
+  "icon_emoji TEXT",
+  "icon_background TEXT",
+  "category TEXT DEFAULT 'general'",
+  "is_builtin INTEGER DEFAULT 0",
+  "registry_slug TEXT",
+  "content_url TEXT",
+  "prerequisites TEXT",
+  "compatibility TEXT",
+  "original_tags TEXT",
+  "safety_level TEXT",
+  "safety_score INTEGER",
+  "safety_report TEXT",
+  "safety_scanned_at INTEGER",
+];
+
+function applySkillMigrationColumns(db: Database.Database): void {
+  for (const column of SKILL_MIGRATION_COLUMNS) {
+    try {
+      db.exec(`ALTER TABLE skills ADD COLUMN ${column}`);
+    } catch {
+      // Column may already exist in newer schema snapshots.
+    }
+  }
+}
+
 beforeEach(async () => {
   tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "skill-installer-test-"));
   configureRuntimePaths({ userDataPath: tmpDir });
@@ -1228,22 +1257,6 @@ describe("SkillInstaller.scanLocal (with real DB)", () => {
   let skillDb: SkillDB;
   let previousHome: string | undefined;
 
-  /** SQL to add columns that migrations normally add */
-  const SKILL_MIGRATIONS = `
-    ALTER TABLE skills ADD COLUMN source_url TEXT;
-    ALTER TABLE skills ADD COLUMN local_repo_path TEXT;
-    ALTER TABLE skills ADD COLUMN icon_url TEXT;
-    ALTER TABLE skills ADD COLUMN icon_emoji TEXT;
-    ALTER TABLE skills ADD COLUMN icon_background TEXT;
-    ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general';
-    ALTER TABLE skills ADD COLUMN is_builtin INTEGER DEFAULT 0;
-    ALTER TABLE skills ADD COLUMN registry_slug TEXT;
-    ALTER TABLE skills ADD COLUMN content_url TEXT;
-    ALTER TABLE skills ADD COLUMN prerequisites TEXT;
-    ALTER TABLE skills ADD COLUMN compatibility TEXT;
-    ALTER TABLE skills ADD COLUMN original_tags TEXT;
-  `;
-
   async function createSkillInDir(
     parentDir: string,
     skillName: string,
@@ -1271,16 +1284,7 @@ describe("SkillInstaller.scanLocal (with real DB)", () => {
     );
     sqliteDb = new Database(path.join(dbTmpDir, "test.db"));
     sqliteDb.exec(SCHEMA_TABLES);
-    // Add migration columns one at a time (some may already exist from SCHEMA_TABLES)
-    for (const line of SKILL_MIGRATIONS.split(";")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        sqliteDb.exec(trimmed);
-      } catch {
-        // Column already exists from SCHEMA_TABLES — expected
-      }
-    }
+    applySkillMigrationColumns(sqliteDb);
     sqliteDb.exec(SCHEMA_INDEXES);
     skillDb = new SkillDB(sqliteDb);
   });
@@ -1367,28 +1371,7 @@ describe("P3: skills table UNIQUE index on LOWER(name)", () => {
     const testDb = new Database(path.join(dbDir, "test.db"));
     try {
       testDb.exec(SCHEMA_TABLES);
-      // Add migration columns
-      const migrationCols = [
-        "source_url TEXT",
-        "local_repo_path TEXT",
-        "icon_url TEXT",
-        "icon_emoji TEXT",
-        "icon_background TEXT",
-        "category TEXT DEFAULT 'general'",
-        "is_builtin INTEGER DEFAULT 0",
-        "registry_slug TEXT",
-        "content_url TEXT",
-        "prerequisites TEXT",
-        "compatibility TEXT",
-        "original_tags TEXT",
-      ];
-      for (const col of migrationCols) {
-        try {
-          testDb.exec(`ALTER TABLE skills ADD COLUMN ${col}`);
-        } catch {
-          /* already exists */
-        }
-      }
+      applySkillMigrationColumns(testDb);
       testDb.exec(SCHEMA_INDEXES);
 
       const now = Date.now();
@@ -1599,20 +1582,6 @@ describe("SkillInstaller.installFromGithub", () => {
 describe("scanLocalPreview DB conflict detection (M6)", () => {
   let scanDb: Database.Database;
   let skillDb: SkillDB;
-  const SKILL_MIGRATIONS_M6 = `
-    ALTER TABLE skills ADD COLUMN source_url TEXT;
-    ALTER TABLE skills ADD COLUMN local_repo_path TEXT;
-    ALTER TABLE skills ADD COLUMN icon_url TEXT;
-    ALTER TABLE skills ADD COLUMN icon_emoji TEXT;
-    ALTER TABLE skills ADD COLUMN icon_background TEXT;
-    ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general';
-    ALTER TABLE skills ADD COLUMN is_builtin INTEGER DEFAULT 0;
-    ALTER TABLE skills ADD COLUMN registry_slug TEXT;
-    ALTER TABLE skills ADD COLUMN content_url TEXT;
-    ALTER TABLE skills ADD COLUMN prerequisites TEXT;
-    ALTER TABLE skills ADD COLUMN compatibility TEXT;
-    ALTER TABLE skills ADD COLUMN original_tags TEXT;
-  `;
 
   beforeEach(async () => {
     await SkillInstaller.init();
@@ -1620,15 +1589,7 @@ describe("scanLocalPreview DB conflict detection (M6)", () => {
     // Real in-memory DB
     const sqliteDb = new Database(":memory:");
     sqliteDb.exec(SCHEMA_TABLES);
-    for (const line of SKILL_MIGRATIONS_M6.split(";")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        sqliteDb.exec(trimmed);
-      } catch {
-        // Column already exists
-      }
-    }
+    applySkillMigrationColumns(sqliteDb);
     sqliteDb.exec(SCHEMA_INDEXES);
     scanDb = sqliteDb;
     skillDb = new SkillDB(sqliteDb);
@@ -1746,29 +1707,7 @@ describe("L3: JSON export/import preserves source_url", () => {
     // Create a real in-memory DB
     const sqliteDb = new Database(":memory:");
     sqliteDb.exec(SCHEMA_TABLES);
-    const migrations = `
-      ALTER TABLE skills ADD COLUMN source_url TEXT;
-      ALTER TABLE skills ADD COLUMN local_repo_path TEXT;
-      ALTER TABLE skills ADD COLUMN icon_url TEXT;
-      ALTER TABLE skills ADD COLUMN icon_emoji TEXT;
-      ALTER TABLE skills ADD COLUMN icon_background TEXT;
-      ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general';
-      ALTER TABLE skills ADD COLUMN is_builtin INTEGER DEFAULT 0;
-      ALTER TABLE skills ADD COLUMN registry_slug TEXT;
-      ALTER TABLE skills ADD COLUMN content_url TEXT;
-      ALTER TABLE skills ADD COLUMN prerequisites TEXT;
-      ALTER TABLE skills ADD COLUMN compatibility TEXT;
-      ALTER TABLE skills ADD COLUMN original_tags TEXT;
-    `;
-    for (const line of migrations.split(";")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        sqliteDb.exec(trimmed);
-      } catch {
-        // Column already exists
-      }
-    }
+    applySkillMigrationColumns(sqliteDb);
     sqliteDb.exec(SCHEMA_INDEXES);
     const db = new SkillDB(sqliteDb);
 
@@ -1798,29 +1737,7 @@ describe("L3: JSON export/import preserves source_url", () => {
   it("importFromJson handles missing source_url gracefully", async () => {
     const sqliteDb = new Database(":memory:");
     sqliteDb.exec(SCHEMA_TABLES);
-    const migrations = `
-      ALTER TABLE skills ADD COLUMN source_url TEXT;
-      ALTER TABLE skills ADD COLUMN local_repo_path TEXT;
-      ALTER TABLE skills ADD COLUMN icon_url TEXT;
-      ALTER TABLE skills ADD COLUMN icon_emoji TEXT;
-      ALTER TABLE skills ADD COLUMN icon_background TEXT;
-      ALTER TABLE skills ADD COLUMN category TEXT DEFAULT 'general';
-      ALTER TABLE skills ADD COLUMN is_builtin INTEGER DEFAULT 0;
-      ALTER TABLE skills ADD COLUMN registry_slug TEXT;
-      ALTER TABLE skills ADD COLUMN content_url TEXT;
-      ALTER TABLE skills ADD COLUMN prerequisites TEXT;
-      ALTER TABLE skills ADD COLUMN compatibility TEXT;
-      ALTER TABLE skills ADD COLUMN original_tags TEXT;
-    `;
-    for (const line of migrations.split(";")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        sqliteDb.exec(trimmed);
-      } catch {
-        // Column already exists
-      }
-    }
+    applySkillMigrationColumns(sqliteDb);
     sqliteDb.exec(SCHEMA_INDEXES);
     const db = new SkillDB(sqliteDb);
 

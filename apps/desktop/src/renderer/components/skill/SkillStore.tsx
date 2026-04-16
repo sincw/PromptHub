@@ -33,6 +33,7 @@ import {
 } from "../../services/skills-sh-store";
 import { useToast } from "../ui/Toast";
 import type {
+  DeviceManagementSettings,
   GitHubRepoMetadata,
   GitHubTreeEntry,
   GitHubTreeResponse,
@@ -40,6 +41,7 @@ import type {
   MarketplaceRegistryDocument,
   MarketplaceSkillEntry,
   RegistrySkill,
+  Settings,
   SkillCategory,
   SkillStoreSource,
 } from "@prompthub/shared/types";
@@ -196,6 +198,19 @@ function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
 
+function cadenceToMs(
+  cadence: DeviceManagementSettings["storeSyncCadence"],
+): number | null {
+  switch (cadence) {
+    case "1h":
+      return 60 * 60 * 1000;
+    case "1d":
+      return 24 * 60 * 60 * 1000;
+    default:
+      return null;
+  }
+}
+
 async function runWithConcurrency<T, R>(
   items: T[],
   limit: number,
@@ -239,9 +254,10 @@ export function SkillStore() {
   const isZh = i18n.language?.startsWith("zh");
 
   const loadRegistry = useSkillStore((state) => state.loadRegistry);
-  const storeCategory = useSkillStore((state) => state.storeCategory);
+  const storeCategory = useSkillStore((state) => state.storeCategory) ?? "all";
   const setStoreCategory = useSkillStore((state) => state.setStoreCategory);
-  const storeSearchQuery = useSkillStore((state) => state.storeSearchQuery);
+  const storeSearchQuery =
+    useSkillStore((state) => state.storeSearchQuery) ?? "";
   const setStoreSearchQuery = useSkillStore(
     (state) => state.setStoreSearchQuery,
   );
@@ -256,12 +272,13 @@ export function SkillStore() {
   const selectedRegistrySlug = useSkillStore(
     (state) => state.selectedRegistrySlug,
   );
-  const registrySkills = useSkillStore((state) => state.registrySkills);
+  const registrySkills = useSkillStore((state) => state.registrySkills) ?? [];
   const selectedStoreSourceId = useSkillStore(
     (state) => state.selectedStoreSourceId,
-  );
+  ) ?? "official";
   const selectStoreSource = useSkillStore((state) => state.selectStoreSource);
-  const customStoreSources = useSkillStore((state) => state.customStoreSources);
+  const customStoreSources =
+    useSkillStore((state) => state.customStoreSources) ?? [];
   const addCustomStoreSource = useSkillStore(
     (state) => state.addCustomStoreSource,
   );
@@ -271,7 +288,8 @@ export function SkillStore() {
   const toggleCustomStoreSource = useSkillStore(
     (state) => state.toggleCustomStoreSource,
   );
-  const remoteStoreEntries = useSkillStore((state) => state.remoteStoreEntries);
+  const remoteStoreEntries =
+    useSkillStore((state) => state.remoteStoreEntries) ?? {};
   const setRemoteStoreEntry = useSkillStore(
     (state) => state.setRemoteStoreEntry,
   );
@@ -294,7 +312,9 @@ export function SkillStore() {
   const aiModels = useSettingsStore((state) => state.aiModels);
 
   useEffect(() => {
-    loadRegistry();
+    if (typeof loadRegistry === "function") {
+      void loadRegistry();
+    }
   }, [loadRegistry]);
 
   const installedSlugs = useMemo(() => {
@@ -635,6 +655,10 @@ export function SkillStore() {
 
   const loadStoreSource = useCallback(
     async (sourceId: string, forceRefresh = false) => {
+      if (typeof setRemoteStoreEntry !== "function") {
+        return;
+      }
+
       if (sourceId === "official" || sourceId === "new-custom") {
         return;
       }
@@ -717,6 +741,70 @@ export function SkillStore() {
     if (!isSelectedSourceRemote) return;
     void loadStoreSource(selectedStoreSourceId);
   }, [isSelectedSourceRemote, loadStoreSource, selectedStoreSourceId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    let disposed = false;
+    let intervalId: number | undefined;
+
+    const refreshStoreSources = async (forceRefresh: boolean) => {
+      if (typeof loadRegistry === "function") {
+        await loadRegistry();
+      }
+
+      const enabledCustomSourceIds = customStoreSources
+        .filter((source) => source.enabled)
+        .map((source) => source.id);
+      const remoteSourceIds = ["claude-code", "community", ...enabledCustomSourceIds];
+
+      await Promise.allSettled(
+        remoteSourceIds.map((sourceId) =>
+          loadStoreSource(sourceId, forceRefresh),
+        ),
+      );
+    };
+
+    const configure = async () => {
+      const settings = (await window.api?.settings?.get?.()) as
+        | Settings
+        | undefined;
+      if (disposed) {
+        return;
+      }
+
+      const deviceSettings = settings?.device;
+      const autoSyncEnabled = deviceSettings?.storeAutoSync ?? true;
+      const intervalMs = cadenceToMs(
+        deviceSettings?.storeSyncCadence ?? "1d",
+      );
+
+      if (!autoSyncEnabled) {
+        return;
+      }
+
+      await refreshStoreSources(true);
+
+      if (!intervalMs) {
+        return;
+      }
+
+      intervalId = window.setInterval(() => {
+        void refreshStoreSources(true);
+      }, intervalMs);
+    };
+
+    void configure();
+
+    return () => {
+      disposed = true;
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [customStoreSources, loadRegistry, loadStoreSource]);
 
   const sourceRegistrySkills = useMemo(() => {
     let baseSkills: RegistrySkill[] = [];

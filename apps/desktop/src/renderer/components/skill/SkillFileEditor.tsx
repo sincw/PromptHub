@@ -104,6 +104,10 @@ function isMarkdownFile(path: string): boolean {
   return ["md", "mdx"].includes(ext);
 }
 
+function isHiddenSkillRepoEntry(path: string): boolean {
+  return path.split("/").some((segment) => segment === ".git");
+}
+
 function buildTree(files: FileTreeEntry[]): TreeNode[] {
   const root: TreeNode[] = [];
 
@@ -223,23 +227,29 @@ export function SkillFileEditor({
     setIsLoading(true);
     try {
       const result = await window.api.skill.listLocalFiles(skillId);
-      setFiles(result);
+      const visibleEntries = result.filter(
+        (entry) => !isHiddenSkillRepoEntry(entry.path),
+      );
+      setFiles(visibleEntries);
       const firstFile =
-        result.find(
+        visibleEntries.find(
           (entry) =>
             !entry.isDirectory && entry.path.toLowerCase() === "skill.md",
         )?.path ||
-        result.find((entry) => !entry.isDirectory)?.path ||
+        visibleEntries.find((entry) => !entry.isDirectory)?.path ||
         null;
       setSelectedFile((current) => {
-        if (current && result.some((entry) => entry.path === current)) {
+        if (
+          current &&
+          visibleEntries.some((entry) => entry.path === current)
+        ) {
           return current;
         }
         return firstFile;
       });
       setLoadedFiles((prev) => {
         const next: Record<string, FileEntry> = {};
-        for (const entry of result) {
+        for (const entry of visibleEntries) {
           if (!entry.isDirectory && prev[entry.path]) {
             next[entry.path] = prev[entry.path];
           }
@@ -247,7 +257,9 @@ export function SkillFileEditor({
         return next;
       });
       // Auto-expand all directories
-      const dirs = result.filter((f) => f.isDirectory).map((f) => f.path);
+      const dirs = visibleEntries
+        .filter((entry) => entry.isDirectory)
+        .map((entry) => entry.path);
       setExpandedDirs(new Set(dirs));
     } catch (error) {
       console.error("Failed to load skill files:", error);

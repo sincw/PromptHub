@@ -11,6 +11,7 @@ import {
   KeyIcon,
   SparklesIcon,
   KeyboardIcon,
+  ServerCogIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { GeneralSettings } from "./GeneralSettings";
@@ -23,6 +24,9 @@ import { SkillSettings } from "./SkillSettings";
 import { AboutSettings } from "./AboutSettings";
 import { DataSettings } from "./DataSettings";
 import { AISettingsPrototype } from "./AISettingsPrototype";
+import { WebDeviceSettings } from "./WebDeviceSettings";
+import { WebWorkspaceSettings } from "./WebWorkspaceSettings";
+import { isWebRuntime } from "../../runtime";
 
 interface SettingsPageProps {
   onBack: () => void;
@@ -30,7 +34,7 @@ interface SettingsPageProps {
 
 // Settings menu items - use i18n keys instead of hardcoded text
 // 设置菜单项 - 使用 key 而非硬编码文本
-const SETTINGS_MENU = [
+const DESKTOP_SETTINGS_MENU = [
   { id: "general", labelKey: "settings.general", icon: SettingsIcon },
   { id: "appearance", labelKey: "settings.appearance", icon: PaletteIcon },
   { id: "data", labelKey: "settings.data", icon: DatabaseIcon },
@@ -43,12 +47,30 @@ const SETTINGS_MENU = [
   { id: "about", labelKey: "settings.about", icon: InfoIcon },
 ];
 
+const WEB_SETTINGS_MENU = [
+  { id: "web", labelKey: "settings.webWorkspace", icon: ServerCogIcon },
+  { id: "devices", labelKey: "settings.deviceManagement", icon: GlobeIcon },
+  { id: "appearance", labelKey: "settings.appearance", icon: PaletteIcon },
+  { id: "data", labelKey: "settings.data", icon: DatabaseIcon },
+  { id: "ai", labelKey: "settings.ai", icon: BrainIcon },
+  { id: "language", labelKey: "settings.language", icon: GlobeIcon },
+  { id: "about", labelKey: "settings.about", icon: InfoIcon },
+] as const;
+
 export function SettingsPage({ onBack }: SettingsPageProps) {
-  const [activeSection, setActiveSection] = useState("general");
+  const webRuntime = isWebRuntime();
+  const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : DESKTOP_SETTINGS_MENU;
+  const [activeSection, setActiveSection] = useState(
+    webRuntime ? "web" : "general",
+  );
   const { t } = useTranslation();
 
   const renderContent = () => {
     switch (activeSection) {
+      case "web":
+        return <WebWorkspaceSettings onNavigate={setActiveSection} />;
+      case "devices":
+        return <WebDeviceSettings />;
       case "general":
         return <GeneralSettings />;
       case "appearance":
@@ -89,7 +111,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
         {/* 菜单列表 */}
         <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-          {SETTINGS_MENU.map((item) => (
+          {settingsMenu.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveSection(item.id)}
@@ -111,7 +133,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-lg font-semibold mb-4">
             {t(
-              SETTINGS_MENU.find((m) => m.id === activeSection)?.labelKey || "",
+              settingsMenu.find((m) => m.id === activeSection)?.labelKey || "",
             )}
           </h1>
           <div

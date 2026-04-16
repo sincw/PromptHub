@@ -118,17 +118,19 @@ export class SkillDB {
         protocol_type, version, author, tags, original_tags, is_favorite,
         source_url, local_repo_path, icon_url, icon_emoji, icon_background, category, is_builtin,
         registry_slug, content_url, prerequisites, compatibility, current_version,
-        version_tracking_enabled,
+        version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
         created_at, updated_at
       ) VALUES (
         @id, @name, @description, @content, @mcp_config,
         @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
         @source_url, @local_repo_path, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
         @registry_slug, @content_url, @prerequisites, @compatibility, @current_version,
-        @version_tracking_enabled,
+        @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
         @created_at, @updated_at
       )
     `);
+
+    const safetyReport = data.safetyReport;
 
     stmt.run({
       "@id": id,
@@ -162,6 +164,10 @@ export class SkillDB {
       "@current_version": data.currentVersion ?? 0,
       "@version_tracking_enabled":
         (data.versionTrackingEnabled ?? true) ? 1 : 0,
+      "@safety_level": safetyReport?.level ?? null,
+      "@safety_score": safetyReport?.score ?? null,
+      "@safety_report": safetyReport ? JSON.stringify(safetyReport) : null,
+      "@safety_scanned_at": safetyReport?.scannedAt ?? null,
       "@created_at": now,
       "@updated_at": now,
     });
@@ -546,6 +552,66 @@ export class SkillDB {
     txn();
   }
 
+  insertSkillDirect(skill: Skill): void {
+    const safetyReport = skill.safetyReport;
+
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO skills (
+          id, name, description, content, mcp_config,
+          protocol_type, version, author, tags, original_tags, is_favorite,
+          source_url, local_repo_path, icon_url, icon_emoji, icon_background, category, is_builtin,
+          registry_slug, content_url, prerequisites, compatibility, current_version,
+          version_tracking_enabled, safety_level, safety_score, safety_report, safety_scanned_at,
+          created_at, updated_at
+        ) VALUES (
+          @id, @name, @description, @content, @mcp_config,
+          @protocol_type, @version, @author, @tags, @original_tags, @is_favorite,
+          @source_url, @local_repo_path, @icon_url, @icon_emoji, @icon_background, @category, @is_builtin,
+          @registry_slug, @content_url, @prerequisites, @compatibility, @current_version,
+          @version_tracking_enabled, @safety_level, @safety_score, @safety_report, @safety_scanned_at,
+          @created_at, @updated_at
+        )`,
+      )
+      .run({
+        "@id": skill.id,
+        "@name": skill.name,
+        "@description": skill.description ?? null,
+        "@content": skill.content ?? skill.instructions ?? null,
+        "@mcp_config": skill.mcp_config ?? null,
+        "@protocol_type": skill.protocol_type,
+        "@version": skill.version ?? null,
+        "@author": skill.author ?? null,
+        "@tags": JSON.stringify(skill.tags ?? []),
+        "@original_tags": JSON.stringify(skill.original_tags ?? skill.tags ?? []),
+        "@is_favorite": skill.is_favorite ? 1 : 0,
+        "@source_url": skill.source_url ?? null,
+        "@local_repo_path": skill.local_repo_path ?? null,
+        "@icon_url": skill.icon_url ?? null,
+        "@icon_emoji": skill.icon_emoji ?? null,
+        "@icon_background": skill.icon_background ?? null,
+        "@category": skill.category ?? "general",
+        "@is_builtin": skill.is_builtin ? 1 : 0,
+        "@registry_slug": skill.registry_slug ?? null,
+        "@content_url": skill.content_url ?? null,
+        "@prerequisites": skill.prerequisites
+          ? JSON.stringify(skill.prerequisites)
+          : null,
+        "@compatibility": skill.compatibility
+          ? JSON.stringify(skill.compatibility)
+          : null,
+        "@current_version": skill.currentVersion ?? 0,
+        "@version_tracking_enabled":
+          (skill.versionTrackingEnabled ?? true) ? 1 : 0,
+        "@safety_level": safetyReport?.level ?? null,
+        "@safety_score": safetyReport?.score ?? null,
+        "@safety_report": safetyReport ? JSON.stringify(safetyReport) : null,
+        "@safety_scanned_at": safetyReport?.scannedAt ?? null,
+        "@created_at": skill.created_at || Date.now(),
+        "@updated_at": skill.updated_at || Date.now(),
+      });
+  }
+
   /**
    * Insert a version row directly (for backup restore).
    * 直接插入版本行（用于备份恢复）。
@@ -595,13 +661,13 @@ export class SkillDB {
     return {
       id: row.id,
       name: row.name,
-      description: row.description,
-      content: row.content,
-      instructions: row.content, // Map content to instructions (alias)
-      mcp_config: row.mcp_config,
+      ...(row.description !== null && { description: row.description }),
+      ...(row.content !== null && { content: row.content }),
+      ...(row.content !== null && { instructions: row.content }),
+      ...(row.mcp_config !== null && { mcp_config: row.mcp_config }),
       protocol_type: row.protocol_type,
-      version: row.version,
-      author: row.author,
+      ...(row.version !== null && { version: row.version }),
+      ...(row.author !== null && { author: row.author }),
       tags: parseJsonArray<string>(row.tags) ?? [],
       is_favorite: row.is_favorite === 1,
       currentVersion: row.current_version ?? 0,
@@ -633,9 +699,9 @@ export class SkillDB {
       id: row.id,
       skillId: row.skill_id,
       version: row.version,
-      content: row.content,
+      ...(row.content !== null && { content: row.content }),
       filesSnapshot: parseJsonArray<SkillFileSnapshot>(row.files_snapshot),
-      note: row.note,
+      ...(row.note !== null && { note: row.note }),
       createdAt: new Date(row.created_at).toISOString(),
     };
   }

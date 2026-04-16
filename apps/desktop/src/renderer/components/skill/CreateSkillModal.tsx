@@ -37,6 +37,7 @@ import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { SkillIconPicker } from "./SkillIconPicker";
 import { getExistingSkillTags } from "./skill-modal-utils";
 import type { ScannedSkill } from "@prompthub/shared/types/skill";
+import { getRuntimeCapabilities } from "../../runtime";
 
 interface CreateSkillModalProps {
   isOpen: boolean;
@@ -51,6 +52,7 @@ function sanitizeSkillName(value: string): string {
 
 export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const { t } = useTranslation();
+  const runtimeCapabilities = getRuntimeCapabilities();
   const createSkill = useSkillStore((state) => state.createSkill);
   const importScannedSkills = useSkillStore(
     (state) => state.importScannedSkills,
@@ -932,23 +934,24 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                 </div>
               </button>
 
-              {/* Scan Option */}
-              <button
-                onClick={() => setMode("scan")}
-                className="w-full flex items-center gap-4 p-4 bg-accent/50 hover:bg-accent border border-border rounded-xl transition-colors group text-left"
-              >
-                <div className="p-3 bg-background rounded-lg group-hover:bg-primary/10 transition-colors">
-                  <FolderOpenIcon className="w-6 h-6 text-foreground" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-foreground">
-                    {t("skill.scanLocal", "Scan Local")}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {t("skill.scanLocalDesc", "Detect existing SKILL.md files")}
-                  </p>
-                </div>
-              </button>
+              {runtimeCapabilities.skillLocalScan && (
+                <button
+                  onClick={() => setMode("scan")}
+                  className="w-full flex items-center gap-4 p-4 bg-accent/50 hover:bg-accent border border-border rounded-xl transition-colors group text-left"
+                >
+                  <div className="p-3 bg-background rounded-lg group-hover:bg-primary/10 transition-colors">
+                    <FolderOpenIcon className="w-6 h-6 text-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-foreground">
+                      {t("skill.scanLocal", "Scan Local")}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {t("skill.scanLocalDesc", "Detect existing SKILL.md files")}
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           )}
 

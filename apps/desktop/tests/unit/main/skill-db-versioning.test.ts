@@ -20,6 +20,10 @@ const SKILL_SCHEMA_MIGRATIONS = `
   ALTER TABLE skills ADD COLUMN prerequisites TEXT;
   ALTER TABLE skills ADD COLUMN compatibility TEXT;
   ALTER TABLE skills ADD COLUMN original_tags TEXT;
+  ALTER TABLE skills ADD COLUMN safety_level TEXT;
+  ALTER TABLE skills ADD COLUMN safety_score INTEGER;
+  ALTER TABLE skills ADD COLUMN safety_report TEXT;
+  ALTER TABLE skills ADD COLUMN safety_scanned_at INTEGER;
 `;
 
 describe("SkillDB versioning", () => {

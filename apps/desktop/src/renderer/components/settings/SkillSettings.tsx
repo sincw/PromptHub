@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { InfoIcon, PlusIcon, TrashIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  InfoIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  TrashIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SKILL_PLATFORMS } from "@prompthub/shared/constants/platforms";
@@ -9,6 +16,7 @@ import { PlatformIcon } from "../ui/PlatformIcon";
 import { SettingSection } from "./shared";
 import { useToast } from "../ui/Toast";
 import { getSafetyScanAIConfig } from "../skill/detail-utils";
+import { isWebRuntime } from "../../runtime";
 
 interface SkillSettingsProps {
   onNavigate: (section: string) => void;
@@ -23,6 +31,7 @@ function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
 
 export function SkillSettings({ onNavigate }: SkillSettingsProps) {
   const { t } = useTranslation();
+  const webRuntime = isWebRuntime();
   const settings = useSettingsStore();
   const scanInstalledSkillSafety = useSkillStore(
     (state) => state.scanInstalledSkillSafety,
@@ -32,6 +41,84 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
   const [newScanPath, setNewScanPath] = useState("");
   const [isBatchScanning, setIsBatchScanning] = useState(false);
   const currentPlatformKey = getCurrentPlatformKey();
+  const orderedPlatforms = useMemo(() => {
+    const preferredIndex = new Map(
+      (settings.skillPlatformOrder ?? []).map((platformId, index) => [
+        platformId,
+        index,
+      ]),
+    );
+
+    return [...SKILL_PLATFORMS].sort((left, right) => {
+      const leftIndex = preferredIndex.get(left.id);
+      const rightIndex = preferredIndex.get(right.id);
+
+      if (leftIndex != null && rightIndex != null) {
+        return leftIndex - rightIndex;
+      }
+      if (leftIndex != null) {
+        return -1;
+      }
+      if (rightIndex != null) {
+        return 1;
+      }
+      return 0;
+    });
+  }, [settings.skillPlatformOrder]);
+  const movePlatformOrder = (platformId: string, direction: "up" | "down") => {
+    const nextOrder = orderedPlatforms.map((platform) => platform.id);
+    const currentIndex = nextOrder.indexOf(platformId);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= nextOrder.length) {
+      return;
+    }
+
+    [nextOrder[currentIndex], nextOrder[targetIndex]] = [
+      nextOrder[targetIndex],
+      nextOrder[currentIndex],
+    ];
+    settings.setSkillPlatformOrder(nextOrder);
+  };
+
+  if (webRuntime) {
+    return (
+      <div className="space-y-6">
+        <SettingSection title={t("settings.skill", "Skill")}>
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-foreground">
+              {t("settings.selfHostedWebDesc")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "settings.webSkillSettingsDesc",
+                "The self-hosted web workspace keeps Skill content in the same backup dataset, but does not manage local platform directories, symlinks, or desktop-only distribution flows.",
+              )}
+            </p>
+          </div>
+        </SettingSection>
+
+        <div className="flex items-start gap-2.5 p-4 rounded-xl bg-muted/50 border border-border/50">
+          <InfoIcon className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "settings.skillBackupHint",
+              "For Skill backup and restore, go to the Data panel",
+            )}{" "}
+            <button
+              onClick={() => onNavigate("data")}
+              className="text-primary hover:underline font-medium"
+            >
+              {t("settings.skillBackupHintLink", "Go to Data Panel")}
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -82,6 +169,67 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
                 )}
               </p>
             </button>
+          </div>
+        </div>
+      </SettingSection>
+
+      <SettingSection
+        title={t("settings.platformDisplayOrder", "Platform Display Order")}
+      >
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "settings.platformDisplayOrderDesc",
+                "Control the platform order shown in Skill detail and batch deployment panels.",
+              )}
+            </p>
+            <button
+              onClick={() => settings.resetSkillPlatformOrder()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <RotateCcwIcon className="h-3.5 w-3.5" />
+              {t("settings.resetPlatformDisplayOrder", "Reset")}
+            </button>
+          </div>
+          <div className="space-y-2 rounded-xl border border-border/70 bg-card/70 p-3">
+            {orderedPlatforms.map((platform, index) => (
+              <div
+                key={platform.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3 py-2"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <PlatformIcon platformId={platform.id} size={20} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-foreground">
+                      {platform.name}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {settings.customSkillPlatformPaths[platform.id] ||
+                        platform.skillsDir[currentPlatformKey]}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => movePlatformOrder(platform.id, "up")}
+                    disabled={index === 0}
+                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    title={t("settings.movePlatformUp", "Move Up")}
+                  >
+                    <ArrowUpIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => movePlatformOrder(platform.id, "down")}
+                    disabled={index === orderedPlatforms.length - 1}
+                    className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                    title={t("settings.movePlatformDown", "Move Down")}
+                  >
+                    <ArrowDownIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </SettingSection>

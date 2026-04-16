@@ -1,7 +1,7 @@
-# PromptHub Server — REST API Design
+# PromptHub Web — REST API Design
 
 > **Status**: Draft v1
-> **Target**: `apps/server` (Hono + SQLite)
+> **Target**: `apps/web` (Hono + SQLite)
 > **Auth**: Username + Password, JWT (access + refresh tokens)
 
 ---
@@ -448,7 +448,7 @@ All responses follow this format:
 ## 15. Server Directory Structure (Planned)
 
 ```
-apps/server/
+apps/web/
 ├── package.json
 ├── tsconfig.json
 ├── src/

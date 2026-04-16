@@ -712,7 +712,10 @@ export async function incrementalUpload(
 
     // Get full data but skip video content to save memory
     // 获取全量数据但跳过视频内容以节省内存
-    const fullBackup = await exportDatabase({ skipVideoContent: true });
+    const fullBackup = await exportDatabase({
+      skipVideoContent: true,
+      limitMedia: true,
+    });
 
     // Keep images in memory as they are usually small
     // 保持图片在内存中，因为它们通常比较小

@@ -10,12 +10,36 @@
  * compilation.
  */
 
-import { Database as WasmDatabase } from "node-sqlite3-wasm";
+import sqlite3Wasm from "node-sqlite3-wasm";
+
+type WasmDatabaseConstructor = new (
+  path: string,
+  options?: { readOnly?: boolean },
+) => {
+  exec(sql: string): void;
+  prepare(sql: string): {
+    run(params?: unknown): { changes: number; lastInsertRowid: number | bigint };
+    get(params?: unknown): unknown;
+    all(params?: unknown): unknown[];
+    finalize?: () => void;
+  };
+  close(): void;
+  inTransaction?: boolean;
+};
+
+const WasmDatabase = sqlite3Wasm.Database as WasmDatabaseConstructor;
 
 class Statement {
-  constructor(private stmt: any) {}
+  constructor(
+    private stmt: {
+      run(params?: unknown): { changes: number; lastInsertRowid: number | bigint };
+      get(params?: unknown): unknown;
+      all(params?: unknown): unknown[];
+      finalize?: () => void;
+    },
+  ) {}
 
-  private normalizeParams(params: any[]): any[] | any {
+  private normalizeParams(params: unknown[]): unknown[] | unknown {
     if (params.length === 0) {
       return [];
     }
@@ -27,21 +51,21 @@ class Statement {
     return params;
   }
 
-  run(...params: any[]): { changes: number; lastInsertRowid: number | bigint } {
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint } {
     const normalized = this.normalizeParams(params);
     return Array.isArray(normalized) && normalized.length === 0
       ? this.stmt.run()
       : this.stmt.run(normalized);
   }
 
-  get(...params: any[]): any {
+  get(...params: unknown[]): unknown {
     const normalized = this.normalizeParams(params);
     return Array.isArray(normalized) && normalized.length === 0
       ? this.stmt.get()
       : this.stmt.get(normalized);
   }
 
-  all(...params: any[]): any[] {
+  all(...params: unknown[]): unknown[] {
     const normalized = this.normalizeParams(params);
     return Array.isArray(normalized) && normalized.length === 0
       ? this.stmt.all()
@@ -54,7 +78,7 @@ class Statement {
 }
 
 class DatabaseAdapter {
-  private _db: WasmDatabase;
+  private _db: InstanceType<WasmDatabaseConstructor>;
 
   constructor(path: string, options?: { readOnly?: boolean }) {
     this._db = new WasmDatabase(path, options);
@@ -65,7 +89,7 @@ class DatabaseAdapter {
    * - SET form  (e.g. 'foreign_keys = ON')  → executes, returns void
    * - GET form  (e.g. 'table_info(prompts)') → returns row array
    */
-  pragma(source: string): any {
+  pragma(source: string): unknown {
     if (source.includes("=")) {
       this._db.exec(`PRAGMA ${source}`);
       return undefined;
@@ -85,9 +109,9 @@ class DatabaseAdapter {
    * Wrap a function in a BEGIN/COMMIT/ROLLBACK transaction.
    * Returns a new function that, when called, executes the original inside a transaction.
    */
-  transaction<T extends (...args: any[]) => any>(fn: T): T {
-    return ((...args: any[]) => {
-      const wasInTransaction = (this._db as any).inTransaction ?? false;
+  transaction<T extends (...args: unknown[]) => unknown>(fn: T): T {
+    return ((...args: unknown[]) => {
+      const wasInTransaction = this._db.inTransaction ?? false;
       if (!wasInTransaction) {
         this._db.exec("BEGIN");
       }

@@ -45,6 +45,8 @@ yarn.lock
 .windsurfrules
 .claude/
 .agent/
+.sisyphus/
+文档/
 
 # ========================
 # OS

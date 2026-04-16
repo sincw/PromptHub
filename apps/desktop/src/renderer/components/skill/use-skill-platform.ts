@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Skill } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { useSkillStore } from "../../stores/skill.store";
+import { useSettingsStore } from "../../stores/settings.store";
+import { getRuntimeCapabilities } from "../../runtime";
 
 export type SkillInstallMode = "copy" | "symlink";
 
@@ -10,11 +12,44 @@ export interface BatchInstallResult {
   totalCount: number;
 }
 
+export function sortSkillPlatformsByPreference(
+  platforms: SkillPlatform[],
+  preferredOrder: string[],
+): SkillPlatform[] {
+  if (preferredOrder.length === 0) {
+    return platforms;
+  }
+
+  const preferredIndex = new Map(
+    preferredOrder.map((platformId, index) => [platformId, index]),
+  );
+
+  return [...platforms].sort((left, right) => {
+    const leftIndex = preferredIndex.get(left.id);
+    const rightIndex = preferredIndex.get(right.id);
+
+    if (leftIndex != null && rightIndex != null) {
+      return leftIndex - rightIndex;
+    }
+    if (leftIndex != null) {
+      return -1;
+    }
+    if (rightIndex != null) {
+      return 1;
+    }
+    return 0;
+  });
+}
+
 export function useSkillPlatform(
   skill: Skill | null | undefined,
   installMode: SkillInstallMode,
 ) {
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
+  const skillPlatformOrder = useSettingsStore(
+    (state) => state.skillPlatformOrder,
+  ) ?? [];
+  const runtimeCapabilities = getRuntimeCapabilities();
   const [supportedPlatforms, setSupportedPlatforms] = useState<SkillPlatform[]>(
     [],
   );
@@ -32,21 +67,31 @@ export function useSkillPlatform(
   } | null>(null);
 
   const loadPlatforms = useCallback(async () => {
+    if (!runtimeCapabilities.skillPlatformIntegration) {
+      setSupportedPlatforms([]);
+      setDetectedPlatforms([]);
+      return;
+    }
+
     const [platforms, detected] = await Promise.all([
       window.api.skill.getSupportedPlatforms(),
       window.api.skill.detectPlatforms(),
     ]);
     setSupportedPlatforms(platforms);
     setDetectedPlatforms(detected);
-  }, []);
+  }, [runtimeCapabilities.skillPlatformIntegration]);
 
   const refreshInstallStatus = useCallback(async () => {
-    if (!skill) return;
+    if (!skill || !runtimeCapabilities.skillPlatformIntegration) {
+      setInstallStatus({});
+      setSelectedPlatforms(new Set());
+      return;
+    }
     const status = await window.api.skill.getMdInstallStatus(skill.name);
     setInstallStatus(status);
     setSelectedPlatforms(new Set());
     await loadDeployedStatus();
-  }, [loadDeployedStatus, skill]);
+  }, [loadDeployedStatus, runtimeCapabilities.skillPlatformIntegration, skill]);
 
   useEffect(() => {
     void loadPlatforms();
@@ -58,8 +103,14 @@ export function useSkillPlatform(
   }, [refreshInstallStatus, skill]);
 
   const availablePlatforms = useMemo(
-    () => supportedPlatforms.filter((platform) => detectedPlatforms.includes(platform.id)),
-    [detectedPlatforms, supportedPlatforms],
+    () =>
+      sortSkillPlatformsByPreference(
+        supportedPlatforms.filter((platform) =>
+          detectedPlatforms.includes(platform.id),
+        ),
+        skillPlatformOrder,
+      ),
+    [detectedPlatforms, skillPlatformOrder, supportedPlatforms],
   );
 
   const uninstalledPlatforms = useMemo(
@@ -88,7 +139,11 @@ export function useSkillPlatform(
   }, []);
 
   const batchInstall = useCallback(async (): Promise<BatchInstallResult> => {
-    if (!skill || selectedPlatforms.size === 0) {
+    if (
+      !runtimeCapabilities.skillPlatformIntegration ||
+      !skill ||
+      selectedPlatforms.size === 0
+    ) {
       return { successCount: 0, totalCount: 0 };
     }
 
@@ -126,15 +181,21 @@ export function useSkillPlatform(
       setIsBatchInstalling(false);
       setInstallProgress(null);
     }
-  }, [installMode, refreshInstallStatus, selectedPlatforms, skill]);
+  }, [
+    installMode,
+    refreshInstallStatus,
+    runtimeCapabilities.skillPlatformIntegration,
+    selectedPlatforms,
+    skill,
+  ]);
 
   const uninstallFromPlatform = useCallback(
     async (platformId: string) => {
-      if (!skill) return;
+      if (!runtimeCapabilities.skillPlatformIntegration || !skill) return;
       await window.api.skill.uninstallMd(skill.name, platformId);
       await refreshInstallStatus();
     },
-    [refreshInstallStatus, skill],
+    [refreshInstallStatus, runtimeCapabilities.skillPlatformIntegration, skill],
   );
 
   return {

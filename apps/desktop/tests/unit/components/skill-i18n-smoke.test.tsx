@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "../../../src/renderer/i18n/locales/en.json";
@@ -91,6 +91,7 @@ function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {})
   return {
     skills: [baseSkill],
     loadSkills: vi.fn().mockResolvedValue(undefined),
+    loadRegistry: vi.fn().mockResolvedValue(undefined),
     deleteSkill: vi.fn().mockResolvedValue(undefined),
     toggleFavorite: vi.fn().mockResolvedValue(undefined),
     updateSkill: vi.fn().mockResolvedValue(undefined),
@@ -103,10 +104,28 @@ function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {})
     viewMode: "gallery",
     setViewMode: vi.fn(),
     storeView: "my-skills",
+    setStoreView: vi.fn(),
+    storeCategory: "all",
+    setFilterType: vi.fn(),
+    setStoreCategory: vi.fn(),
+    storeSearchQuery: "",
+    setStoreSearchQuery: vi.fn(),
     deployedSkillNames: new Set<string>(),
     loadDeployedStatus: vi.fn().mockResolvedValue(undefined),
     filterTags: [],
+    installRegistrySkill: vi.fn().mockResolvedValue(undefined),
     scanLocalPreview: vi.fn().mockResolvedValue([]),
+    selectRegistrySkill: vi.fn(),
+    selectedRegistrySlug: null,
+    registrySkills: [],
+    selectedStoreSourceId: "official",
+    selectStoreSource: vi.fn(),
+    customStoreSources: [],
+    addCustomStoreSource: vi.fn(),
+    removeCustomStoreSource: vi.fn(),
+    toggleCustomStoreSource: vi.fn(),
+    remoteStoreEntries: {},
+    setRemoteStoreEntry: vi.fn(),
     importScannedSkills: vi.fn().mockResolvedValue({ importedCount: 0 }),
     translateContent: vi.fn().mockResolvedValue(undefined),
     getTranslation: vi.fn().mockReturnValue(null),
@@ -202,7 +221,9 @@ describe("skill i18n smoke", () => {
     useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
     useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
 
-    render(<SkillFullDetailPage />);
+    await act(async () => {
+      render(<SkillFullDetailPage />);
+    });
 
     expect(screen.getByRole("button", { name: "Snapshot" })).toBeInTheDocument();
     expect(screen.getByText("Current Version v0")).toBeInTheDocument();
@@ -220,5 +241,48 @@ describe("skill i18n smoke", () => {
     expect(screen.getByText("Imported from Local Folder")).toBeInTheDocument();
     expect(screen.queryByText("源码/内容")).not.toBeInTheDocument();
     expect(screen.queryByText("批量管理")).not.toBeInTheDocument();
+  });
+
+  it("hides desktop-only skill surfaces in web runtime", async () => {
+    (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ = true;
+
+    const setStoreView = vi.fn();
+    const setFilterType = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      storeView: "store",
+      filterType: "pending",
+      setStoreView,
+      setFilterType,
+      selectedSkillId: baseSkill.id,
+      syncSkillFromRepo: vi.fn().mockResolvedValue(baseSkill),
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
+    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+
+    const { unmount } = render(<SkillManager />);
+
+    await waitFor(() => {
+      expect(setStoreView).toHaveBeenCalledWith("my-skills");
+    });
+    await waitFor(() => {
+      expect(setFilterType).toHaveBeenCalledWith("all");
+    });
+    expect(screen.queryByText("Skill Store")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Batch Deploy" })).not.toBeInTheDocument();
+
+    unmount();
+
+    await act(async () => {
+      render(<SkillFullDetailPage />);
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Files")).not.toBeInTheDocument();
+    expect(screen.queryByText("Platform Integration")).not.toBeInTheDocument();
+    expect(screen.getByText("Skill Workspace")).toBeInTheDocument();
+
+    delete (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__;
   });
 });

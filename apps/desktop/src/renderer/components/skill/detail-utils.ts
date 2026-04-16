@@ -297,16 +297,30 @@ function extractFrontmatterValue(content: string, key: string): string | null {
   const frontmatterMatch = trimmed.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
   if (!frontmatterMatch) return null;
 
-  const line = frontmatterMatch[1]
-    .split("\n")
-    .find((entry) => entry.trim().startsWith(`${key}:`));
+  const lines = frontmatterMatch[1].split("\n");
+  const lineIndex = lines.findIndex((entry) =>
+    entry.trim().startsWith(`${key}:`),
+  );
 
-  if (!line) return null;
+  if (lineIndex === -1) return null;
 
-  let value = line
+  let value = lines[lineIndex]
     .trim()
     .slice(key.length + 1)
     .trim();
+
+  if (/^[|>][-+]?$/u.test(value)) {
+    const blockLines: string[] = [];
+    for (let i = lineIndex + 1; i < lines.length; i += 1) {
+      const line = lines[i];
+      if (!/^\s+/.test(line)) {
+        break;
+      }
+      blockLines.push(line.replace(/^\s+/, "").trimEnd());
+    }
+    value = blockLines.join("\n").trim();
+  }
+
   if (
     (value.startsWith('"') && value.endsWith('"')) ||
     (value.startsWith("'") && value.endsWith("'"))

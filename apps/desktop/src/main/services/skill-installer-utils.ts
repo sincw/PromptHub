@@ -160,6 +160,11 @@ function readCustomSkillPlatformPaths(): Record<string, string> {
   }
   try {
     const db = initDatabase();
+    if (!db || typeof db.prepare !== "function") {
+      _customPathsCache = {};
+      _customPathsCacheTs = now;
+      return _customPathsCache;
+    }
     const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
     const row = stmt.get("customSkillPlatformPaths") as
       | { value: string }

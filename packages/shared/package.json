@@ -4,6 +4,7 @@
   "license": "MIT",
   "type": "module",
   "exports": {
+    ".": "./types/index.ts",
     "./types": "./types/index.ts",
     "./types/*": "./types/*.ts",
     "./constants": "./constants/index.ts",

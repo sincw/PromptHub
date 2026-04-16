@@ -48,6 +48,7 @@ import {
   getSkillSafetyFindingTitle,
   getSkillSafetySummary,
 } from "./safety-i18n";
+import { getRuntimeCapabilities } from "../../runtime";
 
 /**
  * Full-width Skill Detail Page
@@ -58,6 +59,7 @@ export type InstallMode = "copy" | "symlink";
 export function SkillFullDetailPage() {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
+  const runtimeCapabilities = getRuntimeCapabilities();
   const selectedSkillId = useSkillStore((state) => state.selectedSkillId);
   const skills = useSkillStore((state) => state.skills);
   const selectSkill = useSkillStore((state) => state.selectSkill);
@@ -131,8 +133,11 @@ export function SkillFullDetailPage() {
   }, [i18n.language]);
 
   const resolvedDescription = useMemo(
-    () => resolveSkillDescription(resolvedSkillMdContent),
-    [resolvedSkillMdContent],
+    () =>
+      resolveSkillDescription(resolvedSkillMdContent) ||
+      selectedSkill?.description ||
+      "",
+    [resolvedSkillMdContent, selectedSkill?.description],
   );
   const safetyTone =
     safetyReport?.level === "blocked"
@@ -156,6 +161,12 @@ export function SkillFullDetailPage() {
     ? getTranslation(descriptionTranslationCacheKey)
     : null;
   // Refresh when skill changes
+  useEffect(() => {
+    if (!runtimeCapabilities.skillFileEditing && activeTab === "files") {
+      setActiveTab("preview");
+    }
+  }, [activeTab, runtimeCapabilities.skillFileEditing]);
+
   useEffect(() => {
     if (selectedSkill) {
       setShowTranslation(false);
@@ -612,18 +623,20 @@ export function SkillFullDetailPage() {
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
           )}
         </button>
-        <button
-          onClick={() => setActiveTab("files")}
-          className={`py-3 text-sm font-semibold relative transition-colors ${activeTab === "files" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          <div className="flex items-center gap-2">
-            <FolderOpenIcon className="w-4 h-4" />
-            {t("skill.files", "Files")}
-          </div>
-          {activeTab === "files" && (
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
-          )}
-        </button>
+        {runtimeCapabilities.skillFileEditing && (
+          <button
+            onClick={() => setActiveTab("files")}
+            className={`py-3 text-sm font-semibold relative transition-colors ${activeTab === "files" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <div className="flex items-center gap-2">
+              <FolderOpenIcon className="w-4 h-4" />
+              {t("skill.files", "Files")}
+            </div>
+            {activeTab === "files" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+        )}
 
         {/* Safety pill — compact, right-aligned in tab bar */}
         <button
@@ -672,9 +685,9 @@ export function SkillFullDetailPage() {
       <div
         ref={contentScrollRef}
         onScroll={handleContentScroll}
-        className={`flex-1 flex flex-col ${activeTab === "files" ? "overflow-hidden" : "overflow-y-auto"}`}
+        className={`flex-1 flex flex-col ${runtimeCapabilities.skillFileEditing && activeTab === "files" ? "overflow-hidden" : "overflow-y-auto"}`}
       >
-        {activeTab === "files" ? (
+        {runtimeCapabilities.skillFileEditing && activeTab === "files" ? (
           /* Files Tab: inline file editor fills the entire content area */
           <div className="flex-1 flex flex-col bg-card min-h-0 overflow-hidden">
             <SkillFileEditor

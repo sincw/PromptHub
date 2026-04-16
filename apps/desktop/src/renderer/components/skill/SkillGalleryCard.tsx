@@ -3,6 +3,7 @@ import { CheckSquareIcon, DownloadIcon, SquareIcon, StarIcon, TrashIcon } from "
 import { useTranslation } from "react-i18next";
 import type { Skill } from "@prompthub/shared/types";
 import { SkillIcon } from "./SkillIcon";
+import { getRuntimeCapabilities } from "../../runtime";
 
 interface SkillGalleryCardProps {
   animationDelayMs: number;
@@ -28,6 +29,7 @@ function SkillGalleryCardComponent({
   skill,
 }: SkillGalleryCardProps) {
   const { t } = useTranslation();
+  const runtimeCapabilities = getRuntimeCapabilities();
 
   return (
     <div
@@ -85,16 +87,18 @@ function SkillGalleryCardComponent({
         />
         {!isSelectionMode && (
           <div className="flex gap-1">
-            <button
-              onClick={(event) => {
-                event.stopPropagation();
-                onQuickInstall(skill);
-              }}
-              className="opacity-0 group-hover:opacity-100 p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all active:scale-90"
-              title={t("skill.quickInstall", "快速安装")}
-            >
-              <DownloadIcon className="w-4 h-4" />
-            </button>
+            {runtimeCapabilities.skillPlatformIntegration && (
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onQuickInstall(skill);
+                }}
+                className="opacity-0 group-hover:opacity-100 p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-all active:scale-90"
+                title={t("skill.quickInstall", "快速安装")}
+              >
+                <DownloadIcon className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={(event) => {
                 event.stopPropagation();

@@ -10,6 +10,8 @@ import {
   ChevronDownIcon,
   SparklesIcon,
   EditIcon,
+  GlobeIcon,
+  LogOutIcon,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { UpdateStatus } from "../UpdateDialog";
@@ -30,6 +32,12 @@ import {
 import { useTranslation } from "react-i18next";
 import { useUIStore } from "../../stores/ui.store";
 import { filterVisibleSkills } from "../../services/skill-filter";
+import {
+  getRuntimeCapabilities,
+  getWebContext,
+  isWebRuntime,
+  logoutWebSession,
+} from "../../runtime";
 
 const CreatePromptModal = lazy(() =>
   import("../prompt/CreatePromptModal").then((module) => ({
@@ -92,6 +100,11 @@ export function TopBar({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
+  const [webContext, setWebContext] = useState<PromptHubWebContext | undefined>(
+    () => getWebContext(),
+  );
+  const webRuntime = isWebRuntime();
+  const runtimeCapabilities = getRuntimeCapabilities();
 
   // Unified search query based on mode
   const searchQuery =
@@ -332,6 +345,21 @@ export function TopBar({
     };
   }, []);
 
+  useEffect(() => {
+    if (!webRuntime) {
+      return;
+    }
+
+    const syncContext = () => {
+      setWebContext(getWebContext());
+    };
+
+    window.addEventListener("prompthub:web-context-changed", syncContext);
+    return () => {
+      window.removeEventListener("prompthub:web-context-changed", syncContext);
+    };
+  }, [webRuntime]);
+
   const handleCreatePrompt = async (data: {
     title: string;
     description?: string;
@@ -378,8 +406,24 @@ export function TopBar({
         className="h-12 bg-card border-b border-border flex items-center px-4 shrink-0"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       >
+        <div
+          className={`shrink-0 ${webRuntime ? "w-52" : "w-8"}`}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          {webRuntime ? (
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <GlobeIcon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="truncate">PromptHub Web</div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         {/* 搜索框 - 居中，带清除按钮、结果计数和导航 */}
-        <div className="flex-1 flex justify-center">
+        <div className="flex-1 flex justify-center px-3">
           <div className="w-full max-w-lg relative flex items-center">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
             <input
@@ -443,7 +487,9 @@ export function TopBar({
         {/* 右侧操作按钮 - 只有按钮本身不可拖动 */}
         <div className="flex items-center gap-1 ml-4">
           {/* 更新提示 */}
-          {updateAvailable && updateAvailable.status === "available" && (
+          {runtimeCapabilities.appUpdate &&
+            updateAvailable &&
+            updateAvailable.status === "available" && (
             <>
               <button
                 onClick={onShowUpdateDialog}
@@ -573,6 +619,18 @@ export function TopBar({
               <MoonIcon className="w-4 h-4" />
             )}
           </button>
+
+          {webRuntime && (
+            <button
+              onClick={() => void logoutWebSession()}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              title={t("settings.signOut")}
+            >
+              <LogOutIcon className="w-4 h-4" />
+              <span className="hidden sm:inline">{t("settings.signOut")}</span>
+            </button>
+          )}
         </div>
       </header>
 

@@ -3,13 +3,20 @@ import { Sidebar, TopBar, MainContent, TitleBar } from "./components/layout";
 import { usePromptStore } from "./stores/prompt.store";
 import { useFolderStore } from "./stores/folder.store";
 import { useSettingsStore } from "./stores/settings.store";
-import { initDatabase, seedDatabase } from "./services/database";
+import { initDatabase, migrateLegacyIndexedDbToMainProcess } from "./services/database";
 import { ImportedPromptData } from "./components/prompt/ImportPromptModal";
 import { autoSync } from "./services/webdav";
 import {
+  pullFromSelfHostedWeb,
+  pushToSelfHostedWeb,
+} from "./services/self-hosted-sync";
+import {
+  hasValidSelfHostedConfig,
   hasValidWebDAVConfig,
   shouldRunBackgroundUpdateCheck,
+  shouldRunPeriodicSelfHostedSync,
   shouldRunPeriodicWebDAVSync,
+  shouldRunStartupSelfHostedSync,
   shouldRunStartupWebDAVSync,
 } from "./services/app-background";
 import { useToast } from "./components/ui/Toast";
@@ -18,6 +25,7 @@ import i18n from "./i18n";
 import { UpdateDialog, UpdateStatus } from "./components/UpdateDialog";
 import { CloseDialog } from "./components/ui/CloseDialog";
 import { DataRecoveryDialog } from "./components/ui/DataRecoveryDialog";
+import { isWebRuntime } from "./runtime";
 
 // Lazy load heavy components for better initial load performance
 // 懒加载大型组件以提升初始加载性能
@@ -59,6 +67,8 @@ function App() {
   const isUpdateCheckInFlightRef = useRef(false);
   const isWebDAVSyncInFlightRef = useRef(false);
   const pendingStartupSyncRef = useRef(false);
+  const isSelfHostedSyncInFlightRef = useRef(false);
+  const pendingSelfHostedStartupSyncRef = useRef(false);
   const isWindowVisibleRef = useRef(true);
 
   // OS-level fullscreen state (synced from main process events)
@@ -87,6 +97,28 @@ function App() {
     }>
   >([]);
 
+  const pickBestRecoveryCandidate = (
+    candidates: Array<{
+      sourcePath: string;
+      promptCount: number;
+      folderCount: number;
+      skillCount: number;
+      dbSizeBytes: number;
+    }>,
+  ) =>
+    candidates.reduce((best, current) => {
+      if (current.promptCount !== best.promptCount) {
+        return current.promptCount > best.promptCount ? current : best;
+      }
+      if (current.folderCount !== best.folderCount) {
+        return current.folderCount > best.folderCount ? current : best;
+      }
+      if (current.skillCount !== best.skillCount) {
+        return current.skillCount > best.skillCount ? current : best;
+      }
+      return current.dbSizeBytes > best.dbSizeBytes ? current : best;
+    });
+
   // Update status (used for TopBar indicator)
   // 更新状态（用于顶部栏显示更新提示）
   const [updateAvailable, setUpdateAvailable] = useState<UpdateStatus | null>(
@@ -100,6 +132,10 @@ function App() {
   );
 
   useEffect(() => {
+    if (isWebRuntime()) {
+      return;
+    }
+
     // Initial load local shortcuts
     // 初始化加载局部快捷键
     window.electron?.getShortcuts?.().then((shortcuts) => {
@@ -239,6 +275,10 @@ function App() {
   }, [shortcutModes, localShortcuts]);
 
   useEffect(() => {
+    if (isWebRuntime()) {
+      return;
+    }
+
     // Listen for OS fullscreen state changes from main process
     // 监听主进程发送的 OS 全屏状态变化事件
     const handleFullscreenChanged = (isFullscreen: boolean) => {
@@ -456,6 +496,44 @@ function App() {
     // 初始化数据库，然后加载数据
     let startupSyncTimer: NodeJS.Timeout | null = null;
     let intervalId: NodeJS.Timeout | null = null;
+    let selfHostedStartupSyncTimer: NodeJS.Timeout | null = null;
+    let selfHostedIntervalId: NodeJS.Timeout | null = null;
+    let disposed = false;
+
+    interface PersistController {
+      hasHydrated?: () => boolean;
+      onFinishHydration?: (callback: () => void) => () => void;
+    }
+
+    const waitForSettingsHydration = async (): Promise<void> => {
+      const persistController = (
+        useSettingsStore as typeof useSettingsStore & {
+          persist?: PersistController;
+        }
+      ).persist;
+
+      if (!persistController || persistController.hasHydrated?.()) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        let finished = false;
+        let unsubscribe: (() => void) | undefined;
+
+        const finish = () => {
+          if (finished) {
+            return;
+          }
+          finished = true;
+          unsubscribe?.();
+          clearTimeout(timeoutId);
+          resolve();
+        };
+
+        unsubscribe = persistController.onFinishHydration?.(finish);
+        const timeoutId = setTimeout(finish, 500);
+      });
+    };
 
     const runAutoSync = async (
       reason: "startup" | "startup-resume" | "interval",
@@ -528,6 +606,72 @@ function App() {
       ) {
         void runAutoSync("startup-resume");
       }
+
+      if (
+        pendingSelfHostedStartupSyncRef.current &&
+        isWindowVisibleRef.current &&
+        navigator.onLine !== false
+      ) {
+        void runSelfHostedAutoSync("startup-resume");
+      }
+    };
+
+    const runSelfHostedAutoSync = async (
+      reason: "startup" | "startup-resume" | "interval",
+    ) => {
+      const settings = useSettingsStore.getState();
+      const state = {
+        isVisible: isWindowVisibleRef.current,
+        isOnline: navigator.onLine !== false,
+        isRunning: isSelfHostedSyncInFlightRef.current,
+      };
+
+      const canRun =
+        reason === "interval"
+          ? shouldRunPeriodicSelfHostedSync(settings, state)
+          : shouldRunStartupSelfHostedSync(settings, state);
+
+      if (!canRun) {
+        if (
+          reason !== "interval" &&
+          settings.selfHostedSyncOnStartup &&
+          hasValidSelfHostedConfig(settings)
+        ) {
+          pendingSelfHostedStartupSyncRef.current = true;
+        }
+        return;
+      }
+
+      pendingSelfHostedStartupSyncRef.current = false;
+      isSelfHostedSyncInFlightRef.current = true;
+
+      try {
+        const summary =
+          reason === "interval"
+            ? await pushToSelfHostedWeb({
+                url: settings.selfHostedSyncUrl,
+                username: settings.selfHostedSyncUsername,
+                password: settings.selfHostedSyncPassword,
+              })
+            : await pullFromSelfHostedWeb({
+                url: settings.selfHostedSyncUrl,
+                username: settings.selfHostedSyncUsername,
+                password: settings.selfHostedSyncPassword,
+              }, {
+                mode: "replace",
+              });
+
+        console.log(
+          `✅ self-hosted ${reason === "interval" ? "push" : "pull"} sync completed: ${summary.prompts} prompts, ${summary.folders} folders, ${summary.skills} skills`,
+        );
+        if (reason !== "interval") {
+          await Promise.all([fetchPrompts(), fetchFolders()]);
+        }
+      } catch (syncError) {
+        console.error(`⚠️ self-hosted ${reason} sync error:`, syncError);
+      } finally {
+        isSelfHostedSyncInFlightRef.current = false;
+      }
     };
 
     const init = async (retryCount = 0) => {
@@ -540,20 +684,37 @@ function App() {
 
       try {
         await initDatabase();
-        await seedDatabase();
+        if (!isWebRuntime()) {
+          const migration = await migrateLegacyIndexedDbToMainProcess();
+          if (migration.migrated) {
+            console.log(
+              `Migrated legacy IndexedDB data to SQLite (${migration.promptCount} prompts, ${migration.folderCount} folders, ${migration.versionCount} versions)`,
+            );
+          }
+        }
         await fetchPrompts();
         await fetchFolders();
         console.log("✅ App initialized");
 
-        // Check for recoverable data after init
-        try {
-          const recoverable = await window.electron?.checkRecovery?.();
-          if (recoverable && recoverable.length > 0) {
-            setRecoverableDatabases(recoverable);
-            setShowRecoveryDialog(true);
+        // Recovery is only relevant when the currently loaded prompt library is
+        // actually empty. This avoids SQLite-only heuristics from masking valid
+        // IndexedDB data in the active profile.
+        if (!isWebRuntime() && usePromptStore.getState().prompts.length === 0) {
+          try {
+            const recoverable = await window.electron?.checkRecovery?.();
+            if (recoverable && recoverable.length > 0) {
+              const bestCandidate = pickBestRecoveryCandidate(recoverable);
+              const recoveryResult = await window.electron?.performRecovery?.(
+                bestCandidate.sourcePath,
+              );
+              if (!recoveryResult?.success) {
+                setRecoverableDatabases(recoverable);
+                setShowRecoveryDialog(true);
+              }
+            }
+          } catch (recoveryErr) {
+            console.warn("Recovery check failed:", recoveryErr);
           }
-        } catch (recoveryErr) {
-          console.warn("Recovery check failed:", recoveryErr);
         }
       } catch (error) {
         console.error("❌ Init failed:", error);
@@ -578,7 +739,7 @@ function App() {
       // 启动后同步（在数据加载完成后执行，不阻塞 UI）
       const settings = useSettingsStore.getState();
       if (settings.webdavSyncOnStartup && hasValidWebDAVConfig(settings)) {
-        const delay = (settings.webdavSyncOnStartupDelay || 10) * 1000;
+        const delay = (settings.webdavSyncOnStartupDelay ?? 10) * 1000;
         console.log(`🔄 Will sync with WebDAV in ${delay / 1000}s...`);
         startupSyncTimer = setTimeout(() => {
           if (!isWindowVisibleRef.current || navigator.onLine === false) {
@@ -588,30 +749,76 @@ function App() {
           void runAutoSync("startup");
         }, delay);
       }
+
+      if (
+        settings.selfHostedSyncOnStartup &&
+        hasValidSelfHostedConfig(settings)
+      ) {
+        const delay = (settings.selfHostedSyncOnStartupDelay ?? 10) * 1000;
+        console.log(
+          `🔄 Will sync with self-hosted PromptHub in ${delay / 1000}s...`,
+        );
+        selfHostedStartupSyncTimer = setTimeout(() => {
+          if (!isWindowVisibleRef.current || navigator.onLine === false) {
+            pendingSelfHostedStartupSyncRef.current = true;
+            return;
+          }
+          void runSelfHostedAutoSync("startup");
+        }, delay);
+      }
     };
-    init();
+    void (async () => {
+      await waitForSettingsHydration();
+      if (disposed) {
+        return;
+      }
 
-    // Periodic auto sync
-    // 定时自动同步
-    const settings = useSettingsStore.getState();
-    if (settings.webdavAutoSyncInterval > 0 && hasValidWebDAVConfig(settings)) {
-      const intervalMs = settings.webdavAutoSyncInterval * 60 * 1000;
-      console.log(
-        `🔄 Auto sync interval: ${settings.webdavAutoSyncInterval} minutes`,
-      );
-      intervalId = setInterval(() => {
-        void runAutoSync("interval");
-      }, intervalMs);
-    }
+      await init();
+      if (disposed) {
+        return;
+      }
 
-    document.addEventListener("visibilitychange", handleBackgroundTaskResume);
-    window.api?.on?.("window:visibility-changed", handleBackgroundTaskResume);
-    window.addEventListener("focus", handleBackgroundTaskResume);
-    window.addEventListener("online", handleBackgroundTaskResume);
+      // Periodic auto sync
+      // 定时自动同步
+      const settings = useSettingsStore.getState();
+      if (
+        settings.webdavAutoSyncInterval > 0 &&
+        hasValidWebDAVConfig(settings)
+      ) {
+        const intervalMs = settings.webdavAutoSyncInterval * 60 * 1000;
+        console.log(
+          `🔄 Auto sync interval: ${settings.webdavAutoSyncInterval} minutes`,
+        );
+        intervalId = setInterval(() => {
+          void runAutoSync("interval");
+        }, intervalMs);
+      }
+
+      if (
+        settings.selfHostedAutoSyncInterval > 0 &&
+        hasValidSelfHostedConfig(settings)
+      ) {
+        const intervalMs = settings.selfHostedAutoSyncInterval * 60 * 1000;
+        console.log(
+          `🔄 Self-hosted auto sync interval: ${settings.selfHostedAutoSyncInterval} minutes`,
+        );
+        selfHostedIntervalId = setInterval(() => {
+          void runSelfHostedAutoSync("interval");
+        }, intervalMs);
+      }
+
+      document.addEventListener("visibilitychange", handleBackgroundTaskResume);
+      window.api?.on?.("window:visibility-changed", handleBackgroundTaskResume);
+      window.addEventListener("focus", handleBackgroundTaskResume);
+      window.addEventListener("online", handleBackgroundTaskResume);
+    })();
 
     return () => {
+      disposed = true;
       if (startupSyncTimer) clearTimeout(startupSyncTimer);
       if (intervalId) clearInterval(intervalId);
+      if (selfHostedStartupSyncTimer) clearTimeout(selfHostedStartupSyncTimer);
+      if (selfHostedIntervalId) clearInterval(selfHostedIntervalId);
       document.removeEventListener(
         "visibilitychange",
         handleBackgroundTaskResume,
@@ -641,7 +848,7 @@ function App() {
       <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
         {/* Windows title bar */}
         {/* Windows 标题栏 */}
-        <TitleBar />
+        {!isWebRuntime() && <TitleBar />}
 
         <div className="flex flex-1 overflow-y-hidden overflow-x-visible">
           {/* Sidebar */}

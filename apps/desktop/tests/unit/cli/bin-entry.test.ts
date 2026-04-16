@@ -14,6 +14,7 @@ describe("CLI npm entry", () => {
       fs.readFileSync(packageJsonPath, "utf8"),
     ) as {
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
       engines?: Record<string, string>;
       exports?: Record<string, string>;
       bin?: Record<string, string>;
@@ -34,9 +35,11 @@ describe("CLI npm entry", () => {
     ]);
     expect(packageJson.engines?.node).toBe(">=22.0.0");
     expect(packageJson.dependencies).toEqual({
+      "node-sqlite3-wasm": expect.any(String),
+    });
+    expect(packageJson.devDependencies).toMatchObject({
       "@prompthub/db": "workspace:*",
       "@prompthub/shared": "workspace:*",
-      "node-sqlite3-wasm": expect.any(String),
     });
     expect(packageJson.scripts?.prepare).toBe(
       "vite build --config vite.cli.config.ts",

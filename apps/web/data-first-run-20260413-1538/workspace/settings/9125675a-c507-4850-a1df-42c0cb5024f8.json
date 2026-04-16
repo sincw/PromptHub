@@ -1,0 +1,16 @@
+{
+  "theme": "system",
+  "language": "zh",
+  "autoSave": true,
+  "customSkillPlatformPaths": {},
+  "sync": {
+    "enabled": false,
+    "provider": "manual",
+    "autoSync": false
+  },
+  "device": {
+    "syncCadence": "manual",
+    "storeAutoSync": true,
+    "storeSyncCadence": "1d"
+  }
+}

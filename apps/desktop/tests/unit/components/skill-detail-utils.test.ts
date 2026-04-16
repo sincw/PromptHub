@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   generateTextDiff,
   getSkillSourceMeta,
+  resolveSkillDescription,
   restoreSkillVersion,
   stripFrontmatter,
 } from "../../../src/renderer/components/skill/detail-utils";
@@ -19,6 +20,19 @@ Body`;
 
     expect(stripFrontmatter(content)).toBe("# Title\n\nBody");
     expect(stripFrontmatter("plain content")).toBe("plain content");
+  });
+
+  it("extracts multiline block descriptions from frontmatter", () => {
+    const content = `---
+name: demo
+description: |
+  Line one.
+  Line two.
+---
+
+# Title`;
+
+    expect(resolveSkillDescription(content)).toBe("Line one. Line two.");
   });
 
   it("restores a version through window api and reloads skills", async () => {

@@ -79,6 +79,8 @@ function createSkillStoreState(skills: Skill[]) {
     viewMode: "gallery",
     setViewMode: vi.fn(),
     storeView: "my-skills",
+    setStoreView: vi.fn(),
+    setFilterType: vi.fn(),
     deployedSkillNames: new Set<string>(),
     loadDeployedStatus: vi.fn().mockImplementation(() => neverSettled),
     filterTags: [],

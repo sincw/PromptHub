@@ -14,7 +14,7 @@
   [![GitHub Forks](https://img.shields.io/github/forks/legeling/PromptHub?style=for-the-badge&logo=github)](https://github.com/legeling/PromptHub/network/members)
   [![Downloads](https://img.shields.io/github/downloads/legeling/PromptHub/total?style=for-the-badge&logo=github&color=blue)](https://github.com/legeling/PromptHub/releases)
   
-  [![Version](https://img.shields.io/badge/version-v0.5.0-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
+  [![Version](https://img.shields.io/badge/version-v0.5.2-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
   [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=for-the-badge)](./LICENSE)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/legeling/PromptHub/pulls)
   
@@ -105,6 +105,7 @@
 - 所有数据存储在本地，隐私安全有保障
 - 全量备份与恢复（`.phub.gz` 压缩格式）
 - WebDAV 云同步（坚果云、Nextcloud 等）
+- 支持自部署 PromptHub Web 作为桌面版备份源 / 恢复源
 - 支持启动同步 + 定时同步
 
 </td>
@@ -174,15 +175,23 @@
 
 ## 安装
 
+## 自部署网页版
+
+除了桌面版，PromptHub 现在也提供轻量级的自部署网页版，适合作为个人浏览器工作区，或作为桌面版的备份源 / 恢复源。
+
+- Web 部署说明：[`apps/web/README.md`](/Users/lingxiaotian/Programs/personal/PromptHub/apps/web/README.md)
+- 支持 Docker / Docker Compose / GHCR 镜像部署
+- 桌面版可在 `设置 -> 数据` 中直接连接自部署网页版，并执行测试连接、上传、下载、启动拉取、定时推送
+
 ### 下载
 
-从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.5.0：
+从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.5.2：
 
 | 平台    | 下载                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-arm64.exe) |
-| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.dmg)     |
-| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.0_amd64.deb)              |
+| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-arm64.exe) |
+| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.dmg)     |
+| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.2_amd64.deb)              |
 
 > 💡 **架构选择建议**
 >
@@ -429,12 +438,12 @@ PromptHub/
 
 ## 路线图
 
-### v0.5.0 (当前) 🚀
+### v0.5.2 (当前) 🚀
 
-- [x] **Skill 安全评估**：新增静态风险扫描器，可手动检查、自动复查已安装 Skills，并对商店 Skill 输出 `safe / warn / high-risk / blocked`
-- [x] **商店安装前护栏**：商店默认不自动检查；支持“先检查再添加”、高风险二次确认和 `blocked` 级别直接拦截
-- [x] **CLI 安全扫描**：`prompthub skill scan` 会返回风险等级与命中规则，适合脚本化审查本地 skill 仓库
-- [x] **安全 / 文档收口**：推荐资源、多语言文档与官网发布元数据同步到 `v0.5.0`
+- [x] **升级前自动备份**：应用内安装更新前自动快照整个 `data/userData` 目录，失败则阻止继续安装
+- [x] **旧数据自动恢复**：当当前库为空时，启动阶段会扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类升级路径
+- [x] **Symlink 安装自动回退**：平台分发创建软链接失败时，会自动降级为复制模式，避免 Windows 权限或文件系统限制导致安装失败
+- [x] **发版文档同步**：README、多语言 README 与官网发布元数据统一同步到 `v0.5.2`
 
 ### v0.4.9
 
@@ -492,22 +501,20 @@ PromptHub/
 
 查看完整的更新日志：**[CHANGELOG.md](./CHANGELOG.md)**
 
-### 最新版本 v0.5.0 (2026-04-09)
+### 最新版本 v0.5.2 (2026-04-16)
 
-**安全评估 / Safety Assessment**
+**数据安全 / Data Safety**
 
-- 🛡️ **Skill 安全评估**：新增静态风险扫描，可检查已安装 Skill、商店 Skill 和 CLI 扫描结果
-- 🔒 **恶意模式检测**：覆盖危险 shell 片段、提权/持久化命令、凭据路径访问、编码执行和可疑工作流文件
+- 🛡️ **升级前自动备份 data 目录**：应用内安装更新前，会先为当前 `userData` 目录创建本地快照；如果备份失败，会直接阻止安装
+- 🔄 **旧数据自动恢复**：当前数据库为空时，会扫描旧数据位置并提供一键恢复，修复升级后“只看到空库或默认数据”的场景
 
-**商店 / Store**
+**Skill 分发 / Skill Deployment**
 
-- 🏪 **安装前安全检查**：商店支持“先检查再添加”，设置里可选开启“添加前自动评估”，默认关闭
-- 🚫 **高风险护栏**：`high-risk` 级别需二次确认，`blocked` 级别直接拦截
+- 🔗 **Symlink 自动回退复制模式**：当平台目录无法创建符号链接时，会自动降级为复制安装，不再因为 `EPERM` / `EACCES` / `ENOTSUP` 直接失败
 
-**自动化 / Automation**
+**维护 / Maintenance**
 
-- 🖥️ **CLI 安全扫描输出**：`prompthub skill scan` 现在会输出风险等级和命中规则
-- 📚 **发版文档同步**：README、多语言 README 与官网发布元数据同步到 `v0.5.0`
+- 📚 **发版文档同步**：README、多语言 README 与官网发布元数据统一同步到 `v0.5.2`
 
 > [查看完整更新日志](./CHANGELOG.md)
 

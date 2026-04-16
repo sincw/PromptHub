@@ -8,6 +8,7 @@ import {
   ExternalLinkIcon,
   TrashIcon,
   Loader2Icon,
+  ServerCogIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -16,12 +17,18 @@ import {
   downloadSelectiveExport,
   restoreFromFile,
 } from "../../services/database-backup";
+import { recordManualBackup } from "../../services/backup-status";
 import { clearDatabase } from "../../services/database";
 import {
   testConnection,
   uploadToWebDAV,
   downloadFromWebDAV,
 } from "../../services/webdav";
+import {
+  pullFromSelfHostedWeb,
+  pushToSelfHostedWeb,
+  testSelfHostedConnection,
+} from "../../services/self-hosted-sync";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
 import { Select } from "../ui/Select";
@@ -32,6 +39,7 @@ import {
   ToggleSwitch,
   PasswordInput,
 } from "./shared";
+import { isWebRuntime } from "../../runtime";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -53,17 +61,22 @@ function getErrorMessage(error: unknown): string {
 export function DataSettings() {
   const { t } = useTranslation();
   const { showToast } = useToast();
+  const webRuntime = isWebRuntime();
   const settings = useSettingsStore();
   const persistedDataPath = settings.dataPath;
   const setDataPath = settings.setDataPath;
   const [currentDataPath, setCurrentDataPath] = useState("");
   const [pendingDataPath, setPendingDataPath] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState("");
 
   // WebDAV operation state
   // WebDAV 操作状态
   const [webdavTesting, setWebdavTesting] = useState(false);
   const [webdavUploading, setWebdavUploading] = useState(false);
   const [webdavDownloading, setWebdavDownloading] = useState(false);
+  const [selfHostedTesting, setSelfHostedTesting] = useState(false);
+  const [selfHostedUploading, setSelfHostedUploading] = useState(false);
+  const [selfHostedDownloading, setSelfHostedDownloading] = useState(false);
 
   // Export/backup options
   // 数据导出/备份选项
@@ -114,6 +127,11 @@ export function DataSettings() {
     window.api?.security?.status().then((status) => {
       setSecurityConfigured(status.configured);
     });
+    window.electron?.updater?.getVersion?.().then((version) => {
+      if (typeof version === "string") {
+        setCurrentVersion(version);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -145,6 +163,9 @@ export function DataSettings() {
         await downloadCompressedBackup();
       } else {
         await downloadBackup();
+      }
+      if (currentVersion) {
+        await recordManualBackup(currentVersion);
       }
       showToast(t("toast.exportSuccess"), "success");
     } catch (error) {
@@ -230,95 +251,396 @@ export function DataSettings() {
   return (
     <>
       <div className="space-y-6">
-        <SettingSection title={t("settings.dataPath")}>
-          <div className="p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <FolderIcon className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">{t("settings.dataPath")}</p>
-                <button
-                  onClick={() =>
-                    currentDataPath && window.electron?.openPath?.(currentDataPath)
-                  }
-                  className="text-xs text-primary font-mono mt-0.5 hover:underline flex items-center gap-1 cursor-pointer"
-                  title={t("settings.openFolder")}
-                >
-                  {currentDataPath || t("common.loading", "Loading...")}
-                  <ExternalLinkIcon className="w-3 h-3" />
-                </button>
-                {pendingDataPath && pendingDataPath !== currentDataPath ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t(
-                      "settings.pendingDataPath",
-                      "Will switch to this directory after restart:",
-                    )}{" "}
-                    <span className="font-mono">{pendingDataPath}</span>
-                  </p>
-                ) : null}
-              </div>
-              <button
-                onClick={async () => {
-                  const newPath = await window.electron?.selectFolder?.();
-                  if (newPath) {
-                    // Confirm migration
-                    // 确认迁移
-                    const confirmed = window.confirm(
-                      t(
-                        "settings.confirmDataMigration",
-                        "Are you sure you want to migrate data to the new directory?\n\nRestart is required after migration.",
-                      ),
-                    );
-                    if (!confirmed) return;
-
-                    // Execute migration
-                    // 执行迁移
-                    const result =
-                      await window.electron?.migrateData?.(newPath);
-                    if (result?.success) {
-                      const resolvedPath = result.newPath || newPath;
-                      setDataPath(resolvedPath);
-                      await refreshDataPathStatus();
-                      showToast(
-                        t("toast.dataPathChanged") +
-                          " " +
-                          t("settings.restartRequired", "Please restart app"),
-                        "success",
-                      );
-                      // Prompt for restart
-                      // 提示重启
-                      setTimeout(() => {
-                        if (
-                          window.confirm(
-                            t(
-                              "settings.restartNow",
-                              "Data migration completed. Restart app now?",
-                            ),
-                          )
-                        ) {
-                          window.location.reload();
-                        }
-                      }, 1000);
-                    } else {
-                      showToast(
-                        t(
-                          "toast.dataPathChangeFailed",
-                          "Data migration failed",
-                        ) +
-                          ": " +
-                          (result?.error || ""),
-                        "error",
-                      );
+        {!webRuntime ? (
+          <SettingSection title={t("settings.dataPath")}>
+            <div className="p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <FolderIcon className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{t("settings.dataPath")}</p>
+                  <button
+                    onClick={() =>
+                      currentDataPath && window.electron?.openPath?.(currentDataPath)
                     }
-                  }
-                }}
-                className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors"
-              >
-                {t("settings.change")}
-              </button>
-            </div>
-          </div>
-        </SettingSection>
+                    className="text-xs text-primary font-mono mt-0.5 hover:underline flex items-center gap-1 cursor-pointer"
+                    title={t("settings.openFolder")}
+                  >
+                    {currentDataPath || t("common.loading", "Loading...")}
+                    <ExternalLinkIcon className="w-3 h-3" />
+                  </button>
+                  {pendingDataPath && pendingDataPath !== currentDataPath ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t(
+                        "settings.pendingDataPath",
+                        "Will switch to this directory after restart:",
+                      )}{" "}
+                      <span className="font-mono">{pendingDataPath}</span>
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  onClick={async () => {
+                    const newPath = await window.electron?.selectFolder?.();
+                    if (newPath) {
+                      const confirmed = window.confirm(
+                        t(
+                          "settings.confirmDataMigration",
+                          "Are you sure you want to migrate data to the new directory?\n\nRestart is required after migration.",
+                        ),
+                      );
+                      if (!confirmed) return;
 
+                      const result =
+                        await window.electron?.migrateData?.(newPath);
+                      if (result?.success) {
+                        const resolvedPath = result.newPath || newPath;
+                        setDataPath(resolvedPath);
+                        await refreshDataPathStatus();
+                        showToast(
+                          t("toast.dataPathChanged") +
+                            " " +
+                            t("settings.restartRequired", "Please restart app"),
+                          "success",
+                        );
+                        setTimeout(() => {
+                          if (
+                            window.confirm(
+                              t(
+                                "settings.restartNow",
+                                "Data migration completed. Restart app now?",
+                              ),
+                            )
+                          ) {
+                            window.location.reload();
+                          }
+                        }, 1000);
+                      } else {
+                        showToast(
+                          t(
+                            "toast.dataPathChangeFailed",
+                            "Data migration failed",
+                          ) +
+                            ": " +
+                            (result?.error || ""),
+                          "error",
+                        );
+                      }
+                    }
+                  }}
+                  className="h-8 px-3 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors"
+                >
+                  {t("settings.change")}
+                </button>
+              </div>
+            </div>
+          </SettingSection>
+        ) : null}
+
+        {!webRuntime ? (
+          <SettingSection title={t("settings.selfHostedWeb")}>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center gap-3">
+                <ServerCogIcon className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">
+                    {t("settings.selfHostedWeb")}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t(
+                      "settings.selfHostedSyncDesc",
+                      "Use your deployed PromptHub Web as an authenticated backup target and restore source for desktop data without WebDAV.",
+                    )}
+                  </p>
+                </div>
+                <ToggleSwitch
+                  checked={settings.selfHostedSyncEnabled}
+                  onChange={settings.setSelfHostedSyncEnabled}
+                />
+              </div>
+
+              {settings.selfHostedSyncEnabled ? (
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t(
+                        "settings.selfHostedSyncServer",
+                        "Self-Hosted PromptHub URL",
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://backup.example.com"
+                      value={settings.selfHostedSyncUrl}
+                      onChange={(e) =>
+                        settings.setSelfHostedSyncUrl(e.target.value)
+                      }
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.webdavUsername")}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={t("settings.webdavUsername")}
+                      value={settings.selfHostedSyncUsername}
+                      onChange={(e) =>
+                        settings.setSelfHostedSyncUsername(e.target.value)
+                      }
+                      className="w-full h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      {t("settings.webdavPassword")}
+                    </label>
+                    <PasswordInput
+                      placeholder={t("settings.webdavPassword")}
+                      value={settings.selfHostedSyncPassword}
+                      onChange={settings.setSelfHostedSyncPassword}
+                      className="h-9"
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <button
+                      onClick={async () => {
+                        if (
+                          !settings.selfHostedSyncUrl ||
+                          !settings.selfHostedSyncUsername ||
+                          !settings.selfHostedSyncPassword
+                        ) {
+                          return;
+                        }
+                        setSelfHostedTesting(true);
+                        try {
+                          const summary = await testSelfHostedConnection({
+                            url: settings.selfHostedSyncUrl,
+                            username: settings.selfHostedSyncUsername,
+                            password: settings.selfHostedSyncPassword,
+                          });
+                          showToast(
+                            t(
+                              "toast.selfHostedSyncConnectionSuccess",
+                              "Connection successful. Remote workspace currently stores {{prompts}} prompts, {{folders}} folders, and {{skills}} skills.",
+                              {
+                                prompts: summary.prompts,
+                                folders: summary.folders,
+                                skills: summary.skills,
+                              },
+                            ),
+                            "success",
+                          );
+                        } catch (error) {
+                          showToast(getErrorMessage(error), "error");
+                        } finally {
+                          setSelfHostedTesting(false);
+                        }
+                      }}
+                      disabled={selfHostedTesting}
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <RefreshCwIcon
+                        className={`w-4 h-4 ${selfHostedTesting ? "animate-spin" : ""}`}
+                      />
+                      {t("settings.testConnection")}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (
+                          !settings.selfHostedSyncUrl ||
+                          !settings.selfHostedSyncUsername ||
+                          !settings.selfHostedSyncPassword
+                        ) {
+                          return;
+                        }
+                        setSelfHostedUploading(true);
+                        try {
+                          const summary = await pushToSelfHostedWeb({
+                            url: settings.selfHostedSyncUrl,
+                            username: settings.selfHostedSyncUsername,
+                            password: settings.selfHostedSyncPassword,
+                          });
+                          showToast(
+                            t(
+                              "toast.selfHostedSyncPushSuccess",
+                              "Uploaded {{prompts}} prompts, {{folders}} folders, and {{skills}} skills to PromptHub Web.",
+                              {
+                                prompts: summary.prompts,
+                                folders: summary.folders,
+                                skills: summary.skills,
+                              },
+                            ),
+                            "success",
+                          );
+                        } catch (error) {
+                          showToast(getErrorMessage(error), "error");
+                        } finally {
+                          setSelfHostedUploading(false);
+                        }
+                      }}
+                      disabled={selfHostedUploading}
+                      className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <UploadIcon className="w-4 h-4" />
+                      {t("settings.upload")}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (
+                          !settings.selfHostedSyncUrl ||
+                          !settings.selfHostedSyncUsername ||
+                          !settings.selfHostedSyncPassword
+                        ) {
+                          return;
+                        }
+                        setSelfHostedDownloading(true);
+                        try {
+                          const summary = await pullFromSelfHostedWeb({
+                            url: settings.selfHostedSyncUrl,
+                            username: settings.selfHostedSyncUsername,
+                            password: settings.selfHostedSyncPassword,
+                          });
+                          showToast(
+                            t(
+                              "toast.selfHostedSyncPullSuccess",
+                              "Restored {{prompts}} prompts, {{folders}} folders, and {{skills}} skills from PromptHub Web.",
+                              {
+                                prompts: summary.prompts,
+                                folders: summary.folders,
+                                skills: summary.skills,
+                              },
+                            ),
+                            "success",
+                          );
+                          setTimeout(() => window.location.reload(), 1000);
+                        } catch (error) {
+                          showToast(getErrorMessage(error), "error");
+                        } finally {
+                          setSelfHostedDownloading(false);
+                        }
+                      }}
+                      disabled={selfHostedDownloading}
+                      className="h-8 px-4 rounded-lg bg-muted text-sm hover:bg-muted/80 transition-colors flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <DownloadIcon className="w-4 h-4" />
+                      {t("settings.download")}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t("settings.selfHostedAutoRun", "Automatic Sync")}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t(
+                          "settings.selfHostedAutoRunDesc",
+                          "Keep desktop and your self-hosted PromptHub workspace aligned on a background schedule.",
+                        )}
+                      </p>
+                    </div>
+                    <div className="min-w-[140px]">
+                      <Select
+                        value={String(settings.selfHostedAutoSyncInterval)}
+                        onChange={(val) =>
+                          settings.setSelfHostedAutoSyncInterval(Number(val))
+                        }
+                        options={[
+                          { value: "0", label: t("common.off", "Off") },
+                          {
+                            value: "5",
+                            label: t("settings.every5min", "Every 5 minutes"),
+                          },
+                          {
+                            value: "15",
+                            label: t("settings.every15min", "Every 15 minutes"),
+                          },
+                          {
+                            value: "30",
+                            label: t("settings.every30min", "Every 30 minutes"),
+                          },
+                          {
+                            value: "60",
+                            label: t("settings.every60min", "Every 60 minutes"),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-border">
+                    <div className="flex-1 mr-4">
+                      <p className="text-sm font-medium">
+                        {t(
+                          "settings.selfHostedSyncOnStartup",
+                          "Run Once on Startup",
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {t(
+                          "settings.selfHostedSyncOnStartupDesc",
+                          "Automatically pull from your self-hosted PromptHub workspace after desktop startup. Changes take effect on next launch.",
+                        )}
+                      </p>
+                    </div>
+                    <div className="min-w-[180px]">
+                      <Select
+                        value={String(
+                          settings.selfHostedSyncOnStartup
+                            ? settings.selfHostedSyncOnStartupDelay
+                            : -1,
+                        )}
+                        onChange={(val) => {
+                          const num = Number(val);
+                          if (num === -1) {
+                            settings.setSelfHostedSyncOnStartup(false);
+                          } else {
+                            settings.setSelfHostedSyncOnStartup(true);
+                            settings.setSelfHostedSyncOnStartupDelay(num);
+                          }
+                        }}
+                        options={[
+                          { value: "-1", label: t("common.off", "Off") },
+                          {
+                            value: "0",
+                            label: t(
+                              "settings.startupImmediate",
+                              "Run immediately on startup",
+                            ),
+                          },
+                          {
+                            value: "5",
+                            label: t(
+                              "settings.startupDelay5s",
+                              "Run 5 seconds after startup",
+                            ),
+                          },
+                          {
+                            value: "10",
+                            label: t(
+                              "settings.startupDelay10s",
+                              "Run 10 seconds after startup",
+                            ),
+                          },
+                          {
+                            value: "30",
+                            label: t(
+                              "settings.startupDelay30s",
+                              "Run 30 seconds after startup",
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </SettingSection>
+        ) : null}
+
+        {!webRuntime ? (
         <SettingSection title={t("settings.webdav")}>
           <div className="p-4 space-y-4">
             <div className="flex items-center gap-3">
@@ -675,6 +997,7 @@ export function DataSettings() {
             )}
           </div>
         </SettingSection>
+        ) : null}
 
         <SettingSection title={t("settings.backup")}>
           {/* 选择性导出（只导出） */}
@@ -790,23 +1113,30 @@ export function DataSettings() {
             </div>
           </div>
 
-          <SettingItem
-            label={t("settings.clear")}
-            description={t("settings.clearDesc")}
-          >
-            <button
-              onClick={handleClearData}
-              className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
+          {!webRuntime ? (
+            <SettingItem
+              label={t("settings.clear")}
+              description={t("settings.clearDesc")}
             >
-              {t("settings.clear")}
-            </button>
-          </SettingItem>
+              <button
+                onClick={handleClearData}
+                className="h-9 px-4 rounded-lg bg-destructive text-white text-sm font-medium hover:bg-destructive/90 transition-colors"
+              >
+                {t("settings.clear")}
+              </button>
+            </SettingItem>
+          ) : null}
         </SettingSection>
 
         <SettingSection title={t("settings.dbInfo")}>
           <div className="p-4 text-sm text-muted-foreground space-y-1">
-            <p>• IndexedDB</p>
-            <p>• PromptHubDB</p>
+            <p>• workspace/prompts/*.md</p>
+            <p>• workspace/folders.json</p>
+            <p>• workspace/skills/&lt;skill-slug&gt;__&lt;skillId&gt;/</p>
+            <p>• workspace/settings/&lt;userId&gt;.json</p>
+            <p>• workspace/assets/&lt;userId&gt;/images/...</p>
+            <p>• workspace/assets/&lt;userId&gt;/videos/...</p>
+            <p>• index/prompthub.db</p>
           </div>
         </SettingSection>
       </div>

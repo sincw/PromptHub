@@ -357,6 +357,12 @@ export async function installSkillMdSymlink(
   // 2. Create a symlink from the platform dir → canonical dir
   const platformSkillsDir = getPlatformSkillsDir(platform);
   const platformSkillDir = path.join(platformSkillsDir, skillName);
+  const fallbackInstall = async (reason: string): Promise<void> => {
+    console.warn(
+      `Symlink install unsupported for "${skillName}" on ${platform.name}; falling back to copy install. Reason: ${reason}`,
+    );
+    await installSkillMd(skillName, skillMdContent, platformId);
+  };
 
   try {
     // Ensure parent exists
@@ -378,6 +384,13 @@ export async function installSkillMdSymlink(
       `Symlinked "${skillName}" → ${platform.name}: ${canonicalDir} → ${platformSkillDir}`,
     );
   } catch (error) {
+    const code = getErrorCode(error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (code === "EPERM" || code === "EACCES" || code === "ENOTSUP") {
+      await fallbackInstall(`${code}: ${message}`);
+      return;
+    }
+
     console.error(
       `Failed to create symlink for "${skillName}" to ${platform.name}:`,
       error,

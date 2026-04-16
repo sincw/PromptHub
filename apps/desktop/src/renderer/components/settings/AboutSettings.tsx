@@ -9,10 +9,12 @@ import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "../../stores/settings.store";
 import { SettingSection, SettingItem, ToggleSwitch } from "./shared";
 import appIconUrl from "../../../assets/icon.png";
+import { isWebRuntime } from "../../runtime";
 
 export function AboutSettings() {
   const { t } = useTranslation();
   const settings = useSettingsStore();
+  const webRuntime = isWebRuntime();
 
   // Get application version
   // 获取应用版本号
@@ -52,39 +54,47 @@ export function AboutSettings() {
         </div>
       </SettingSection>
 
-      <SettingSection title={t("settings.checkUpdate")}>
-        <SettingItem
-          label={t("settings.autoCheckUpdate")}
-          description={t("settings.autoCheckUpdateDesc")}
-        >
-          <ToggleSwitch
-            checked={settings.autoCheckUpdate}
-            onChange={settings.setAutoCheckUpdate}
-          />
-        </SettingItem>
-        <SettingItem
-          label={t("settings.tryMirrorSource")}
-          description={t("settings.mirrorSourceRisk")}
-        >
-          <ToggleSwitch
-            checked={settings.useUpdateMirror}
-            onChange={settings.setUseUpdateMirror}
-          />
-        </SettingItem>
-        <SettingItem
-          label={t("settings.checkUpdate")}
-          description={`${t("settings.version")}: ${appVersion || "..."}`}
-        >
-          <button
-            onClick={() =>
-              window.dispatchEvent(new CustomEvent("open-update-dialog"))
-            }
-            className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors"
+      {webRuntime ? (
+        <SettingSection title={t("settings.checkUpdate")}>
+          <div className="px-4 py-3 text-sm text-muted-foreground">
+            {t("settings.webUpdatesManagedDesc")}
+          </div>
+        </SettingSection>
+      ) : (
+        <SettingSection title={t("settings.checkUpdate")}>
+          <SettingItem
+            label={t("settings.autoCheckUpdate")}
+            description={t("settings.autoCheckUpdateDesc")}
           >
-            {t("settings.checkUpdate")}
-          </button>
-        </SettingItem>
-      </SettingSection>
+            <ToggleSwitch
+              checked={settings.autoCheckUpdate}
+              onChange={settings.setAutoCheckUpdate}
+            />
+          </SettingItem>
+          <SettingItem
+            label={t("settings.tryMirrorSource")}
+            description={t("settings.mirrorSourceRisk")}
+          >
+            <ToggleSwitch
+              checked={settings.useUpdateMirror}
+              onChange={settings.setUseUpdateMirror}
+            />
+          </SettingItem>
+          <SettingItem
+            label={t("settings.checkUpdate")}
+            description={`${t("settings.version")}: ${appVersion || "..."}`}
+          >
+            <button
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("open-update-dialog"))
+              }
+              className="h-8 px-4 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-colors"
+            >
+              {t("settings.checkUpdate")}
+            </button>
+          </SettingItem>
+        </SettingSection>
+      )}
 
       <SettingSection title={t("settings.openSource")}>
         <SettingItem label="GitHub" description={t("settings.viewOnGithub")}>
@@ -145,20 +155,22 @@ export function AboutSettings() {
         </div>
       </SettingSection>
 
-      <SettingSection title={t("settings.developer", "开发者选项")}>
-        <SettingItem
-          label={t("settings.debugMode", "调试模式")}
-          description={t(
-            "settings.debugModeDesc",
-            "启用控制台调试 (支持 Ctrl+Shift+I / Cmd+Option+I 唤起)",
-          )}
-        >
-          <ToggleSwitch
-            checked={settings.debugMode}
-            onChange={settings.setDebugMode}
-          />
-        </SettingItem>
-      </SettingSection>
+      {!webRuntime ? (
+        <SettingSection title={t("settings.developer", "开发者选项")}>
+          <SettingItem
+            label={t("settings.debugMode", "调试模式")}
+            description={t(
+              "settings.debugModeDesc",
+              "启用控制台调试 (支持 Ctrl+Shift+I / Cmd+Option+I 唤起)",
+            )}
+          >
+            <ToggleSwitch
+              checked={settings.debugMode}
+              onChange={settings.setDebugMode}
+            />
+          </SettingItem>
+        </SettingSection>
+      ) : null}
 
       <div className="px-4 py-4 text-sm text-muted-foreground text-center">
         <div>AGPL-3.0 License &copy; 2025 PromptHub</div>

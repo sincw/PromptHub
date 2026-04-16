@@ -1,5 +1,9 @@
+export type SkillVisibility = 'private' | 'shared';
+
 export interface Skill {
   id: string;
+  ownerUserId?: string | null;
+  visibility?: SkillVisibility;
   name: string;
   description?: string;
   instructions?: string; // System Prompt / SKILL.md content (alias for content)

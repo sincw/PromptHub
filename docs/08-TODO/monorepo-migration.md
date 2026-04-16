@@ -1,13 +1,13 @@
 # Monorepo 改造 — 计划与进展
 
-> 目标：将 PromptHub 从单体结构改造为 pnpm monorepo，为多产品线（desktop、server、web SaaS）做准备。
+> 目标：将 PromptHub 从单体结构改造为 pnpm monorepo，为多产品线（desktop、web、web SaaS）做准备。
 
 ## 总体路线图
 
 ```
 Phase 1: Monorepo 基础结构          ✅ 已完成
 Phase 2: 提取 packages/db           ✅ 已完成
-Phase 3: 新增 apps/server (Hono)    ❌ 待做
+Phase 3: 新增 apps/web (Hono)       ❌ 待做
 Phase 4: 私有仓库 prompthub-cloud   ⏳ 部分完成
 Phase 5: CI/CD 验证 + 发布          ❌ 待做
 ```
@@ -99,7 +99,7 @@ Phase 5: CI/CD 验证 + 发布          ❌ 待做
 
 ---
 
-## Phase 3: 新增 apps/server (Hono) ❌
+## Phase 3: 新增 apps/web (Hono) ❌
 
 **目标:** 创建自部署后端服务，提供 REST API 供 web 客户端和第三方集成使用。
 
@@ -114,7 +114,7 @@ Phase 5: CI/CD 验证 + 发布          ❌ 待做
 
 ### 步骤
 
-- [ ] 创建 `apps/server/package.json` (`@prompthub/server`)
+- [ ] 创建 `apps/web/package.json` (`@prompthub/web`)
 - [ ] 基础 Hono 项目脚手架
 - [ ] 接入 `@prompthub/db`（或 `@prompthub/shared` 的类型）
 - [ ] 实现 Prompt CRUD API
@@ -147,7 +147,7 @@ Phase 5: CI/CD 验证 + 发布          ❌ 待做
 公开仓库 (AGPL-3.0)          私有仓库 (Proprietary)
 ┌────────────────────┐      ┌──────────────────────┐
 │  apps/desktop      │      │  apps/web-saas       │
-│  apps/server       │      │  apps/billing        │
+│  apps/web          │      │  apps/billing        │
 │  packages/shared   │◄────►│  packages/pro-*      │
 │  packages/db       │      │                      │
 └────────────────────┘      └──────────────────────┘
@@ -156,7 +156,7 @@ Phase 5: CI/CD 验证 + 发布          ❌ 待做
 
 ### 产品路线
 
-1. **Self-hosted** — 开源免费（当前 desktop + 未来 server）
+1. **Self-hosted** — 开源免费（当前 desktop + 未来 web）
 2. **Demo 站点** — 引流，免费但有限制
 3. **SaaS Pro/Team** — 付费，协作功能、高级 AI、云同步
 4. **Enterprise** — 私有部署 + 商业支持

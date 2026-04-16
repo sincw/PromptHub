@@ -7,7 +7,7 @@
   <p>
     <a href="https://github.com/legeling/PromptHub/stargazers"><img src="https://img.shields.io/github/stars/legeling/PromptHub?style=flat-square&color=yellow" alt="GitHub Stars"/></a>
     <a href="https://github.com/legeling/PromptHub/network/members"><img src="https://img.shields.io/github/forks/legeling/PromptHub?style=flat-square" alt="GitHub Forks"/></a>
-    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/version-v0.5.0-green?style=flat-square" alt="Version"/></a>
+    <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/badge/version-v0.5.2-green?style=flat-square" alt="Version"/></a>
     <a href="https://github.com/legeling/PromptHub/releases"><img src="https://img.shields.io/github/downloads/legeling/PromptHub/total?style=flat-square&color=blue" alt="Downloads"/></a>
     <img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="Lizenz: AGPL-3.0"/>
   </p>
@@ -48,9 +48,9 @@
 
 | Plattform |                                                                                                                                                                                                                Download                                                                                                                                                                                                                 |
 | :-------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-|  Windows  | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-arm64.exe) |
-|   macOS   |   [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.dmg)   |
-|   Linux   |       [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.0_amd64.deb)        |
+|  Windows  | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-arm64.exe) |
+|   macOS   |   [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.dmg)   |
+|   Linux   |       [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.2_amd64.deb)        |
 
 ---
 
@@ -124,9 +124,9 @@ Laden Sie das Installationsprogramm für Ihre Plattform von der [Release-Seite](
 
 | Plattform |                                                                                                                                                                                                                Download                                                                                                                                                                                                                 |
 | :-------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-|  Windows  | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.0-arm64.exe) |
-|   macOS   |   [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.dmg)   |
-|   Linux   |       [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.0-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.0_amd64.deb)        |
+|  Windows  | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-arm64.exe) |
+|   macOS   |   [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.dmg)   |
+|   Linux   |       [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.2_amd64.deb)        |
 
 ### macOS Erststart
 
@@ -294,12 +294,12 @@ PromptHub/
 
 ## 🗺️ Roadmap
 
-### v0.5.0 (Aktuelle Version) 🚀
+### v0.5.2 (Aktuelle Version) 🚀
 
-- [x] **Skill-Sicherheitsbewertung**: Statischer Risikoscanner für installierte Skills, Store-Skills und CLI-Scans
-- [x] **Store-Schutzmechanismen**: Store-Installationen können vorab geprüft werden, Auto-Check bleibt standardmäßig aus, `high-risk` erfordert Bestätigung und `blocked` wird verweigert
-- [x] **CLI-Sicherheitsaudit**: `prompthub skill scan` liefert jetzt Risikostufen und erkannte Regeln
-- [x] **Dokument-Sync**: README, lokalisierte READMEs und Website-Release-Metadaten auf `v0.5.0` angehoben
+- [x] **Automatisches Backup vor dem Upgrade**: Vor In-App-Updates wird jetzt ein lokaler Snapshot des gesamten `data/userData`-Verzeichnisses erstellt; wenn das Backup fehlschlägt, wird die Installation blockiert
+- [x] **Automatische Wiederherstellung alter Daten**: Wenn die aktuelle Datenbank leer ist, durchsucht PromptHub bekannte alte Speicherorte und bietet eine Ein-Klick-Wiederherstellung für Upgrade-Pfade wie `0.4.7 -> 0.4.8`
+- [x] **Symlink-Fallback bei Installationsfehlern**: Wenn die Plattformbereitstellung keinen Symlink anlegen kann, fällt PromptHub unter Windows oder auf nicht unterstützten Dateisystemen automatisch auf Kopiermodus zurück
+- [x] **Dokument-Sync**: README, lokalisierte READMEs und Website-Release-Metadaten auf `v0.5.2` angehoben
 
 ### v0.4.9
 
@@ -328,22 +328,20 @@ PromptHub/
 
 Den vollständigen Verlauf finden Sie hier: **[CHANGELOG.md](../CHANGELOG.md)**
 
-### Neueste Version v0.5.0 (2026-04-09) 🎉
+### Neueste Version v0.5.2 (2026-04-16) 🎉
 
-**Skill-Sicherheit**
+**Datensicherheit**
 
-- 🛡️ **Statischer Risikoscanner**: Bewertet installierte Skills, Store-Skills und CLI-Scan-Ausgaben
-- 🔒 **Erkennung bösartiger Muster**: Markiert gefährliche Shell-Snippets, Privilegienerweiterung, Persistenz, Secret-Pfade, kodierte Ausführung und verdächtige Workflow-Dateien
+- 🛡️ **Automatischer data-Snapshot vor dem Upgrade**: Bevor ein In-App-Update installiert wird, erstellt PromptHub einen lokalen Snapshot des aktuellen `userData`-Verzeichnisses und blockiert die Installation, falls das Backup fehlschlägt
+- 🔄 **Wiederherstellung alter Daten**: Ist die aktuelle Datenbank leer, durchsucht PromptHub bekannte alte Speicherorte und bietet eine Ein-Klick-Wiederherstellung für Upgrades mit scheinbar fehlenden Daten
 
-**Store-Ablauf**
+**Skill-Bereitstellung**
 
-- 🏪 **Vor dem Hinzufügen prüfen**: Store-Skills können vor der Installation manuell geprüft werden; Auto-Check bleibt standardmäßig aus
-- 🚫 **Schutzmechanismen**: `high-risk` verlangt eine Bestätigung, `blocked` wird abgelehnt
+- 🔗 **Symlink-Fallback auf Kopiermodus**: Wenn im Zielverzeichnis kein Symlink angelegt werden kann, wechselt PromptHub bei `EPERM`, `EACCES` oder `ENOTSUP` automatisch auf Kopierinstallation
 
-**Automatisierung**
+**Wartung**
 
-- 🖥️ **CLI-Sicherheitsausgabe**: `prompthub skill scan` gibt jetzt Risikostufen und erkannte Regeln aus
-- 📚 **Release-Dokument-Sync**: README, lokalisierte Dokus und Website-Metadaten auf `v0.5.0` synchronisiert
+- 📚 **Release-Dokument-Sync**: README, lokalisierte Dokus und Website-Metadaten auf `v0.5.2` synchronisiert
 
 > 📋 [Vollständiges Änderungsprotokoll anzeigen](../CHANGELOG.md)
 

@@ -79,6 +79,8 @@ function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {})
     viewMode: "gallery",
     setViewMode: vi.fn(),
     storeView: "my-skills",
+    setStoreView: vi.fn(),
+    setFilterType: vi.fn(),
     deployedSkillNames: new Set<string>(),
     loadDeployedStatus: vi.fn().mockResolvedValue(undefined),
     filterTags: [],

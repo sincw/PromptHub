@@ -14,6 +14,7 @@ import { SortableTree } from './tree/SortableTree';
 import type { FlattenedItem } from './tree/utilities';
 import { buildPromptStats } from '../../services/prompt-filter';
 import { buildSkillStats } from '../../services/skill-stats';
+import { getRuntimeCapabilities, isWebRuntime } from '../../runtime';
 
 type PageType = 'home' | 'settings';
 
@@ -135,6 +136,9 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const favoriteCount = promptStats.favoriteCount;
   const uniqueTags = promptStats.uniqueTags;
   const uniqueSkillTags = skillStats.uniqueUserTags;
+  const runtimeCapabilities = getRuntimeCapabilities();
+  const webRuntime = isWebRuntime();
+  const showModeLabels = !isCollapsed;
 
   const confirmLeaveDirtySkillEditor = useCallback(() => {
     const hasUnsaved = (
@@ -333,7 +337,7 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
         }`}
     >
       {/* Top spacing - Extra padding for Mac traffic lights */}
-      {isMac && !isFullscreen && <div className="h-12 titlebar-drag shrink-0" />}
+      {!webRuntime && isMac && !isFullscreen && <div className="h-12 titlebar-drag shrink-0" />}
 
       {/* Collapse Button */}
       <div className="absolute top-1/2 -translate-y-1/2 -right-3 z-50 opacity-0 group-hover:opacity-100 transition-all duration-300 delay-100">
@@ -357,8 +361,8 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       <div className={`px-2 pt-4 pb-2 shrink-0 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
         <div className={`
           relative flex transition-all duration-300
-          ${isCollapsed 
-            ? 'flex-col gap-2' 
+          ${isCollapsed
+            ? 'justify-center gap-2'
             : 'p-1 bg-sidebar-accent/50 rounded-xl border border-white/5'
           }
         `}>
@@ -371,14 +375,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             title={t('common.prompts')}
             className={`
               relative flex items-center justify-center transition-all duration-300 z-10
-              ${isCollapsed 
+              ${isCollapsed
                 ? `w-10 h-10 rounded-xl ${viewMode === 'prompt' ? 'bg-primary text-white shadow-lg' : 'text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}` 
                 : `flex-1 py-1.5 gap-2 text-xs font-semibold rounded-lg ${viewMode === 'prompt' ? 'bg-background text-foreground shadow-sm' : 'text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/5'}`
               }
             `}
           >
             <CommandIcon className="w-5 h-5" />
-            {!isCollapsed && <span className="truncate">{t('common.prompts')}</span>}
+            {showModeLabels && <span className="truncate">{t('common.prompts')}</span>}
           </button>
           
           <button
@@ -390,14 +394,14 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
             title={t('common.skills')}
             className={`
               relative flex items-center justify-center transition-all duration-300 z-10
-              ${isCollapsed 
+              ${isCollapsed
                 ? `w-10 h-10 rounded-xl ${viewMode === 'skill' ? 'bg-primary text-white shadow-lg' : 'text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}` 
                 : `flex-1 py-1.5 gap-2 text-xs font-semibold rounded-lg ${viewMode === 'skill' ? 'bg-background text-foreground shadow-sm' : 'text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/5'}`
               }
             `}
           >
             <CuboidIcon className="w-5 h-5" />
-            {!isCollapsed && <span className="truncate">{t('common.skills')}</span>}
+            {showModeLabels && <span className="truncate">{t('common.skills')}</span>}
           </button>
         </div>
       </div>
@@ -756,45 +760,53 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
                 if (currentPage !== 'home') onNavigate('home');
               }}
             />
-            <NavItem
-              icon={<GlobeIcon className="w-5 h-5" />}
-              label={t('skill.deployed', '已分发')}
-              count={skillStats.deployedCount}
-              active={storeView === 'distribution' && currentPage === 'home'}
-              collapsed={isCollapsed}
-              onClick={() => {
-                if (!confirmLeaveDirtySkillEditor()) return;
-                setStoreView('distribution');
-                if (currentPage !== 'home') onNavigate('home');
-              }}
-            />
-            <NavItem
-              icon={<Clock3Icon className="w-5 h-5" />}
-              label={t('skill.pendingDeployment', '待分发')}
-              count={skillStats.pendingCount}
-              active={skillFilterType === 'pending' && storeView === 'my-skills' && currentPage === 'home'}
-              collapsed={isCollapsed}
-              onClick={() => {
-                if (!confirmLeaveDirtySkillEditor()) return;
-                setSkillFilterType('pending');
-                setStoreView('my-skills');
-                if (currentPage !== 'home') onNavigate('home');
-              }}
-            />
-            <div className="h-px bg-sidebar-border/50 my-2" />
-            <NavItem
-              icon={<StoreIcon className="w-5 h-5" />}
-              label={t('nav.skillStore', 'Skill 商店')}
-              active={storeView === 'store' && currentPage === 'home'}
-              collapsed={isCollapsed}
-              onClick={() => {
-                if (!confirmLeaveDirtySkillEditor()) return;
-                setStoreView('store');
-                selectStoreSource(selectedStoreSourceId || 'official');
-                if (currentPage !== 'home') onNavigate('home');
-              }}
-            />
-            {storeView === 'store' && !isCollapsed && (
+            {runtimeCapabilities.skillDistribution && (
+              <>
+                <NavItem
+                  icon={<GlobeIcon className="w-5 h-5" />}
+                  label={t('skill.deployed', '已分发')}
+                  count={skillStats.deployedCount}
+                  active={storeView === 'distribution' && currentPage === 'home'}
+                  collapsed={isCollapsed}
+                  onClick={() => {
+                    if (!confirmLeaveDirtySkillEditor()) return;
+                    setStoreView('distribution');
+                    if (currentPage !== 'home') onNavigate('home');
+                  }}
+                />
+                <NavItem
+                  icon={<Clock3Icon className="w-5 h-5" />}
+                  label={t('skill.pendingDeployment', '待分发')}
+                  count={skillStats.pendingCount}
+                  active={skillFilterType === 'pending' && storeView === 'my-skills' && currentPage === 'home'}
+                  collapsed={isCollapsed}
+                  onClick={() => {
+                    if (!confirmLeaveDirtySkillEditor()) return;
+                    setSkillFilterType('pending');
+                    setStoreView('my-skills');
+                    if (currentPage !== 'home') onNavigate('home');
+                  }}
+                />
+              </>
+            )}
+            {runtimeCapabilities.skillStore && (
+              <>
+                <div className="h-px bg-sidebar-border/50 my-2" />
+                <NavItem
+                  icon={<StoreIcon className="w-5 h-5" />}
+                  label={t('nav.skillStore', 'Skill 商店')}
+                  active={storeView === 'store' && currentPage === 'home'}
+                  collapsed={isCollapsed}
+                  onClick={() => {
+                    if (!confirmLeaveDirtySkillEditor()) return;
+                    setStoreView('store');
+                    selectStoreSource(selectedStoreSourceId || 'official');
+                    if (currentPage !== 'home') onNavigate('home');
+                  }}
+                />
+              </>
+            )}
+            {runtimeCapabilities.skillStore && storeView === 'store' && !isCollapsed && (
               <div className="ml-4 pl-3 mt-1 border-l border-sidebar-border/50 space-y-1">
                 <button
                   onClick={() => {

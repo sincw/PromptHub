@@ -5,6 +5,7 @@ import { DataSettings } from "../../../src/renderer/components/settings/DataSett
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 import { restoreFromFile } from "../../../src/renderer/services/database-backup";
+import { testSelfHostedConnection } from "../../../src/renderer/services/self-hosted-sync";
 
 const useSettingsStoreMock = vi.fn();
 const useToastMock = vi.fn();
@@ -32,6 +33,12 @@ vi.mock("../../../src/renderer/services/webdav", () => ({
   testConnection: vi.fn(),
   uploadToWebDAV: vi.fn(),
   downloadFromWebDAV: vi.fn(),
+}));
+
+vi.mock("../../../src/renderer/services/self-hosted-sync", () => ({
+  testSelfHostedConnection: vi.fn(),
+  pushToSelfHostedWeb: vi.fn(),
+  pullFromSelfHostedWeb: vi.fn(),
 }));
 
 function createSettingsState() {
@@ -62,6 +69,20 @@ function createSettingsState() {
     setWebdavEncryptionEnabled: vi.fn(),
     webdavEncryptionPassword: "",
     setWebdavEncryptionPassword: vi.fn(),
+    selfHostedSyncEnabled: false,
+    selfHostedSyncUrl: "",
+    selfHostedSyncUsername: "",
+    selfHostedSyncPassword: "",
+    selfHostedSyncOnStartup: false,
+    selfHostedSyncOnStartupDelay: 10,
+    selfHostedAutoSyncInterval: 0,
+    setSelfHostedSyncEnabled: vi.fn(),
+    setSelfHostedSyncUrl: vi.fn(),
+    setSelfHostedSyncUsername: vi.fn(),
+    setSelfHostedSyncPassword: vi.fn(),
+    setSelfHostedSyncOnStartup: vi.fn(),
+    setSelfHostedSyncOnStartupDelay: vi.fn(),
+    setSelfHostedAutoSyncInterval: vi.fn(),
   };
 }
 
@@ -94,6 +115,7 @@ describe("DataSettings", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    delete (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__;
   });
 
   it("shows the real current data path and the pending path after restart", async () => {
@@ -198,5 +220,60 @@ describe("DataSettings", () => {
       "Import failed: Selective export file is corrupted",
       "error",
     );
+  });
+
+  it("tests a self-hosted PromptHub connection from desktop settings", async () => {
+    const showToast = vi.fn();
+    useToastMock.mockReturnValue({ showToast });
+    useSettingsStoreMock.mockReturnValue({
+      ...createSettingsState(),
+      selfHostedSyncEnabled: true,
+      selfHostedSyncUrl: "https://backup.example.com",
+      selfHostedSyncUsername: "owner",
+      selfHostedSyncPassword: "secret",
+    });
+    vi.mocked(testSelfHostedConnection).mockResolvedValue({
+      prompts: 3,
+      folders: 2,
+      skills: 1,
+    });
+
+    await act(async () => {
+      await renderWithI18n(<DataSettings />, { language: "en" });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Test Connection" }));
+
+    await waitFor(() => {
+      expect(testSelfHostedConnection).toHaveBeenCalledWith({
+        url: "https://backup.example.com",
+        username: "owner",
+        password: "secret",
+      });
+    });
+    expect(showToast).toHaveBeenCalledWith(
+      "Connection successful. Remote workspace currently stores 3 prompts, 2 folders, and 1 skills.",
+      "success",
+    );
+  });
+
+  it("keeps web data settings focused on backup flows", async () => {
+    (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ = true;
+
+    await act(async () => {
+      await renderWithI18n(<DataSettings />, { language: "en" });
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByText("Data Path")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clear Data" })).toBeNull();
+    expect(screen.getByText("Backup & Restore")).toBeInTheDocument();
+    expect(screen.queryByText("Will switch to this directory after restart:")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Test Connection" })).toBeNull();
   });
 });

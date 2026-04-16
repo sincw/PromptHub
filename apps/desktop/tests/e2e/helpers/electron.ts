@@ -11,6 +11,7 @@ export interface LaunchedElectronApp {
 
 interface LaunchOptions {
   env?: Record<string, string>;
+  userDataDir?: string;
 }
 
 function getMainEntry() {
@@ -22,11 +23,14 @@ function getSeedPath(seedFileName: string) {
 }
 
 export async function launchPromptHub(
-  seedFileName: string,
+  seedFileName: string | null,
   options: LaunchOptions = {},
 ): Promise<LaunchedElectronApp> {
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-e2e-"));
+  const userDataDir =
+    options.userDataDir ||
+    fs.mkdtempSync(path.join(os.tmpdir(), "prompthub-e2e-"));
   const mainEntry = getMainEntry();
+  const seedPath = seedFileName ? getSeedPath(seedFileName) : undefined;
 
   const app = await electron.launch({
     args: [mainEntry],
@@ -35,7 +39,7 @@ export async function launchPromptHub(
       NODE_ENV: "test",
       PROMPTHUB_E2E: "1",
       PROMPTHUB_E2E_USER_DATA_DIR: userDataDir,
-      PROMPTHUB_E2E_SEED_PATH: getSeedPath(seedFileName),
+      ...(seedPath ? { PROMPTHUB_E2E_SEED_PATH: seedPath } : {}),
       ...options.env,
     },
   });
@@ -77,9 +81,15 @@ export async function setAppSettings(
   await page.waitForLoadState("domcontentloaded");
 }
 
-export async function closePromptHub(app: ElectronApplication, userDataDir: string) {
+export async function closePromptHub(
+  app: ElectronApplication,
+  userDataDir: string,
+  options: { preserveUserDataDir?: boolean } = {},
+) {
   await app.close();
-  fs.rmSync(userDataDir, { recursive: true, force: true });
+  if (!options.preserveUserDataDir) {
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
 }
 
 export async function getE2EStats(page: Page) {

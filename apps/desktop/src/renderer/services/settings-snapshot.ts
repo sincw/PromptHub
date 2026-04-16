@@ -19,6 +19,8 @@ export const SENSITIVE_SETTINGS_FIELDS = [
   "webdavUsername",
   "webdavPassword",
   "webdavEncryptionPassword",
+  "selfHostedSyncUsername",
+  "selfHostedSyncPassword",
   "aiApiKey",
 ] as const;
 

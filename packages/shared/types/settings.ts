@@ -9,6 +9,11 @@ export interface Settings {
   autoSave: boolean;
   defaultFolderId?: string;
   customSkillPlatformPaths?: Record<string, string>;
+  skillPlatformOrder?: string[];
+  lastManualBackupAt?: string;
+  lastManualBackupVersion?: string;
+  sync?: SyncSettings;
+  device?: DeviceManagementSettings;
   // Security
   // 安全相关
   security?: {
@@ -17,12 +22,40 @@ export interface Settings {
   };
 }
 
+export interface SyncSettings {
+  enabled: boolean;
+  provider: 'manual' | 'webdav';
+  endpoint?: string;
+  username?: string;
+  password?: string;
+  remotePath?: string;
+  autoSync?: boolean;
+  lastSyncAt?: string;
+}
+
+export interface DeviceManagementSettings {
+  syncCadence?: 'manual' | '15m' | '1h' | '1d';
+  storeAutoSync?: boolean;
+  storeSyncCadence?: 'manual' | '1h' | '1d';
+}
+
 export type Theme = 'light' | 'dark' | 'system';
-export type Language = 'en' | 'zh';
+export type Language = 'en' | 'zh' | 'zh-TW' | 'ja' | 'fr' | 'de' | 'es';
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   language: 'zh',
   autoSave: true,
   customSkillPlatformPaths: {},
+  skillPlatformOrder: [],
+  sync: {
+    enabled: false,
+    provider: 'manual',
+    autoSync: false,
+  },
+  device: {
+    syncCadence: 'manual',
+    storeAutoSync: true,
+    storeSyncCadence: '1d',
+  },
 };

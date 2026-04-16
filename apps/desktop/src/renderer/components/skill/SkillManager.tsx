@@ -24,6 +24,7 @@ import { useToast } from "../ui/Toast";
 import type { Skill, ScannedSkill } from "@prompthub/shared/types";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
+import { getRuntimeCapabilities } from "../../runtime";
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
@@ -75,13 +76,26 @@ export function SkillManager() {
   const viewMode = useSkillStore((state) => state.viewMode);
   const setViewMode = useSkillStore((state) => state.setViewMode);
   const storeView = useSkillStore((state) => state.storeView);
+  const setStoreView = useSkillStore((state) => state.setStoreView);
+  const setFilterType = useSkillStore((state) => state.setFilterType);
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
   const customSkillScanPaths = useSettingsStore(
     (state) => state.customSkillScanPaths,
   );
-  const isDistributionView = storeView === "distribution";
+  const runtimeCapabilities = getRuntimeCapabilities();
+  const webSkillLibraryMode =
+    !runtimeCapabilities.skillDistribution && !runtimeCapabilities.skillStore;
+  const effectiveStoreView = webSkillLibraryMode ? "my-skills" : storeView;
+  const effectiveFilterType =
+    webSkillLibraryMode &&
+    (filterType === "installed" ||
+      filterType === "deployed" ||
+      filterType === "pending")
+      ? "all"
+      : filterType;
+  const isDistributionView = effectiveStoreView === "distribution";
 
   // Get filtered skills - filter directly in useMemo instead of using store function
   // 直接在 useMemo 中过滤，而不是使用 store 函数（避免函数引用作为依赖）
@@ -89,18 +103,18 @@ export function SkillManager() {
     return filterVisibleSkills({
       deployedSkillNames,
       filterTags: skillFilterTags,
-      filterType,
+      filterType: effectiveFilterType,
       searchQuery,
       skills,
-      storeView,
+      storeView: effectiveStoreView,
     });
   }, [
-    skills,
-    filterType,
     deployedSkillNames,
+    effectiveFilterType,
+    effectiveStoreView,
     skillFilterTags,
-    storeView,
     searchQuery,
+    skills,
   ]);
 
   // Quick install state
@@ -140,6 +154,10 @@ export function SkillManager() {
   }>({ isOpen: false, skillIds: [], skillNames: [] });
 
   const handleScanLocal = async (customPaths?: string[]) => {
+    if (!runtimeCapabilities.skillLocalScan) {
+      return;
+    }
+
     setIsScanning(true);
     try {
       const result = await scanLocalPreview(customPaths);
@@ -155,6 +173,10 @@ export function SkillManager() {
   // Re-scan handler passed down to the preview modal
   // 传给预览弹窗的重新扫描回调
   const handleRescan = async (customPaths: string[]) => {
+    if (!runtimeCapabilities.skillLocalScan) {
+      return;
+    }
+
     const result = await scanLocalPreview(customPaths);
     setScannedSkills(result);
   };
@@ -165,7 +187,9 @@ export function SkillManager() {
   ) => {
     const result = await importScannedSkills(skillsToImport, userTagsByPath);
     // Refresh deployed status after import
-    await loadDeployedStatus();
+    if (runtimeCapabilities.skillDistribution) {
+      await loadDeployedStatus();
+    }
     return result.importedCount;
   };
 
@@ -189,6 +213,24 @@ export function SkillManager() {
 
   // Load skills on mount, then defer deployed status to idle time
   useEffect(() => {
+    if (!webSkillLibraryMode) {
+      return;
+    }
+
+    if (storeView !== "my-skills") {
+      setStoreView("my-skills");
+    }
+
+    if (
+      filterType === "installed" ||
+      filterType === "deployed" ||
+      filterType === "pending"
+    ) {
+      setFilterType("all");
+    }
+  }, [filterType, setFilterType, setStoreView, storeView, webSkillLibraryMode]);
+
+  useEffect(() => {
     let disposed = false;
     let idleId: number | undefined;
     let timeoutId: number | undefined;
@@ -202,6 +244,10 @@ export function SkillManager() {
 
     void loadSkills().then(() => {
       if (disposed) return;
+
+      if (!runtimeCapabilities.skillDistribution) {
+        return;
+      }
 
       const run = () => {
         if (!disposed) {
@@ -228,7 +274,7 @@ export function SkillManager() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [loadSkills, loadDeployedStatus]);
+  }, [loadSkills, loadDeployedStatus, runtimeCapabilities.skillDistribution]);
 
   useEffect(() => {
     const targetCount =
@@ -288,7 +334,7 @@ export function SkillManager() {
 
   // Store view: show the skill store page
   // 商店视图：显示技能商店页面
-  if (storeView === "store") {
+  if (runtimeCapabilities.skillStore && effectiveStoreView === "store") {
     return (
       <Suspense
         fallback={
@@ -444,49 +490,54 @@ export function SkillManager() {
 
   const headerTitle = isDistributionView
     ? t("nav.distribution", "Distribution")
-    : filterType === "favorites"
+    : effectiveFilterType === "favorites"
       ? t("nav.favorites", "Favorites")
-      : filterType === "installed"
+      : effectiveFilterType === "installed"
         ? t("skill.imported", "Imported")
-        : filterType === "deployed"
+        : effectiveFilterType === "deployed"
           ? t("skill.deployed", "Distributed")
-          : filterType === "pending"
+          : effectiveFilterType === "pending"
             ? t("skill.pendingDeployment", "Pending")
             : t("nav.mySkills", "My Skills");
 
   const emptyStateTitle = isDistributionView
     ? t("skill.noSkills", "No skills yet")
-    : filterType === "favorites"
+    : effectiveFilterType === "favorites"
       ? t("skill.noFavorites", "No favorite skills")
-      : filterType === "installed"
+      : effectiveFilterType === "installed"
         ? t("skill.noImportedSkills", "No imported skills yet")
-        : filterType === "deployed"
+        : effectiveFilterType === "deployed"
           ? t("skill.noDeployedSkills", "No distributed skills yet")
-          : filterType === "pending"
+          : effectiveFilterType === "pending"
             ? t("skill.noPendingSkills", "No pending skills")
             : t("skill.noSkills", "No skills yet");
 
-  const emptyStateHint = isDistributionView
+  const emptyStateHint = webSkillLibraryMode
+    ? t(
+        "skill.webLibraryHint",
+        "Create or import your own skills here. Platform distribution and skill marketplaces are desktop-only.",
+      )
+    : isDistributionView
     ? t(
         "skill.noDistributionSkillsHint",
         "Import skills first, then install, sync, or uninstall them to Claude, Cursor, and other platforms here.",
       )
-    : filterType === "favorites"
+      : effectiveFilterType === "favorites"
       ? t(
           "skill.noFavoritesHint",
           "Click the star on skill cards to add favorites",
         )
-      : filterType === "installed"
+      : effectiveFilterType === "installed"
         ? t(
             "skill.noImportedSkillsHint",
             "After importing from Skill Store, local scan, GitHub, or manual creation, they will appear here.",
           )
-        : filterType === "deployed"
+        : effectiveFilterType === "deployed"
           ? t(
               "skill.noDeployedSkillsHint",
               "After distributing skills to Claude, Cursor, or other platforms, they will show up here.",
             )
-          : filterType === "pending"
+          : effectiveFilterType === "pending"
             ? t(
                 "skill.noPendingSkillsHint",
                 "Skills not yet distributed to any platform will appear here.",
@@ -496,7 +547,12 @@ export function SkillManager() {
                 "Import skills from Skill Store, scan local environments, or create one manually to get started",
               );
 
-  const headerSubtitle = isDistributionView
+  const headerSubtitle = webSkillLibraryMode
+    ? t(
+        "skill.webLibrarySubtitle",
+        "Manage your personal skill library in the self-hosted web workspace.",
+      )
+    : isDistributionView
     ? t(
         "skill.distributionHint",
         "Manage install, sync, and uninstall across connected platforms.",
@@ -529,7 +585,7 @@ export function SkillManager() {
                   <span className="inline-flex items-center rounded-full border border-white/5 bg-accent/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
                     {isDistributionView
                       ? distributionStatsLabel
-                      : `${filteredSkills.length}${filterType !== "all" ? ` / ${skills.length}` : ""}`}
+                      : `${filteredSkills.length}${effectiveFilterType !== "all" ? ` / ${skills.length}` : ""}`}
                   </span>
                   {filteredSkills.length > visibleSkills.length && (
                     <span className="text-[11px] text-muted-foreground">
@@ -581,22 +637,28 @@ export function SkillManager() {
                     <ListIcon className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="h-4 w-px bg-border" />
-                <button
-                  onClick={() => handleScanLocal(customSkillScanPaths)}
-                  disabled={isScanning}
-                  className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
-                  title={t("skill.scanLocal", "Scan local skills")}
-                >
-                  <FolderInputIcon
-                    className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`}
-                  />
-                </button>
+                {runtimeCapabilities.skillLocalScan && (
+                  <>
+                    <div className="h-4 w-px bg-border" />
+                    <button
+                      onClick={() => handleScanLocal(customSkillScanPaths)}
+                      disabled={isScanning}
+                      className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
+                      title={t("skill.scanLocal", "Scan local skills")}
+                    >
+                      <FolderInputIcon
+                        className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`}
+                      />
+                    </button>
+                  </>
+                )}
                 <div className="h-4 w-px bg-border" />
                 <button
                   onClick={async () => {
                     await loadSkills();
-                    await loadDeployedStatus();
+                    if (runtimeCapabilities.skillDistribution) {
+                      await loadDeployedStatus();
+                    }
                   }}
                   className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors"
                   title={t("settings.refresh")}
@@ -663,15 +725,17 @@ export function SkillManager() {
                   <TagsIcon className="w-4 h-4 text-primary" />
                   {t("skill.batchTags", "Batch Tags")}
                 </button>
-                <button
-                  onClick={handleBatchDeploy}
-                  disabled={selectedSkillIds.size === 0}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
-                  title={t("skill.batchDeploy", "Batch Deploy")}
-                >
-                  <SendIcon className="w-4 h-4" />
-                  {t("skill.batchDeploy", "Batch Deploy")}
-                </button>
+                {runtimeCapabilities.skillDistribution && (
+                  <button
+                    onClick={handleBatchDeploy}
+                    disabled={selectedSkillIds.size === 0}
+                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
+                    title={t("skill.batchDeploy", "Batch Deploy")}
+                  >
+                    <SendIcon className="w-4 h-4" />
+                    {t("skill.batchDeploy", "Batch Deploy")}
+                  </button>
+                )}
                 <button
                   onClick={handleBatchDelete}
                   disabled={selectedSkillIds.size === 0}
@@ -778,7 +842,7 @@ export function SkillManager() {
 
       {/* Quick Install Modal */}
       {/* 快速安装弹窗 */}
-      {quickInstallSkill && (
+      {runtimeCapabilities.skillPlatformIntegration && quickInstallSkill && (
         <SkillQuickInstall
           skill={quickInstallSkill}
           onClose={() => setQuickInstallSkill(null)}
@@ -787,7 +851,7 @@ export function SkillManager() {
 
       {/* Scan Preview Modal */}
       {/* 扫描预览弹窗 */}
-      {showScanPreview && (
+      {runtimeCapabilities.skillLocalScan && showScanPreview && (
         <Suspense fallback={null}>
           <SkillScanPreview
             scannedSkills={scannedSkills}
@@ -807,13 +871,15 @@ export function SkillManager() {
         </Suspense>
       )}
 
-      {showBatchDeployDialog && (
+      {runtimeCapabilities.skillDistribution && showBatchDeployDialog && (
         <Suspense fallback={null}>
           <SkillBatchDeployDialog
             skills={selectedSkills}
             onClose={() => setShowBatchDeployDialog(false)}
             onComplete={async () => {
-              await loadDeployedStatus();
+              if (runtimeCapabilities.skillDistribution) {
+                await loadDeployedStatus();
+              }
             }}
           />
         </Suspense>
