@@ -1,3 +1,34 @@
+## [0.5.3] - 2026-04-17
+
+### 修复 / Fixed
+
+- 🚨 **修复 Windows 升级后"数据为空 + 应用无限重启"严重问题**：v0.5.2 在 Windows 从旧版升级后，如果新 `userData` 目录被检测为空，渲染进程会自动触发恢复流程，主进程随即 `app.relaunch() + app.quit()`；叠加 electron-updater 的 `autoInstallOnAppQuit=true`，会让每次退出都重装 pending 包并再次空库启动，形成无限重启循环。现移除渲染端自动恢复（必须由用户在 `DataRecoveryDialog` 点击确认），主进程对 `performRecovery` 增加会话级防抖，所有平台统一关闭 `autoInstallOnAppQuit`，并将 `bootstrapPromptWorkspace` 包裹为 try/catch，避免工作区初始化失败阻塞启动
+  - **Fix Windows Infinite-Restart Loop After Upgrade**: In v0.5.2, upgrading on Windows could produce an empty detected `userData`, which triggered auto-recovery in the renderer, then `app.relaunch() + app.quit()` in the main process. Combined with electron-updater's `autoInstallOnAppQuit=true`, every quit reinstalled the pending package and re-entered the empty-DB branch, producing an infinite restart loop. Auto-recovery has been removed from the renderer (the user must now confirm in `DataRecoveryDialog`), the main process guards `performRecovery` with a session-level flag, `autoInstallOnAppQuit` is now `false` on every platform, and `bootstrapPromptWorkspace` is wrapped in try/catch so workspace errors no longer block startup
+- 📝 **新增启动诊断日志**：关键启动事件（DB 初始化、恢复候选检测、恢复执行与结果）现会以 JSON 行写入 `<userData>/logs/startup.log`，便于用户在反馈升级/恢复问题时提供可分析的上下文；日志超过 512KB 自动轮转
+  - **Startup Diagnostic Log**: Key startup events (DB init, recovery candidate detection, recovery execution and outcome) are now appended as JSON lines to `<userData>/logs/startup.log`, making upgrade/recovery issue reports diagnosable from user-shared logs; the file auto-rotates above 512 KB
+- 🗂️ **工作区引导重构为"四象限 + 双向合并"**：`bootstrapPromptWorkspace` 不再无条件 `rmSync(promptsDir)` 再导出；现在按 `DB 空 / 工作区空` 组合分四种情形处理：两边都空时 noop；仅 DB 有数据按文件真源导出；仅工作区有数据反向导入 DB；两边都有数据则按 `updatedAt` 做 newer-wins 合并。DB 端 `updated_at` 的 INTEGER/string 类型不一致已由统一的 `toEpochMs()` 比较路径消除。工作区侧被删除/重命名的遗留目录不再直接 `rmSync`，而是移动到 `<workspace>/.trash/<ISO>/` 并保留最近 5 个快照，支持 `EXDEV` 跨卷降级
+  - **Workspace Bootstrap Rewritten as "Four-Quadrant + Two-Way Merge"**: `bootstrapPromptWorkspace` no longer unconditionally `rmSync(promptsDir)` before re-export. It now handles four cases by `DB empty / workspace empty`: both empty is a noop, DB-only exports files, workspace-only imports into DB, and both-populated merges by `updatedAt` with newer-wins. The long-standing INTEGER/string mismatch on `updated_at` has been eliminated by a single `toEpochMs()` comparison helper. Orphan/renamed directories on the workspace side are moved to `<workspace>/.trash/<ISO>/` (keeping the last 5 snapshots, with `EXDEV` cross-device fallback) instead of being hard-deleted
+- 🛟 **首次升级前自动快照 SQLite 文件**：从旧版本首次启动 0.5.3 时，会把 `prompthub.db` 复制为 `prompthub.db.backup-before-0.5.3.<timestamp>.db`，并写入 marker 文件保证幂等，避免合并逻辑万一出错时没有可回滚的索引层；新建或体积小于 4 KB 的全新 DB 不会写入 marker，避免污染首次启动路径
+  - **Automatic Pre-Upgrade SQLite Snapshot**: On first 0.5.3 launch after upgrade, `prompthub.db` is copied to `prompthub.db.backup-before-0.5.3.<timestamp>.db` (guarded by an idempotent marker file), providing a rollback path for the SQLite index layer in case the new merge logic misbehaves; brand-new or sub-4 KB databases skip the marker to avoid polluting the first-launch path
+- 🔁 **数据恢复后禁止"复活"**：`DataRecoveryDialog` 成功执行 `performRecovery` 后，会在 userData 下写入 `.restore-in-progress` 标记；下次启动时 `bootstrapPromptWorkspace` 检测到该标记会跳过 "WS→DB 反向导入" 阶段，改为以恢复后的 DB 为真源重建工作区，彻底避免旧工作区把已删除的数据又"导入"回来
+  - **Prevent "Resurrection" After Data Recovery**: After `DataRecoveryDialog` successfully runs `performRecovery`, a `.restore-in-progress` marker is written into userData; on the next launch, `bootstrapPromptWorkspace` detects the marker and skips the "workspace→DB" import phase, rebuilding the workspace from the recovered DB instead, eliminating the risk of a stale workspace re-importing records the user explicitly restored away from
+- 🧩 **同 id 冲突改为 newer-wins + 隔离而非删除**：工作区反向导入时若出现多个 Prompt 目录携带同一个 `id`，按 `updatedAt` 选胜者，其余副本会被移动到 `<workspace>/.trash/conflicts/` 下保留（仍受 `.trash` 保留策略约束），而不是被直接覆盖或丢弃
+  - **Same-id Conflicts Resolved by newer-wins + Quarantine**: When workspace→DB import encounters multiple prompt directories sharing the same `id`, the newer `updatedAt` wins and losing copies are moved under `<workspace>/.trash/conflicts/` (subject to the existing `.trash` retention policy) instead of being overwritten or silently discarded
+- 📉 **启动日志脱敏**：`startup.log` 中的用户数据路径、数据源路径、应用数据路径会把用户主目录前缀替换为 `~`，避免用户分享日志时泄露真实用户名
+  - **Startup Log Path Redaction**: Paths written to `startup.log` (user data path, source data path, app data path) now have the home directory prefix replaced with `~`, so users can share logs without leaking their real usernames
+
+### 升级注意事项 / Upgrade Notes
+
+- ⚠️ **卡在 v0.5.2 无限重启的用户**：请下载 v0.5.3 安装包手动安装覆盖升级。启动后如果看到空的 Prompt 列表，**请在应用内点击"数据恢复"按钮**手动从旧数据目录恢复（`DataRecoveryDialog` 入口仍保留）。启动日志位于 `<userData>/logs/startup.log`，其中 `startup:bootstrap_workspace_empty` 事件表示 DB 与工作区均为空、需要手动恢复
+  - **Users Stuck in v0.5.2 Infinite Restart**: Download the v0.5.3 installer and manually upgrade in place. If the Prompt list appears empty after launch, **click the "Data Recovery" button inside the app** to manually restore from a legacy data location (the `DataRecoveryDialog` entry point is preserved). Startup logs at `<userData>/logs/startup.log`; a `startup:bootstrap_workspace_empty` event indicates both DB and workspace were empty and manual recovery is required
+
+### 维护 / Maintenance
+
+- 🛡️ **发布流程改为 Draft 优先**：GitHub Release CI 现会把新 tag 的产物先发布为 Draft，经 Windows 真机验证后再手动 `--draft=false --latest` 推进，避免未验证版本被 auto-updater 立即推送给用户；Homebrew 更新步骤会在 Draft 状态下跳过
+  - **Draft-First Release Pipeline**: The GitHub Release workflow now publishes new tag artifacts as Draft first and requires manual promotion (`--draft=false --latest`) after Windows real-device validation, preventing unverified builds from being pushed via auto-updater; Homebrew updates are skipped while the release remains a Draft
+
+---
+
 ## [0.5.2] - 2026-04-16
 
 ### 新功能 / Added

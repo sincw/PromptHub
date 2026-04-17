@@ -400,27 +400,35 @@ jobs:
             release_assets/latest-mac-arm64.yml \
             release_assets/latest-mac-x64.yml
 
-          # 6. Create or refresh the Release.
+          # 6. Create or refresh the Release as a DRAFT.
+          # 所有 tag 打包产物默认为 Draft Release，不会被 auto-updater 拉取，
+          # 也不会出现在 "latest" 链接中。验证通过后，维护者手动执行：
+          #   gh release edit <tag> --draft=false --latest
+          # 才会正式对外发布。
+          #
           # Hotfix republishes for the same tag are allowed; existing assets with
           # the same file name are replaced in-place via --clobber.
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists. Updating assets in place..."
+            echo "Release ${GITHUB_REF_NAME} already exists. Updating assets in place (remains draft if currently draft)..."
+            # 保留当前 draft 状态：如果 release 已经是 draft 就保持 draft，
+            # 如果已经发布过就不再退回 draft（避免误伤已发布版本）。
+            IS_DRAFT=$(gh release view "${GITHUB_REF_NAME}" --json isDraft -q .isDraft)
             gh release edit "${GITHUB_REF_NAME}" \
               --title "PromptHub ${VERSION}" \
               --notes-file release_notes.md \
-              --draft=false \
+              --draft=${IS_DRAFT} \
               --prerelease=${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
 
             gh release upload "${GITHUB_REF_NAME}" \
               release_assets/* \
               --clobber
           else
-            echo "Creating release..."
+            echo "Creating DRAFT release..."
             gh release create "${GITHUB_REF_NAME}" \
               release_assets/* \
               --title "PromptHub ${VERSION}" \
               --notes-file release_notes.md \
-              --draft=false \
+              --draft=true \
               --prerelease=${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }} \
               --generate-notes
           fi
@@ -428,13 +436,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update Homebrew Cask
+        # Homebrew 只有当 release 已经 promote 为非 draft 时才更新。
+        # 对于 draft release（默认新建时状态），跳过；对 beta/alpha 也跳过。
+        # 验证通过后执行 `gh release edit <tag> --draft=false --latest` 再手动
+        # 重跑该 workflow（workflow_dispatch）或重打 tag 即可触发 Homebrew 更新。
         if: ${{ !contains(github.ref, 'beta') && !contains(github.ref, 'alpha') && env.HOMEBREW_TAP_TOKEN != '' }}
         shell: bash
         run: |
+          # 检查 release 是否仍为 draft；是则跳过 Homebrew 更新
+          IS_DRAFT=$(gh release view "${RELEASE_TAG}" --json isDraft -q .isDraft 2>/dev/null || echo "true")
+          if [ "$IS_DRAFT" = "true" ]; then
+            echo "Release ${RELEASE_TAG} is still a draft; skipping Homebrew cask update."
+            echo "Promote via: gh release edit ${RELEASE_TAG} --draft=false --latest"
+            exit 0
+          fi
+
           # Wait for release assets to be fully available
           sleep 15
           bash apps/desktop/scripts/update-homebrew-cask.sh "$VERSION" "$RELEASE_TAG"
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Skip Homebrew Cask update

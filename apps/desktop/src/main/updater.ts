@@ -297,9 +297,19 @@ export function initUpdater(win: BrowserWindow) {
   // Disable auto download, let user choose
   // 禁用自动下载，让用户选择
   autoUpdater.autoDownload = false;
-  // macOS: disable auto-install on quit since Squirrel won't work without code signing
-  // macOS: 禁用退出时自动安装，因为没有代码签名 Squirrel 不会工作
-  autoUpdater.autoInstallOnAppQuit = !isMac;
+  // Disable auto-install on quit across all platforms.
+  //
+  // Historical context: v0.5.2 enabled this on Windows (`!isMac`), but when
+  // combined with the auto-recovery code path in renderer (which called
+  // `app.relaunch()+quit()` after copying a recovered database), a pending
+  // electron-updater install was triggered on every quit. That install
+  // silently re-applied the same NSIS package — and because the package
+  // itself could lead the app back into an empty-database state, the loop
+  // repeated indefinitely.
+  //
+  // Requiring an explicit user click to install is worth the minor UX cost.
+  // See AGENTS.md §12 and the v0.5.3 regression analysis.
+  autoUpdater.autoInstallOnAppQuit = false;
 
   // electron-updater channel configuration:
   // electron-updater channel 配置：

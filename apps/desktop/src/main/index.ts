@@ -51,7 +51,8 @@ import {
 import { runCli } from "../cli/run";
 import { PromptDB } from "./database/prompt";
 import { FolderDB } from "./database/folder";
-import { bootstrapPromptWorkspace } from "./services/prompt-workspace";
+import { bootstrapPromptWorkspace, writeRestoreMarker } from "./services/prompt-workspace";
+import { logStartupEvent, scrubPath } from "./startup-log";
 
 // Disable GPU acceleration (optional; may be needed on some systems)
 // 禁用 GPU 加速（可选，某些系统上可能需要）
@@ -664,6 +665,15 @@ ipcMain.handle("data:getStatus", () => {
 // Data recovery: check for recoverable databases at known locations
 // 数据恢复：在已知位置检查可恢复的数据库
 let cachedRecoveryResult: RecoverableDatabase[] | null = null;
+// Process-lifetime guard: we only allow performRecovery to trigger a relaunch
+// ONCE per app session. Historically a combination of auto-recovery in the
+// renderer + `app.relaunch() + app.quit()` here produced an instant restart
+// loop when the recovered data was still interpreted as empty on the next
+// boot (e.g. after an NSIS upgrade overwrote userData, or the copy silently
+// targeted a path that was cleared by bootstrapPromptWorkspace). Limiting to
+// one attempt per process ensures the worst case is a single pointless
+// restart, not an infinite loop.
+let recoveryAttemptedThisSession = false;
 
 ipcMain.handle("data:checkRecovery", () => {
   if (isE2E) {
@@ -684,6 +694,17 @@ ipcMain.handle("data:checkRecovery", () => {
   const candidatePaths = getRecoveryCandidatePaths(currentPath);
   const results = detectRecoverableDatabases(currentPath, candidatePaths);
   cachedRecoveryResult = results;
+  logStartupEvent({
+    event: "recovery:candidates_detected",
+    currentPath: scrubPath(currentPath),
+    candidatePathCount: candidatePaths.length,
+    resultCount: results.length,
+    results: results.map((r) => ({
+      sourcePath: scrubPath(r.sourcePath),
+      promptCount: r.promptCount,
+      folderCount: r.folderCount,
+    })),
+  });
   return results;
 });
 
@@ -691,6 +712,31 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
   if (typeof sourcePath !== "string" || sourcePath.trim().length === 0) {
     return { success: false, error: "sourcePath is required" };
   }
+
+  // Session-level guard: refuse a second attempt in the same process. If the
+  // first attempt "succeeded" but the DB is still empty on next boot, the
+  // renderer would normally call us again; we must break the loop here rather
+  // than relaunch infinitely.
+  if (recoveryAttemptedThisSession) {
+    console.warn(
+      "[Recovery] performRecovery called more than once in this session; refusing to relaunch again.",
+    );
+    logStartupEvent({
+      event: "recovery:refused_duplicate_attempt",
+      sourcePath: scrubPath(sourcePath),
+    });
+    return {
+      success: false,
+      error:
+        "Recovery already attempted in this session. Please restart the app manually and try again if data is still missing.",
+    };
+  }
+  recoveryAttemptedThisSession = true;
+  logStartupEvent({
+    event: "recovery:started",
+    sourcePath: scrubPath(sourcePath),
+    currentPath: scrubPath(app.getPath("userData")),
+  });
 
   const currentPath = app.getPath("userData");
 
@@ -702,6 +748,26 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
   if (result.success) {
     // Clear cache so next check sees the recovered data
     cachedRecoveryResult = null;
+
+    // v0.5.3 review-follow-up: write a restore marker so the next boot's
+    // bootstrapPromptWorkspace skips Phase 1 (WS → DB). Without this, prompt
+    // files that still carry pre-deletion state would "revive" records the
+    // restored DB no longer contains.
+    // v0.5.3 review 反馈修复：写入恢复标记，下次启动 bootstrap 跳过 Phase 1，
+    // 防止工作区旧文件"复活"已删除记录。
+    try {
+      writeRestoreMarker(currentPath);
+    } catch (markerError) {
+      console.warn(
+        "[Recovery] writeRestoreMarker failed (continuing):",
+        markerError,
+      );
+    }
+
+    logStartupEvent({
+      event: "recovery:succeeded_scheduling_relaunch",
+      sourcePath: scrubPath(sourcePath),
+    });
 
     // Schedule a relaunch so the app starts fresh with the recovered database.
     // A short delay gives the renderer time to show a success message.
@@ -716,7 +782,14 @@ ipcMain.handle("data:performRecovery", async (_event, sourcePath: string) => {
     };
   }
 
-  // If recovery failed, re-open the original database
+  // If recovery failed, re-open the original database and allow another
+  // attempt (the user might select a different candidate).
+  recoveryAttemptedThisSession = false;
+  logStartupEvent({
+    event: "recovery:failed",
+    sourcePath: scrubPath(sourcePath),
+    error: result.error,
+  });
   const db = initDatabase();
   appDb = db;
 
@@ -1085,7 +1158,72 @@ app.whenReady().then(async () => {
     // 初始化数据库
     const db = initDatabase();
     applyE2ESeed(db);
-    bootstrapPromptWorkspace(new PromptDB(db), new FolderDB(db));
+    // v0.5.3: Log startup diagnostics (userData path, DB emptiness) before
+    // any recovery logic runs. Persisted to <userData>/logs/startup.log so
+    // users can share it when diagnosing Windows upgrade issues.
+    // v0.5.3: 在恢复逻辑运行前记录启动诊断信息（userData 路径、DB 是否为空）。
+    // 持久化到 <userData>/logs/startup.log，便于用户反馈 Windows 升级问题时分享。
+    try {
+      logStartupEvent({
+        event: "startup:db_initialized",
+        userDataPath: scrubPath(app.getPath("userData")),
+        appDataPath: scrubPath(app.getPath("appData")),
+        dbEmpty: isDatabaseEmpty(db),
+      });
+    } catch {
+      // ignore
+    }
+    // v0.5.3: Wrap bootstrapPromptWorkspace in try/catch to prevent startup crash
+    // if workspace directory operations fail (e.g., permission issues on Windows
+    // upgrades). A workspace bootstrap failure should not block the app — users
+    // can still access their data via the DB; workspace files can resync later.
+    // v0.5.3: 用 try/catch 包裹 bootstrapPromptWorkspace，避免工作区目录操作失败
+    // （如 Windows 升级后权限问题）阻塞整个启动流程。工作区引导失败不应阻塞应用，
+    // 用户仍可通过数据库访问数据，工作区文件可稍后重新同步。
+    try {
+      const bootstrapResult = bootstrapPromptWorkspace(
+        new PromptDB(db),
+        new FolderDB(db),
+      );
+      // v0.5.3: Always log bootstrap outcome so users who see an empty UI
+      // after upgrade can share a diagnosable log. "empty" quadrant in
+      // particular indicates both DB and workspace were empty — the user
+      // likely needs to use DataRecoveryDialog manually.
+      // v0.5.3: 总是记录引导结果，以便升级后看到空界面的用户能提供可分析日志。
+      // 特别是 "empty" 象限意味着 DB 和工作区都空，用户可能需要手动使用
+      // DataRecoveryDialog 恢复数据。
+      logStartupEvent({
+        event:
+          bootstrapResult.quadrant === "empty"
+            ? "startup:bootstrap_workspace_empty"
+            : "startup:bootstrap_workspace_ok",
+        quadrant: bootstrapResult.quadrant,
+        imported: bootstrapResult.imported,
+        exported: bootstrapResult.exported,
+        promptCount: bootstrapResult.promptCount,
+        folderCount: bootstrapResult.folderCount,
+        versionCount: bootstrapResult.versionCount,
+        ...(bootstrapResult.restoreMarkerUsed
+          ? { restoreMarkerUsed: true }
+          : {}),
+      });
+      if (bootstrapResult.quadrant === "empty") {
+        console.warn(
+          "[startup] Both database and workspace are empty. " +
+            "If this is an upgrade, the user should use DataRecoveryDialog " +
+            "to restore data from a previous install location.",
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[startup] bootstrapPromptWorkspace failed, continuing without workspace sync:",
+        error,
+      );
+      logStartupEvent({
+        event: "startup:bootstrap_workspace_failed",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     appDb = db; // Save to module-level variable for createWindow access
     registerAllIPC(db);
 

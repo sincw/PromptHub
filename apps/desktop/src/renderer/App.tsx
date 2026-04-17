@@ -97,28 +97,6 @@ function App() {
     }>
   >([]);
 
-  const pickBestRecoveryCandidate = (
-    candidates: Array<{
-      sourcePath: string;
-      promptCount: number;
-      folderCount: number;
-      skillCount: number;
-      dbSizeBytes: number;
-    }>,
-  ) =>
-    candidates.reduce((best, current) => {
-      if (current.promptCount !== best.promptCount) {
-        return current.promptCount > best.promptCount ? current : best;
-      }
-      if (current.folderCount !== best.folderCount) {
-        return current.folderCount > best.folderCount ? current : best;
-      }
-      if (current.skillCount !== best.skillCount) {
-        return current.skillCount > best.skillCount ? current : best;
-      }
-      return current.dbSizeBytes > best.dbSizeBytes ? current : best;
-    });
-
   // Update status (used for TopBar indicator)
   // 更新状态（用于顶部栏显示更新提示）
   const [updateAvailable, setUpdateAvailable] = useState<UpdateStatus | null>(
@@ -699,18 +677,23 @@ function App() {
         // Recovery is only relevant when the currently loaded prompt library is
         // actually empty. This avoids SQLite-only heuristics from masking valid
         // IndexedDB data in the active profile.
+        //
+        // IMPORTANT: We MUST NOT auto-execute performRecovery here. Historically
+        // this code auto-picked the best candidate and called performRecovery
+        // directly, which triggered an unconditional relaunch+quit inside the
+        // main process. On Windows upgrades, combined with electron-updater's
+        // `autoInstallOnAppQuit=true` and empty workspace scenarios, this
+        // produced an instant restart loop with no user-visible data.
+        //
+        // The DataRecoveryDialog below is the only legitimate path to invoke
+        // recovery — the user must explicitly confirm, so a loop is impossible.
+        // See: https://github.com/legeling/PromptHub v0.5.2 regression.
         if (!isWebRuntime() && usePromptStore.getState().prompts.length === 0) {
           try {
             const recoverable = await window.electron?.checkRecovery?.();
             if (recoverable && recoverable.length > 0) {
-              const bestCandidate = pickBestRecoveryCandidate(recoverable);
-              const recoveryResult = await window.electron?.performRecovery?.(
-                bestCandidate.sourcePath,
-              );
-              if (!recoveryResult?.success) {
-                setRecoverableDatabases(recoverable);
-                setShowRecoveryDialog(true);
-              }
+              setRecoverableDatabases(recoverable);
+              setShowRecoveryDialog(true);
             }
           } catch (recoveryErr) {
             console.warn("Recovery check failed:", recoveryErr);
