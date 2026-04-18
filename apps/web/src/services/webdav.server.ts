@@ -87,3 +87,15 @@ export async function pullWebDavFile(config: WebDavConfig, fileName: string): Pr
     body: response.body.toString('utf-8'),
   };
 }
+
+// Create a WebDAV collection (directory). Returns true if created or already exists.
+export async function mkcolWebDavDirectory(config: WebDavConfig, dirName: string): Promise<boolean> {
+  const response = await requestRemoteBuffered({
+    url: buildWebDavTargetUrl(config, dirName),
+    method: 'MKCOL',
+    headers: { ...getAuthHeader(config) },
+    allowedProtocols: ['https:'],
+  });
+  // 201 Created, 405 Method Not Allowed (already exists on most servers)
+  return response.status === 201 || response.status === 405 || response.status === 200;
+}

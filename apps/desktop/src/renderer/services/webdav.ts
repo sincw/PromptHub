@@ -1060,7 +1060,8 @@ export async function incrementalDownload(
       exportedAt: coreData.exportedAt,
       prompts: coreData.prompts,
       folders: coreData.folders,
-      versions: coreData.versions || [],
+      // Support both desktop `versions` and web `promptVersions` field names
+      versions: coreData.versions || coreData.promptVersions || [],
       skills: coreData.skills,
       skillVersions: coreData.skillVersions,
       skillFiles: coreData.skillFiles,

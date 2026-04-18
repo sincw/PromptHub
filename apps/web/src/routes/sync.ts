@@ -4,14 +4,19 @@ import type { Folder, Prompt, PromptVersion, Settings, Skill, SkillVersion, Sync
 import { getAuthUser } from '../middleware/auth.js';
 import { BackupService } from '../services/backup.service.js';
 import { SettingsService } from '../services/settings.service.js';
-import { pullWebDavFile, pushWebDavFile, testWebDavConnection } from '../services/webdav.server.js';
+import { pullWebDavFile, pushWebDavFile, testWebDavConnection, mkcolWebDavDirectory } from '../services/webdav.server.js';
 import { error, ErrorCode, success } from '../utils/response.js';
 import { parseJsonBody } from '../utils/validation.js';
 
 const sync = new Hono();
 const backupService = new BackupService();
 const settingsService = new SettingsService();
-const REMOTE_BACKUP_FILE_NAME = 'prompthub-web-backup.json';
+
+// Unified path shared with desktop. Legacy path kept for pull fallback (migration).
+const REMOTE_BACKUP_DIR = 'prompthub-backup';
+const REMOTE_BACKUP_DATA_FILE = 'prompthub-backup/data.json';
+const REMOTE_MANIFEST_FILE = 'prompthub-backup/manifest.json';
+const LEGACY_REMOTE_BACKUP_FILE = 'prompthub-web-backup.json';
 
 interface NormalizedSyncPayload {
   version: string;
@@ -191,7 +196,7 @@ const importPayloadSchema = z.object({
         masterPasswordConfigured: z.boolean(),
         unlocked: z.boolean(),
       }).optional(),
-    }),
+    }).optional(),
     settingsUpdatedAt: z.string().optional(),
   }),
 });
@@ -346,7 +351,7 @@ function normalizeSyncPayload(payload: z.infer<typeof importPayloadSchema>['payl
       note: version.note,
       createdAt: typeof version.createdAt === 'number' ? new Date(version.createdAt).toISOString() : version.createdAt,
     })),
-    settings: payload.settings,
+    settings: payload.settings ?? { theme: 'system', language: 'en', autoSave: true },
     settingsUpdatedAt: payload.settingsUpdatedAt,
   };
 }
@@ -437,10 +442,24 @@ sync.post('/push', async (c) => {
       return error(c, 422, ErrorCode.VALIDATION_ERROR, `WebDAV connection failed with HTTP ${connection.status}`);
     }
 
-    const pushed = await pushWebDavFile(syncSettings, REMOTE_BACKUP_FILE_NAME, JSON.stringify(exported));
+    // Ensure directory exists (MKCOL is idempotent – 405 means already exists)
+    await mkcolWebDavDirectory(syncSettings, REMOTE_BACKUP_DIR);
+
+    const pushed = await pushWebDavFile(syncSettings, REMOTE_BACKUP_DATA_FILE, JSON.stringify(exported));
     if (!pushed.ok) {
       return error(c, 422, ErrorCode.VALIDATION_ERROR, `WebDAV upload failed with HTTP ${pushed.status}`);
     }
+
+    // Write a minimal manifest.json so the desktop client can locate data.json
+    const manifest = {
+      version: '1',
+      createdAt: exported.exportedAt,
+      dataHash: '',
+      encrypted: false,
+      images: {},
+      videos: {},
+    };
+    await pushWebDavFile(syncSettings, REMOTE_MANIFEST_FILE, JSON.stringify(manifest));
 
     const syncedAt = new Date().toISOString();
     const currentSettings = settingsService.get(actor.userId);
@@ -456,7 +475,7 @@ sync.post('/push', async (c) => {
       ok: true,
       provider: 'webdav',
       syncedAt,
-      remoteFile: REMOTE_BACKUP_FILE_NAME,
+      remoteFile: REMOTE_BACKUP_DATA_FILE,
     });
   } catch (routeError) {
     return error(c, 422, ErrorCode.VALIDATION_ERROR, routeError instanceof Error ? routeError.message : 'Sync push failed');
@@ -469,14 +488,19 @@ sync.post('/pull', async (c) => {
 
   try {
     assertWebDavConfig(syncSettings);
-    const pulled = await pullWebDavFile(syncSettings, REMOTE_BACKUP_FILE_NAME);
+
+    // Try unified path first, fall back to legacy web-only path for migration
+    let pulled = await pullWebDavFile(syncSettings, REMOTE_BACKUP_DATA_FILE);
     if (!pulled.ok) {
-      return error(c, 422, ErrorCode.VALIDATION_ERROR, `WebDAV download failed with HTTP ${pulled.status}`);
+      pulled = await pullWebDavFile(syncSettings, LEGACY_REMOTE_BACKUP_FILE);
+    }
+    if (!pulled.ok) {
+      return error(c, 422, ErrorCode.VALIDATION_ERROR, `WebDAV download failed: no backup found at ${REMOTE_BACKUP_DATA_FILE} or ${LEGACY_REMOTE_BACKUP_FILE}`);
     }
 
     const parsedPayload = importPayloadSchema.shape.payload.safeParse(JSON.parse(pulled.body));
     if (!parsedPayload.success) {
-      return error(c, 422, ErrorCode.VALIDATION_ERROR, 'Remote sync payload is invalid');
+      return error(c, 422, ErrorCode.VALIDATION_ERROR, `Remote sync payload is invalid: ${parsedPayload.error.issues.map((i) => i.message).join(', ')}`);
     }
 
     const imported = backupService.import(actor, normalizeSyncPayload(parsedPayload.data));
@@ -495,7 +519,7 @@ sync.post('/pull', async (c) => {
       ...imported,
       provider: 'webdav',
       syncedAt,
-      remoteFile: REMOTE_BACKUP_FILE_NAME,
+      remoteFile: REMOTE_BACKUP_DATA_FILE,
     });
   } catch (routeError) {
     return error(c, 422, ErrorCode.VALIDATION_ERROR, routeError instanceof Error ? routeError.message : 'Sync pull failed');
