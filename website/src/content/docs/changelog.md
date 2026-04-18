@@ -1,3 +1,43 @@
+## [Unreleased]
+
+> ⚠️ **升级前请务必备份数据 / Please back up your data before upgrading**
+
+### 新功能 / Added
+
+- 📦 **选择性导出为 ZIP（可读文件结构）**：`设置 → 数据 → 导出数据` 现在在 Electron 桌面端会生成 `.zip` 文件，包含 `prompts/*.md`、`skills/*/SKILL.md`、`images/` 等可直接阅读的文件，以及 `import-with-prompthub.json` 供重新导入
+  - **Selective Export as ZIP**: *Settings → Data → Export* generates a `.zip` with human-readable prompt/skill files and an `import-with-prompthub.json` for re-import
+
+### 修复 / Fixed
+
+- 🗂️ **数据设置页 UI 重构**：「升级备份」语义明确为「回滚数据（升级前快照）」，扫描文案精简，底部仅显示绝对路径；修复确认对话框加载态与 dismiss 标记写入
+  - **Data Settings UI Refactor**: Upgrade-backup semantics clarified, scan copy simplified, bottom section shows only absolute paths; dialog loading state and dismiss-marker bugs fixed
+- 📥 **导入支持 `.zip` 文件**：文件选择器新增 `.zip`，自动提取 `import-with-prompthub.json` 恢复数据
+  - **Import Accepts `.zip`**: Automatically extracts `import-with-prompthub.json` from the uploaded ZIP
+
+---
+
+## [0.5.3] - 2026-04-17
+
+### 修复 / Fixed
+
+- 🚨 **修复 Windows 升级后"数据为空 + 应用无限重启"严重问题**：移除渲染端自动恢复、增加主进程会话级防抖、统一关闭 `autoInstallOnAppQuit`，工作区初始化改为 try/catch 避免阻塞启动
+  - **Fix Windows Infinite-Restart Loop After Upgrade**: Auto-recovery removed from renderer, session-level debounce added to main process, `autoInstallOnAppQuit` disabled on all platforms, workspace bootstrap wrapped in try/catch
+- 📝 **启动诊断日志**：关键事件写入 `<userData>/logs/startup.log`，超 512KB 自动轮转，路径脱敏
+  - **Startup Diagnostic Log**: Key events logged to `<userData>/logs/startup.log` with auto-rotation and path redaction
+- 🗂️ **工作区引导改为四象限 + 双向合并**：按 `DB空/工作区空` 四种情形处理，newer-wins 合并，遗留目录移入 `.trash/` 而非直接删除
+  - **Workspace Bootstrap: Four-Quadrant + Two-Way Merge**: Four cases by `DB empty / workspace empty`, newer-wins merge, orphan dirs moved to `.trash/`
+- 🛟 **首次升级前自动快照 SQLite**：0.5.3 首启把 `prompthub.db` 复制为带时间戳的备份文件，幂等执行
+  - **Automatic Pre-Upgrade SQLite Snapshot**: On first 0.5.3 launch, `prompthub.db` is copied to a timestamped backup
+- 🔁 **恢复后禁止旧工作区"复活"**：恢复成功后写 `.restore-in-progress` 标记，下次启动跳过反向导入阶段
+  - **Prevent Resurrection After Recovery**: `.restore-in-progress` marker skips workspace→DB import on next launch
+
+### 升级注意事项 / Upgrade Notes
+
+- ⚠️ **卡在 v0.5.2 无限重启的用户**：手动安装 v0.5.3；若 Prompt 列表为空，点击应用内「数据恢复」按钮手动恢复
+  - **Users Stuck in v0.5.2 Infinite Restart**: Manually install v0.5.3; if the Prompt list is empty, click "Data Recovery" in the app
+
+---
+
 ## [0.5.2] - 2026-04-16
 
 ### 新功能 / Added

@@ -1,3 +1,27 @@
+## [Unreleased]
+
+> ⚠️ **升级前请务必备份数据 / Please back up your data before upgrading**
+>
+> 本次更新涉及数据导出格式与设置页结构调整，建议在升级前通过 `设置 → 数据 → 压缩备份` 或手动复制 `userData` 目录做好备份，以防意外。
+>
+> This release modifies the data export format and data-settings UI. Back up via **Settings → Data → Compressed Backup** (or copy your `userData` folder) before upgrading.
+
+### 新功能 / Added
+
+- 📦 **选择性导出为 ZIP（可读文件结构）**：`设置 → 数据 → 导出数据` 现在在 Electron 桌面端会生成 `.zip` 文件，ZIP 内含 `prompts/*.md`、`skills/*/SKILL.md`、`images/` 等可直接阅读的文件，以及 `import-with-prompthub.json` 供重新导入；非 Electron 环境 fallback 为原有 JSON 下载
+  - **Selective Export as ZIP (readable file structure)**: *Settings → Data → Export* on Electron now generates a `.zip` containing human-readable `prompts/*.md`, `skills/*/SKILL.md`, `images/`, and an `import-with-prompthub.json` for re-import; non-Electron environments fall back to the existing JSON download
+
+### 修复 / Fixed
+
+- 🗂️ **数据设置页 UI 重构**：「升级备份」改为「回滚数据（升级前快照）」语义，「扫描历史数据」文案精简为急救入口，底部数据路径块仅显示绝对路径；修复「确认覆盖」对话框加载态与关闭时 dismiss 标记写入问题
+  - **Data Settings UI Refactor**: "Upgrade Backup" now uses "roll back to pre-upgrade snapshot" semantics, history-scan copy shortened to an emergency-recovery entry, the bottom data-path block shows only absolute paths; fixes confirm-overwrite dialog loading state and dismiss-marker write on close
+- 🔍 **修复手动扫描被 `isDbEmpty` 守护误拦截**：即使数据库非空，用户主动发起的手动扫描现在也能正常执行
+  - **Fix Manual Scan Blocked by `isDbEmpty` Guard**: User-initiated manual scans now run even when the database is non-empty
+- 📥 **导入支持 `.zip` 文件**：`设置 → 数据 → 导入` 的文件选择器新增 `.zip` 格式，导入时自动从 ZIP 读取 `import-with-prompthub.json` 恢复数据
+  - **Import Accepts `.zip` Files**: The file picker now accepts `.zip`; import automatically extracts `import-with-prompthub.json` from the archive for restore
+
+---
+
 ## [0.5.3] - 2026-04-17
 
 ### 修复 / Fixed

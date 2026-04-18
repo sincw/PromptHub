@@ -31,7 +31,7 @@ export default defineConfig({
       ),
       '@desktop-renderer-i18n': path.resolve(
         __dirname,
-        '../desktop/src/renderer/i18n/index.ts',
+        'src/client/i18n.ts',
       ),
       '@desktop-renderer-globals-css': path.resolve(
         __dirname,
