@@ -87,7 +87,7 @@ describe('webdav.server', () => {
       },
       body: '{"ok":true}',
       allowedProtocols: ['https:'],
-      maxBytes: 524288,
+      maxBytes: 104857600,
     });
   });
 
@@ -140,7 +140,7 @@ describe('webdav.server', () => {
       },
       body: '{"anonymous":true}',
       allowedProtocols: ['https:'],
-      maxBytes: 524288,
+      maxBytes: 104857600,
     });
   });
 });

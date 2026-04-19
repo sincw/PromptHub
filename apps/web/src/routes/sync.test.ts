@@ -21,6 +21,7 @@ interface WebDavMockSet {
   testWebDavConnection?: ReturnType<typeof vi.fn>;
   pushWebDavFile?: ReturnType<typeof vi.fn>;
   pullWebDavFile?: ReturnType<typeof vi.fn>;
+  mkcolWebDavDirectory?: ReturnType<typeof vi.fn>;
 }
 
 function getMockCall(mockFn: ReturnType<typeof vi.fn>, index: number): unknown[] {
@@ -43,6 +44,7 @@ async function createTestApp(dataDir: string, webDavMocks?: WebDavMockSet) {
       testWebDavConnection: webDavMocks.testWebDavConnection ?? vi.fn(async () => ({ ok: true, status: 207 })),
       pushWebDavFile: webDavMocks.pushWebDavFile ?? vi.fn(async () => ({ ok: true, status: 201 })),
       pullWebDavFile: webDavMocks.pullWebDavFile ?? vi.fn(async () => ({ ok: true, status: 200, body: '{}' })),
+      mkcolWebDavDirectory: webDavMocks.mkcolWebDavDirectory ?? vi.fn(async () => ({ ok: true, status: 201 })),
     }));
   }
 
@@ -640,13 +642,13 @@ describe('web sync routes', () => {
 
       expect(pushBody.data.ok).toBe(true);
       expect(pushBody.data.provider).toBe('webdav');
-      expect(pushBody.data.remoteFile).toBe('prompthub-web-backup.json');
+      expect(pushBody.data.remoteFile).toBe('prompthub-backup/data.json');
       expect(pushBody.data.syncedAt).toBeTruthy();
       expect(testWebDavConnection).toHaveBeenCalledTimes(1);
-      expect(pushWebDavFile).toHaveBeenCalledTimes(1);
+      expect(pushWebDavFile).toHaveBeenCalledTimes(2); // data.json + manifest.json
       const pushCall = getMockCall(pushWebDavFile, 0);
       expect(pushCall).toBeTruthy();
-      expect(pushCall[1]).toBe('prompthub-web-backup.json');
+      expect(pushCall[1]).toBe('prompthub-backup/data.json');
 
       const pushedPayload = JSON.parse(String(pushCall[2])) as {
         prompts: Array<{ title: string }>;
@@ -725,11 +727,11 @@ describe('web sync routes', () => {
       expect(pullBody.data.foldersImported).toBe(2);
       expect(pullBody.data.skillsImported).toBe(1);
       expect(pullBody.data.provider).toBe('webdav');
-      expect(pullBody.data.remoteFile).toBe('prompthub-web-backup.json');
+      expect(pullBody.data.remoteFile).toBe('prompthub-backup/data.json');
       expect(pullWebDavFile).toHaveBeenCalledTimes(1);
       const pullCall = getMockCall(pullWebDavFile, 0);
       expect(pullCall).toBeTruthy();
-      expect(pullCall[1]).toBe('prompthub-web-backup.json');
+      expect(pullCall[1]).toBe('prompthub-backup/data.json');
 
       const dataResponse = await app.request(
         new Request('http://local/api/sync/data', {
