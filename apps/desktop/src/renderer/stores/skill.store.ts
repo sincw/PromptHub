@@ -935,39 +935,6 @@ export const useSkillStore = create<SkillState>()(
         // 加载内置注册表（使用嵌入内容）
         const registry = [...BUILTIN_SKILL_REGISTRY];
         set({ registrySkills: registry, isLoadingRegistry: false });
-
-        // If any skills have content_url, fetch real content in the background
-        // 如果有技能有 content_url，在后台获取真实内容
-        const withUrls = registry.filter((s) => s.content_url);
-        if (withUrls.length > 0) {
-          (async () => {
-            const updated = [...registry];
-            let hasUpdates = false;
-
-            await runWithConcurrency(
-              updated,
-              REMOTE_CONTENT_CONCURRENCY,
-              async (skill, index) => {
-                if (!skill.content_url) return;
-                try {
-                  const realContent = await window.api.skill.fetchRemoteContent(
-                    skill.content_url,
-                  );
-                  if (realContent && realContent.trim().length > 0) {
-                    updated[index] = { ...skill, content: realContent };
-                    hasUpdates = true;
-                  }
-                } catch {
-                  // Silently fall back to embedded content
-                }
-              },
-            );
-
-            if (hasUpdates) {
-              set({ registrySkills: [...updated] });
-            }
-          })();
-        }
       },
 
       installRegistrySkill: async (regSkill) => {

@@ -23,6 +23,11 @@ import { SkillStoreDetail } from "./SkillStoreDetail";
 import { SkillStoreCard } from "./SkillStoreCard";
 import { SkillStoreCustomSources } from "./SkillStoreCustomSources";
 import { SkillStoreSourceForm } from "./SkillStoreSourceForm";
+import {
+  loadGitHubSkillRepo,
+  parseFrontmatter,
+  toTitleCase,
+} from "../../services/github-skill-store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { isLikelyLocalSource } from "../../services/skill-store-source";
@@ -34,9 +39,6 @@ import {
 import { useToast } from "../ui/Toast";
 import type {
   DeviceManagementSettings,
-  GitHubRepoMetadata,
-  GitHubTreeEntry,
-  GitHubTreeResponse,
   MarketplaceReferenceEntry,
   MarketplaceRegistryDocument,
   MarketplaceSkillEntry,
@@ -86,35 +88,6 @@ const MAX_REMOTE_STORE_DEPTH = 3;
 const MAX_SKILLS_SH_SKILLS = 24;
 const SKILLS_SH_CONCURRENCY = 4;
 
-function stripQuotes(value: string) {
-  return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
-function parseFrontmatter(content: string) {
-  const match = content.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) {
-    return { name: "", description: "", tags: [] as string[] };
-  }
-
-  const block = match[1];
-  const tagsLine = block.match(/^tags:\s*\[(.+)\]$/m)?.[1] ?? "";
-
-  return {
-    name: stripQuotes(block.match(/^name:\s*(.+)$/m)?.[1] ?? ""),
-    description: stripQuotes(block.match(/^description:\s*(.+)$/m)?.[1] ?? ""),
-    tags: tagsLine
-      .split(",")
-      .map((tag) => stripQuotes(tag))
-      .filter(Boolean),
-  };
-}
-
-function toTitleCase(value: string) {
-  return value
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -148,20 +121,6 @@ function resolveUrl(baseUrl: string, value?: string | null) {
   }
 }
 
-function parseGithubRepo(url: string) {
-  const normalized = url
-    .trim()
-    .replace(/^git@github\.com:/, "https://github.com/")
-    .replace(/\.git$/, "");
-  const match = normalized.match(/github\.com\/([^/]+)\/([^/]+)/i);
-  if (!match) return null;
-  return {
-    owner: match[1],
-    repo: match[2],
-    repositoryUrl: `https://github.com/${match[1]}/${match[2]}`,
-  };
-}
-
 function dedupeRegistrySkills(skills: RegistrySkill[]) {
   const bySlug = new Map<string, RegistrySkill>();
   // Also deduplicate by normalized name to stay consistent with the
@@ -189,11 +148,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function isGitHubRateLimitError(error: unknown): boolean {
-  const message = getErrorMessage(error).toLowerCase();
-  return message.includes("github api rate limit reached");
-}
-
 function isDefined<T>(value: T | null | undefined): value is T {
   return value !== null && value !== undefined;
 }
@@ -209,6 +163,21 @@ function cadenceToMs(
     default:
       return null;
   }
+}
+
+function shouldForceRefreshSource(
+  loadedAt: number | undefined,
+  intervalMs: number | null,
+): boolean {
+  if (!loadedAt || loadedAt <= 0) {
+    return true;
+  }
+
+  if (intervalMs === null) {
+    return false;
+  }
+
+  return Date.now() - loadedAt >= intervalMs;
 }
 
 async function runWithConcurrency<T, R>(
@@ -232,14 +201,6 @@ async function runWithConcurrency<T, R>(
   );
 
   return results.filter(isDefined);
-}
-
-function isGitHubTreeEntry(
-  entry: GitHubTreeEntry | null | undefined,
-): entry is GitHubTreeEntry & { path: string; type: string } {
-  return Boolean(
-    entry && typeof entry.path === "string" && typeof entry.type === "string",
-  );
 }
 
 function resolveMarketplaceReference(
@@ -307,15 +268,34 @@ export function SkillStore() {
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
   const remoteStoreEntriesRef = useRef(remoteStoreEntries);
   const inflightStoreLoadsRef = useRef(new Map<string, Promise<void>>());
+  const loadRegistryRef = useRef(loadRegistry);
+  const loadStoreSourceRef = useRef<
+    (sourceId: string, forceRefresh?: boolean) => Promise<void>
+  >(async () => undefined);
   const { showToast } = useToast();
   const autoScanBeforeInstall = useSettingsStore(
     (state) => state.autoScanStoreSkillsBeforeInstall,
   );
   const aiModels = useSettingsStore((state) => state.aiModels);
+  const customStoreSourcesSyncKey = useMemo(
+    () =>
+      customStoreSources
+        .map((source) =>
+          [source.id, source.type, source.url, source.enabled ? "1" : "0"].join(
+            ":",
+          ),
+        )
+        .join("|"),
+    [customStoreSources],
+  );
 
   useEffect(() => {
     remoteStoreEntriesRef.current = remoteStoreEntries;
   }, [remoteStoreEntries]);
+
+  useEffect(() => {
+    loadRegistryRef.current = loadRegistry;
+  }, [loadRegistry]);
 
   useEffect(() => {
     if (typeof loadRegistry === "function") {
@@ -350,117 +330,31 @@ export function SkillStore() {
     selectedStoreSourceId === "community" ||
     Boolean(selectedCustomSource);
 
-  const loadGitHubSkillRepo = useCallback(
+  const loadGitHubRepoSkills = useCallback(
     async (repoUrl: string): Promise<RegistrySkill[]> => {
-      const parsedRepo = parseGithubRepo(repoUrl);
-      if (!parsedRepo) {
-        throw new Error(
-          t(
-            "skill.invalidGitRepo",
-            "Please enter a GitHub repository URL, or use a local directory path instead",
+      try {
+        return await loadGitHubSkillRepo(repoUrl, {
+          fetchRemoteContent: (url) => window.api.skill.fetchRemoteContent(url),
+          registrySkills,
+          rateLimitMessage: t(
+            "skill.remoteStoreRateLimitHint",
+            "GitHub API rate limit reached. Try again in a few minutes, or add a GitHub token in settings.",
           ),
-        );
-      }
-
-      let repoMetaRaw: string;
-      try {
-        repoMetaRaw = await window.api.skill.fetchRemoteContent(
-          `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}`,
-        );
+        });
       } catch (error) {
-        if (isGitHubRateLimitError(error)) {
+        if (
+          error instanceof Error &&
+          error.message === "Invalid GitHub repository URL"
+        ) {
           throw new Error(
             t(
-              "skill.remoteStoreRateLimitHint",
-              "GitHub API rate limit reached. Try again in a few minutes, or add a GitHub token in settings.",
+              "skill.invalidGitRepo",
+              "Please enter a GitHub repository URL, or use a local directory path instead",
             ),
           );
         }
         throw error;
       }
-      const repoMeta = parseJson<GitHubRepoMetadata>(repoMetaRaw || "{}", {});
-      const defaultBranch = repoMeta.default_branch || "main";
-
-      let treeRaw: string;
-      try {
-        treeRaw = await window.api.skill.fetchRemoteContent(
-          `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/git/trees/${defaultBranch}?recursive=1`,
-        );
-      } catch (error) {
-        if (isGitHubRateLimitError(error)) {
-          throw new Error(
-            t(
-              "skill.remoteStoreRateLimitHint",
-              "GitHub API rate limit reached. Try again in a few minutes, or add a GitHub token in settings.",
-            ),
-          );
-        }
-        throw error;
-      }
-      const treeData = parseJson<GitHubTreeResponse>(treeRaw || "{}", {});
-      const skillFiles = Array.isArray(treeData.tree)
-        ? treeData.tree.filter(
-            (item): item is GitHubTreeEntry & { path: string; type: string } =>
-              isGitHubTreeEntry(item) &&
-              item.type === "blob" &&
-              item.path.endsWith("/SKILL.md"),
-          )
-        : [];
-
-      const builtinBySlug = new Map(
-        registrySkills.map((skill) => [skill.slug, skill]),
-      );
-
-      const remoteSkills = await Promise.all(
-        skillFiles.map(async (item) => {
-          const path = item.path;
-          const slug = path.split("/").slice(-2, -1)[0];
-          const rawUrl = `https://raw.githubusercontent.com/${parsedRepo.owner}/${parsedRepo.repo}/${defaultBranch}/${path}`;
-          const sourceRepoUrl = `${parsedRepo.repositoryUrl}/tree/${defaultBranch}/${path.replace(/\/SKILL\.md$/, "")}`;
-          let content: string;
-          try {
-            content = await window.api.skill.fetchRemoteContent(rawUrl);
-          } catch {
-            return null;
-          }
-          if (!content) return null;
-
-          const builtin = builtinBySlug.get(slug);
-          const parsed = parseFrontmatter(content);
-          const description =
-            parsed.description ||
-            builtin?.description ||
-            `${toTitleCase(slug)} skill`;
-
-          return {
-            slug,
-            name: builtin?.name || parsed.name || toTitleCase(slug),
-            description,
-            category: builtin?.category || inferCategory(slug, description),
-            icon_url: builtin?.icon_url,
-            icon_emoji: builtin?.icon_emoji,
-            author:
-              builtin?.author ||
-              repoMeta?.owner?.login ||
-              (parsedRepo.owner === "anthropics"
-                ? "Anthropic"
-                : parsedRepo.owner),
-            source_url: sourceRepoUrl,
-            tags: builtin?.tags?.length
-              ? builtin.tags
-              : parsed.tags.length
-                ? parsed.tags
-                : slug.split(/[-_]/).filter(Boolean),
-            version: builtin?.version || "1.0.0",
-            content,
-            content_url: rawUrl,
-            prerequisites: builtin?.prerequisites,
-            compatibility: builtin?.compatibility || ["claude", "cursor"],
-          } satisfies RegistrySkill;
-        }),
-      );
-
-      return dedupeRegistrySkills(remoteSkills.filter(isDefined));
     },
     [registrySkills, t],
   );
@@ -711,7 +605,7 @@ export function SkillStore() {
           if (source.type === "git-repo") {
             skillsForSource = isLikelyLocalSource(source.url)
               ? await loadLocalDirectoryStore(source.url)
-              : await loadGitHubSkillRepo(source.url);
+              : await loadGitHubRepoSkills(source.url);
           } else if (source.type === "skills-sh") {
             skillsForSource = await loadSkillsShStore();
           } else if (source.type === "marketplace-json") {
@@ -750,7 +644,7 @@ export function SkillStore() {
     },
     [
       customStoreSources,
-      loadGitHubSkillRepo,
+      loadGitHubRepoSkills,
       loadLocalDirectoryStore,
       loadMarketplaceStore,
       loadSkillsShStore,
@@ -758,6 +652,10 @@ export function SkillStore() {
       t,
     ],
   );
+
+  useEffect(() => {
+    loadStoreSourceRef.current = loadStoreSource;
+  }, [loadStoreSource]);
 
   useEffect(() => {
     if (!isSelectedSourceRemote) return;
@@ -772,20 +670,24 @@ export function SkillStore() {
     let disposed = false;
     let intervalId: number | undefined;
 
-    const refreshStoreSources = async (forceRefresh: boolean) => {
-      if (typeof loadRegistry === "function") {
-        await loadRegistry();
+    const enabledCustomSourceIds = customStoreSources
+      .filter((source) => source.enabled)
+      .map((source) => source.id);
+    const remoteSourceIds = ["claude-code", "community", ...enabledCustomSourceIds];
+
+    const refreshStoreSources = async (forceRefresh: boolean, intervalMs: number | null) => {
+      if (typeof loadRegistryRef.current === "function") {
+        await loadRegistryRef.current();
       }
 
-      const enabledCustomSourceIds = customStoreSources
-        .filter((source) => source.enabled)
-        .map((source) => source.id);
-      const remoteSourceIds = ["claude-code", "community", ...enabledCustomSourceIds];
-
       await Promise.allSettled(
-        remoteSourceIds.map((sourceId) =>
-          loadStoreSource(sourceId, forceRefresh),
-        ),
+        remoteSourceIds.map((sourceId) => {
+          const cachedEntry = remoteStoreEntriesRef.current[sourceId];
+          const nextForceRefresh =
+            forceRefresh &&
+            shouldForceRefreshSource(cachedEntry?.loadedAt, intervalMs);
+          return loadStoreSourceRef.current(sourceId, nextForceRefresh);
+        }),
       );
     };
 
@@ -807,14 +709,12 @@ export function SkillStore() {
         return;
       }
 
-      await refreshStoreSources(true);
-
       if (!intervalMs) {
         return;
       }
 
       intervalId = window.setInterval(() => {
-        void refreshStoreSources(true);
+        void refreshStoreSources(true, intervalMs);
       }, intervalMs);
     };
 
@@ -826,7 +726,7 @@ export function SkillStore() {
         window.clearInterval(intervalId);
       }
     };
-  }, [customStoreSources, loadRegistry, loadStoreSource]);
+  }, [customStoreSources, customStoreSourcesSyncKey]);
 
   const sourceRegistrySkills = useMemo(() => {
     let baseSkills: RegistrySkill[] = [];
@@ -909,7 +809,10 @@ export function SkillStore() {
           securityAudits: skill.security_audits,
           aiConfig: getSafetyScanAIConfig(aiModels),
         });
-        if (report.level === "blocked" || report.level === "high-risk") {
+        const shouldBlockInstall =
+          report.scanMethod === "ai" &&
+          (report.level === "blocked" || report.level === "high-risk");
+        if (shouldBlockInstall) {
           showToast(
             t(
               "skill.safetyScanBlockedInstall",
@@ -918,6 +821,18 @@ export function SkillStore() {
             "error",
           );
           return;
+        }
+        if (
+          report.scanMethod === "static" &&
+          (report.level === "blocked" || report.level === "high-risk")
+        ) {
+          showToast(
+            t(
+              "skill.safetyScanStaticReviewOnly",
+              "Static scan found potentially risky patterns. Review the safety report before installing, but installation is not blocked without AI confirmation.",
+            ),
+            "warning",
+          );
         }
       }
       const result = await installRegistrySkill(skill);

@@ -38,6 +38,7 @@ import {
   downloadSkillExport,
   getErrorMessage,
   getSafetyScanAIConfig,
+  groupSkillSafetyFindings,
   resolveSkillDescription,
   stripFrontmatter,
 } from "./detail-utils";
@@ -46,6 +47,7 @@ import { SkillVersionHistoryModal } from "./SkillVersionHistoryModal";
 import type { SkillSafetyReport } from "@prompthub/shared/types";
 import {
   getSkillSafetyFindingTitle,
+  getSkillSafetyMethodDescription,
   getSkillSafetySummary,
 } from "./safety-i18n";
 import { getRuntimeCapabilities } from "../../runtime";
@@ -147,6 +149,10 @@ export function SkillFullDetailPage() {
         : safetyReport?.level === "warn"
           ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
           : "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  const groupedSafetyFindings = useMemo(
+    () => groupSkillSafetyFindings(safetyReport?.findings ?? []),
+    [safetyReport?.findings],
+  );
 
   const translationCacheKey = selectedSkill
     ? `skill_${selectedSkill.id}_${targetLang}_${translationMode}`
@@ -1064,16 +1070,19 @@ export function SkillFullDetailPage() {
                 )}
               </span>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+              {getSkillSafetyMethodDescription(t, safetyReport)}
+            </p>
 
             {/* Findings list */}
             <div className="space-y-2">
-              {(safetyReport.findings ?? []).length === 0 ? (
+              {groupedSafetyFindings.length === 0 ? (
                 <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
                   <CheckCircleIcon className="w-4 h-4 shrink-0" />
                   {t("skill.safetyNoFindings", "No issues found")}
                 </div>
               ) : (
-                safetyReport.findings.map((finding, idx) => {
+                groupedSafetyFindings.map((finding, idx) => {
                   const severityConfig = {
                     high: {
                       cls: "border-red-500/30 bg-red-500/5",
@@ -1120,9 +1129,14 @@ export function SkillFullDetailPage() {
                             >
                               {cfg.label}
                             </span>
-                            {finding.filePath && (
+                            {finding.count > 1 && (
+                              <span className="text-[10px] text-muted-foreground font-medium">
+                                × {finding.count}
+                              </span>
+                            )}
+                            {finding.filePaths[0] && (
                               <span className="text-[10px] text-muted-foreground font-mono truncate">
-                                {finding.filePath}
+                                {finding.filePaths[0]}
                               </span>
                             )}
                           </div>
@@ -1131,10 +1145,27 @@ export function SkillFullDetailPage() {
                               {finding.detail}
                             </p>
                           )}
-                          {finding.evidence && (
+                          {finding.evidences[0] && (
                             <code className="mt-1.5 block text-[11px] bg-muted/60 rounded px-2 py-1 text-muted-foreground font-mono break-all">
-                              {finding.evidence}
+                              {finding.evidences[0]}
                             </code>
+                          )}
+                          {finding.filePaths.length > 1 && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {finding.filePaths.slice(1, 5).map((filePath) => (
+                                <span
+                                  key={filePath}
+                                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground font-mono"
+                                >
+                                  {filePath}
+                                </span>
+                              ))}
+                              {finding.filePaths.length > 5 && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                                  +{finding.filePaths.length - 5}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>

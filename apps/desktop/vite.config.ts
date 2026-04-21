@@ -53,6 +53,9 @@ export default defineConfig({
       "@renderer": path.resolve(__dirname, "src/renderer"),
     },
   },
+  optimizeDeps: {
+    include: ["fflate"],
+  },
   build: {
     outDir: "out/renderer",
     // Performance: Disable sourcemap in production to reduce bundle size

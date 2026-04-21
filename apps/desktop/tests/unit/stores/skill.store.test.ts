@@ -105,6 +105,17 @@ describe("skill store", () => {
     expect(state.remoteStoreEntries["custom-1"]).toBeUndefined();
   });
 
+  it("loadRegistry does not prefetch remote content", () => {
+    const fetchRemoteContent = vi.fn();
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+
+    useSkillStore.getState().loadRegistry();
+
+    const state = useSkillStore.getState();
+    expect(state.registrySkills.length).toBeGreaterThan(0);
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
+  });
+
   it("syncs an intentionally empty SKILL.md back to the local repo on update", async () => {
     const update = vi.fn().mockResolvedValue({
       id: "skill-1",

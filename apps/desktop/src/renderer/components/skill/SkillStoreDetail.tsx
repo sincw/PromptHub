@@ -26,6 +26,7 @@ import type {
 } from "@prompthub/shared/types";
 import {
   getErrorMessage,
+  groupSkillSafetyFindings,
   getSafetyScanAIConfig,
   renderImmersiveSegments,
   stripFrontmatter,
@@ -33,11 +34,10 @@ import {
 import {
   getSkillSafetyFindingTitle,
   getSkillSafetyLevelLabel,
+  getSkillSafetyMethodDescription,
   getSkillSafetySummary,
 } from "./safety-i18n";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeSanitize from "rehype-sanitize";
+import { SkillMarkdown } from "./SkillMarkdown";
 
 interface SkillStoreDetailProps {
   skill: RegistrySkill;
@@ -83,6 +83,9 @@ export function SkillStoreDetail({
   );
   const [pendingHighRiskInstallReport, setPendingHighRiskInstallReport] =
     useState<SkillSafetyReport | null>(null);
+  const groupedSafetyFindings = safetyReport
+    ? groupSkillSafetyFindings(safetyReport.findings ?? [])
+    : [];
   const [showTranslation, setShowTranslation] = useState(false);
   const [deploySkill, setDeploySkill] = useState<Skill | null>(null);
 
@@ -233,7 +236,9 @@ export function SkillStoreDetail({
 
       if (autoScanBeforeInstall) {
         const report = await scanSafety();
-        if (report?.level === "blocked") {
+        const shouldBlockInstall =
+          report?.scanMethod === "ai" && report.level === "blocked";
+        if (shouldBlockInstall) {
           showToast(
             t(
               "skill.safetyScanBlockedInstall",
@@ -243,9 +248,21 @@ export function SkillStoreDetail({
           );
           return;
         }
-        if (report?.level === "high-risk") {
+        if (report?.scanMethod === "ai" && report.level === "high-risk") {
           setPendingHighRiskInstallReport(report);
           return;
+        }
+        if (
+          report?.scanMethod === "static" &&
+          (report.level === "blocked" || report.level === "high-risk")
+        ) {
+          showToast(
+            t(
+              "skill.safetyScanStaticReviewOnly",
+              "Static scan found potentially risky patterns. Review the safety report before installing, but installation is not blocked without AI confirmation.",
+            ),
+            "warning",
+          );
         }
       }
 
@@ -387,21 +404,15 @@ export function SkillStoreDetail({
                             key={i}
                             className="border-l-2 border-primary/40 pl-3 my-1 text-primary/70 text-[12px] italic"
                           >
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              rehypePlugins={[rehypeSanitize]}
-                            >
-                              {seg.text}
-                            </ReactMarkdown>
+                            <SkillMarkdown content={seg.text} />
                           </div>
                         ) : (
-                          <ReactMarkdown
+                          <SkillMarkdown
                             key={i}
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeSanitize]}
-                          >
-                            {seg.text}
-                          </ReactMarkdown>
+                            content={seg.text}
+                            sourceUrl={skill.source_url}
+                            contentUrl={skill.content_url}
+                          />
                         ),
                       )}
                     </div>
@@ -412,12 +423,7 @@ export function SkillStoreDetail({
               return (
                 <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
                   <div className="markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeSanitize]}
-                    >
-                      {cachedTranslation}
-                    </ReactMarkdown>
+                    <SkillMarkdown content={cachedTranslation} />
                   </div>
                 </div>
               );
@@ -426,12 +432,11 @@ export function SkillStoreDetail({
             return (
               <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
                 <div className="markdown-body">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeSanitize]}
-                  >
-                    {originalContent}
-                  </ReactMarkdown>
+                  <SkillMarkdown
+                    content={originalContent}
+                    sourceUrl={skill.source_url}
+                    contentUrl={skill.content_url}
+                  />
                 </div>
               </div>
             );
@@ -575,15 +580,21 @@ export function SkillStoreDetail({
                   {getSkillSafetySummary(t, safetyReport)}
                 </p>
               )}
-              {safetyReport && safetyReport.findings.length > 0 && (
+              {safetyReport && (
+                <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">
+                  {getSkillSafetyMethodDescription(t, safetyReport)}
+                </p>
+              )}
+              {groupedSafetyFindings.length > 0 && (
                 <ul className="mt-1.5 space-y-0.5">
-                  {safetyReport.findings.slice(0, 3).map((finding) => (
+                  {groupedSafetyFindings.slice(0, 3).map((finding) => (
                     <li
-                      key={`${finding.code}-${finding.filePath || finding.evidence || ""}`}
+                      key={`${finding.code}-${finding.filePaths[0] || finding.evidences[0] || ""}`}
                       className="text-[11px] text-muted-foreground"
                     >
                       • {getSkillSafetyFindingTitle(t, finding)}
-                      {finding.filePath ? ` · ${finding.filePath}` : ""}
+                      {finding.count > 1 ? ` × ${finding.count}` : ""}
+                      {finding.filePaths[0] ? ` · ${finding.filePaths[0]}` : ""}
                     </li>
                   ))}
                 </ul>

@@ -38,7 +38,7 @@ describe("FolderDB (in-memory SQLite)", () => {
       expect(folder.name).toBe("Work");
       expect(folder.order).toBe(0);
       expect(folder.isPrivate).toBe(false);
-      expect(folder.parentId).toBeNull();
+      expect(folder.parentId).toBeUndefined();
     });
 
     it("assigns incremental sort_order within same parent", () => {
@@ -249,7 +249,7 @@ describe("FolderDB (in-memory SQLite)", () => {
       const folder = db.getById("manual-id");
       expect(folder).not.toBeNull();
       // rowToFolder should fall back: updatedAt = updated_at || created_at
-      expect(folder!.updatedAt).toBe(now);
+      expect(folder!.updatedAt).toBe(new Date(now).toISOString());
     });
   });
 
@@ -361,7 +361,7 @@ describe("FolderDB (in-memory SQLite)", () => {
       const movedToRoot = db.update(child.id, {
         parentId: null as unknown as string,
       });
-      expect(db.getById(child.id)!.parentId).toBeNull();
+      expect(db.getById(child.id)!.parentId).toBeUndefined();
     });
 
     // Reorder with non-existent IDs (should not throw, just no-op for those)
@@ -418,7 +418,7 @@ describe("FolderDB (in-memory SQLite)", () => {
       expect(f.icon).toBe("🎯");
 
       db.update(f.id, { icon: null as unknown as string });
-      expect(db.getById(f.id)!.icon).toBeNull();
+      expect(db.getById(f.id)!.icon).toBeUndefined();
     });
 
     // isPrivate toggle

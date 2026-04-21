@@ -8,14 +8,11 @@ import {
   GlobeIcon,
 } from "lucide-react";
 import { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
-import rehypeSanitize from "rehype-sanitize";
-import remarkGfm from "remark-gfm";
 import type { TFunction } from "i18next";
 import type { Skill } from "@prompthub/shared/types";
 import { normalizeStringArray } from "../../services/skill-normalize";
 import { SkillRenderBoundary } from "./SkillRenderBoundary";
+import { SkillMarkdown } from "./SkillMarkdown";
 import { renderImmersiveSegments, stripFrontmatter } from "./detail-utils";
 
 interface SkillPreviewPaneProps {
@@ -182,42 +179,35 @@ export function SkillPreviewPane({
                             key={index}
                             className="border-l-2 border-primary/40 pl-3 my-1 text-primary/70 text-[12px] italic"
                           >
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                            >
-                              {segment.text}
-                            </ReactMarkdown>
+                            <SkillMarkdown content={segment.text} enableHighlight />
                           </div>
                         ) : (
-                          <ReactMarkdown
+                          <SkillMarkdown
                             key={index}
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                          >
-                            {segment.text}
-                          </ReactMarkdown>
+                            content={segment.text}
+                            sourceUrl={selectedSkill.source_url}
+                            contentUrl={selectedSkill.content_url}
+                            enableHighlight
+                          />
                         ),
                       )}
                     </div>
                   ) : (
                     <div className="markdown-body">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                      >
-                        {cachedInstructionsTranslation}
-                      </ReactMarkdown>
+                      <SkillMarkdown
+                        content={cachedInstructionsTranslation}
+                        enableHighlight
+                      />
                     </div>
                   )
                 ) : (
                   <div className="markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeHighlight, rehypeSanitize]}
-                    >
-                      {stripFrontmatter(skillContent)}
-                    </ReactMarkdown>
+                    <SkillMarkdown
+                      content={stripFrontmatter(skillContent)}
+                      sourceUrl={selectedSkill.source_url}
+                      contentUrl={selectedSkill.content_url}
+                      enableHighlight
+                    />
                   </div>
                 )
               ) : (

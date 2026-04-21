@@ -92,7 +92,8 @@ const HIGH_RISK_PATTERNS = [
     title: "Touches persistence or system service mechanisms",
     detail:
       "The skill content refers to launch agents, cron jobs, scheduled tasks, or system services.",
-    regex: /\b(?:launchctl|systemctl|service\s+\w+|crontab|schtasks)\b/i,
+    regex:
+      /\b(?:launchctl|systemctl|service\s+(?:start|stop|restart|reload|enable|disable|status)\b|crontab|schtasks)\b/i,
   },
   {
     code: "secret-access",
@@ -100,7 +101,7 @@ const HIGH_RISK_PATTERNS = [
     detail:
       "The skill content references files that commonly contain credentials or private keys.",
     regex:
-      /(?:\.env\b|id_rsa\b|id_ed25519\b|\.ssh\/|aws\/credentials|\.npmrc\b|\.pypirc\b)/i,
+      /(?:^|[\s"'`(=:\/~])(?:\.env(?:\.[\w.-]+)?\b|id_rsa\b|id_ed25519\b|\.ssh\/|aws\/credentials\b|\.npmrc\b|\.pypirc\b)/im,
   },
   {
     code: "security-bypass",
@@ -116,7 +117,7 @@ const HIGH_RISK_PATTERNS = [
     detail:
       "The skill content combines secret-like file references with remote upload commands.",
     regex:
-      /(?:\.env\b|id_rsa\b|\.ssh\/|aws\/credentials)[\s\S]{0,120}?\b(?:curl|wget|scp|rsync|nc|ftp)\b/i,
+      /(?:^|[\s"'`(=:\/~])(?:\.env(?:\.[\w.-]+)?\b|id_rsa\b|\.ssh\/|aws\/credentials\b)[\s\S]{0,120}?\b(?:curl|wget|scp|rsync|nc|ftp)\b/im,
   },
 ];
 
@@ -140,9 +141,50 @@ const WARN_PATTERNS = [
     title: "Mutates shell environment or startup files",
     detail:
       "The skill content edits shell rc files or environment variables, which may have long-lived effects.",
-    regex: /\b(?:\.zshrc|\.bashrc|\.profile|export\s+[A-Z_][A-Z0-9_]*)\b/i,
+    regex:
+      /(?:\.(?:zshrc|bashrc|profile)\b|(?:^|[^A-Za-z0-9_])export\s+[A-Z_][A-Z0-9_]*\b)/m,
   },
 ];
+
+interface PatternRule {
+  code: string;
+  title: string;
+  detail: string;
+  regex: RegExp;
+}
+
+function createRegexMatcher(regex: RegExp): RegExp {
+  const flags = regex.flags.includes("g") ? regex.flags : `${regex.flags}g`;
+  return new RegExp(regex.source, flags);
+}
+
+function extractMatches(text: string, regex: RegExp): string[] {
+  const matcher = createRegexMatcher(regex);
+  const matches: string[] = [];
+
+  for (const match of text.matchAll(matcher)) {
+    const candidate = match[0]?.trim();
+    if (!candidate) {
+      continue;
+    }
+    matches.push(candidate.slice(0, 160));
+    if (matches.length >= 3) {
+      break;
+    }
+  }
+
+  return matches;
+}
+
+function shouldIgnoreRuleMatch(rule: PatternRule, evidence: string): boolean {
+  const normalized = evidence.trim();
+
+  if (rule.code === "secret-access") {
+    return /(?:process|import\.meta)\.env\b/i.test(normalized);
+  }
+
+  return false;
+}
 
 interface ScanDeps {
   now?: () => number;
@@ -189,43 +231,49 @@ function scanTextContent(
   filePath?: string,
 ): void {
   for (const rule of BLOCK_PATTERNS) {
-    const match = text.match(rule.regex);
-    if (match) {
+    for (const evidence of extractMatches(text, rule.regex)) {
+      if (shouldIgnoreRuleMatch(rule, evidence)) {
+        continue;
+      }
       addFinding(findings, {
         code: rule.code,
         severity: "high",
         title: rule.title,
         detail: rule.detail,
         filePath,
-        evidence: match[0].slice(0, 160),
+        evidence,
       });
     }
   }
 
   for (const rule of HIGH_RISK_PATTERNS) {
-    const match = text.match(rule.regex);
-    if (match) {
+    for (const evidence of extractMatches(text, rule.regex)) {
+      if (shouldIgnoreRuleMatch(rule, evidence)) {
+        continue;
+      }
       addFinding(findings, {
         code: rule.code,
         severity: "high",
         title: rule.title,
         detail: rule.detail,
         filePath,
-        evidence: match[0].slice(0, 160),
+        evidence,
       });
     }
   }
 
   for (const rule of WARN_PATTERNS) {
-    const match = text.match(rule.regex);
-    if (match) {
+    for (const evidence of extractMatches(text, rule.regex)) {
+      if (shouldIgnoreRuleMatch(rule, evidence)) {
+        continue;
+      }
       addFinding(findings, {
         code: rule.code,
         severity: "warn",
         title: rule.title,
         detail: rule.detail,
         filePath,
-        evidence: match[0].slice(0, 160),
+        evidence,
       });
     }
   }
@@ -436,6 +484,7 @@ function scanRepoFiles(
   findings: SkillSafetyFinding[],
 ): number {
   let checkedFileCount = 0;
+  const scriptFiles: string[] = [];
 
   for (const file of files) {
     if (file.isDirectory) {
@@ -471,19 +520,29 @@ function scanRepoFiles(
         filePath: file.path,
       });
     } else if (SCRIPT_FILE_EXTENSIONS.has(ext) && file.path !== "SKILL.md") {
-      addFinding(findings, {
-        code: "script-file",
-        severity: "warn",
-        title: "Repository contains executable scripts",
-        detail:
-          "The skill repo contains script files. That is common for advanced skills, but it increases review surface.",
-        filePath: file.path,
-      });
+      scriptFiles.push(file.path);
     }
 
     if (file.content && !file.content.startsWith("[")) {
       scanTextContent(findings, file.content, file.path);
     }
+  }
+
+  if (scriptFiles.length > 0) {
+    addFinding(findings, {
+      code: "script-file",
+      severity: "warn",
+      title: "Repository contains executable scripts",
+      detail:
+        scriptFiles.length === 1
+          ? "The skill repo contains one script file. That is common for advanced skills, but it increases review surface."
+          : `The skill repo contains ${scriptFiles.length} script files. That is common for advanced skills, but it increases review surface.`,
+      filePath: scriptFiles[0],
+      evidence:
+        scriptFiles.length <= 5
+          ? scriptFiles.join(", ")
+          : `${scriptFiles.slice(0, 5).join(", ")} +${scriptFiles.length - 5} more`,
+    });
   }
 
   return checkedFileCount;

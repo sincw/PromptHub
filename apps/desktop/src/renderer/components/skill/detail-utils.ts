@@ -2,6 +2,7 @@ import type { TFunction } from "i18next";
 import type {
   SafetyScanAIConfig,
   Skill,
+  SkillSafetyFinding,
   SkillVersion,
 } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
@@ -39,11 +40,27 @@ export interface SkillSourceMeta {
   sourceLabel: string;
 }
 
+export interface GitHubMarkdownBase {
+  hrefBase: string;
+  imageBase: string;
+}
+
 export interface DiffLine {
   type: "add" | "remove" | "unchanged";
   content: string;
   oldLineNum?: number;
   newLineNum?: number;
+}
+
+export interface GroupedSkillSafetyFinding {
+  code: string;
+  severity: SkillSafetyFinding["severity"];
+  title: string;
+  detail: string;
+  count: number;
+  filePaths: string[];
+  evidences: string[];
+  findings: SkillSafetyFinding[];
 }
 
 export function getProtocolDisplayLabel(
@@ -149,6 +166,150 @@ export function getSkillSourceMeta(
     shortValue,
     sourceLabel,
   };
+}
+
+export function resolveGitHubMarkdownBase(
+  sourceUrl?: string,
+  contentUrl?: string,
+): GitHubMarkdownBase | null {
+  const parseTreeUrl = (url: string): GitHubMarkdownBase | null => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.toLowerCase() !== "github.com") {
+        return null;
+      }
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      if (parts.length >= 4 && parts[2] === "tree") {
+        const owner = parts[0];
+        const repo = parts[1];
+        const branch = parts[3];
+        const directoryPath = parts.slice(4).join("/");
+        const normalizedDirectory = directoryPath ? `${directoryPath}/` : "";
+        return {
+          hrefBase: `https://github.com/${owner}/${repo}/blob/${branch}/${normalizedDirectory}`,
+          imageBase: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${normalizedDirectory}`,
+        };
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  const parseRawUrl = (url: string): GitHubMarkdownBase | null => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname.toLowerCase() !== "raw.githubusercontent.com") {
+        return null;
+      }
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      if (parts.length >= 4) {
+        const owner = parts[0];
+        const repo = parts[1];
+        const branch = parts[2];
+        const directoryPath = parts.slice(3, -1).join("/");
+        const normalizedDirectory = directoryPath ? `${directoryPath}/` : "";
+        return {
+          hrefBase: `https://github.com/${owner}/${repo}/blob/${branch}/${normalizedDirectory}`,
+          imageBase: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${normalizedDirectory}`,
+        };
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  if (sourceUrl) {
+    const parsed = parseTreeUrl(sourceUrl);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  if (contentUrl) {
+    const parsed = parseRawUrl(contentUrl);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+export function resolveGitHubMarkdownUrl(
+  rawUrl: string,
+  base: GitHubMarkdownBase | null,
+  kind: "link" | "image",
+): string {
+  const trimmed = rawUrl.trim();
+  if (!trimmed || !base) {
+    return trimmed;
+  }
+  if (
+    /^(https?:|data:|mailto:|tel:|#)/i.test(trimmed) ||
+    trimmed.startsWith("local-image://")
+  ) {
+    return trimmed;
+  }
+
+  const normalized = trimmed.replace(/^\.\//, "");
+  const baseUrl = kind === "image" ? base.imageBase : base.hrefBase;
+  try {
+    return new URL(normalized, baseUrl).toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+export function groupSkillSafetyFindings(
+  findings: SkillSafetyFinding[],
+): GroupedSkillSafetyFinding[] {
+  const grouped = new Map<string, GroupedSkillSafetyFinding>();
+
+  for (const finding of findings) {
+    const key = `${finding.code}::${finding.severity}`;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        code: finding.code,
+        severity: finding.severity,
+        title: finding.title,
+        detail: finding.detail,
+        count: 1,
+        filePaths: finding.filePath ? [finding.filePath] : [],
+        evidences: finding.evidence ? [finding.evidence] : [],
+        findings: [finding],
+      });
+      continue;
+    }
+
+    existing.count += 1;
+    existing.findings.push(finding);
+    if (finding.filePath && !existing.filePaths.includes(finding.filePath)) {
+      existing.filePaths.push(finding.filePath);
+    }
+    if (finding.evidence && !existing.evidences.includes(finding.evidence)) {
+      existing.evidences.push(finding.evidence);
+    }
+  }
+
+  const severityOrder: Record<SkillSafetyFinding["severity"], number> = {
+    high: 0,
+    warn: 1,
+    info: 2,
+  };
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    const severityDiff = severityOrder[a.severity] - severityOrder[b.severity];
+    if (severityDiff !== 0) {
+      return severityDiff;
+    }
+    if (b.count !== a.count) {
+      return b.count - a.count;
+    }
+    return a.title.localeCompare(b.title);
+  });
 }
 
 export function renderImmersiveSegments(raw: string): ImmersiveSegment[] {

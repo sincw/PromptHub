@@ -29,6 +29,7 @@ import {
   ICON_TERMINAL,
 } from "@prompthub/shared/constants/skill-icons";
 import { SkillIcon } from "./SkillIcon";
+import { useSettingsStore } from "../../stores/settings.store";
 
 interface SkillIconPickerProps {
   name: string;
@@ -49,7 +50,7 @@ interface PresetIconOption {
   background: string;
 }
 
-const PRESET_BACKGROUNDS = [
+const LIGHT_PRESET_BACKGROUNDS = [
   "#f2d6de",
   "#e8d9f7",
   "#dce8ff",
@@ -64,7 +65,22 @@ const PRESET_BACKGROUNDS = [
   "#dce7e6",
 ];
 
-const PRESET_ICONS: PresetIconOption[] = [
+const DARK_PRESET_BACKGROUNDS = [
+  "#4f2d3b",
+  "#4a3559",
+  "#30435f",
+  "#27473f",
+  "#5b4032",
+  "#5c4b22",
+  "#28414f",
+  "#38385f",
+  "#5a4338",
+  "#465032",
+  "#514159",
+  "#364748",
+];
+
+const LIGHT_PRESET_ICONS: PresetIconOption[] = [
   { id: "document", name: "Document", iconUrl: ICON_DOCUMENT, background: "#efe6dc" },
   { id: "folder", name: "Folder", iconUrl: ICON_FOLDER, background: "#dce8ff" },
   { id: "pdf", name: "PDF", iconUrl: ICON_PDF, background: "#e8d7f3" },
@@ -92,6 +108,34 @@ const PRESET_ICONS: PresetIconOption[] = [
   { id: "openai", name: "OpenAI", iconUrl: ICON_OPENAI, background: "#e9dfd0" },
 ];
 
+const DARK_PRESET_ICONS: PresetIconOption[] = [
+  { id: "document", name: "Document", iconUrl: ICON_DOCUMENT, background: "#5b463b" },
+  { id: "folder", name: "Folder", iconUrl: ICON_FOLDER, background: "#334766" },
+  { id: "pdf", name: "PDF", iconUrl: ICON_PDF, background: "#4c3b63" },
+  { id: "github", name: "GitHub", iconUrl: ICON_GITHUB, background: "#39425f" },
+  { id: "terminal", name: "Terminal", iconUrl: ICON_TERMINAL, background: "#314646" },
+  { id: "mcp", name: "MCP", iconUrl: ICON_MCP, background: "#284842" },
+  { id: "html", name: "HTML", iconUrl: ICON_HTML5, background: "#5d4036" },
+  { id: "css", name: "CSS", iconUrl: ICON_CSS, background: "#5b3441" },
+  { id: "react", name: "React", iconUrl: ICON_REACT, background: "#224a5b" },
+  { id: "docker", name: "Docker", iconUrl: ICON_DOCKER, background: "#304c6d" },
+  { id: "database", name: "PostgreSQL", iconUrl: ICON_POSTGRESQL, background: "#475536" },
+  { id: "chart", name: "Chart", iconUrl: ICON_BARCHART, background: "#4a405d" },
+  { id: "research", name: "Research", iconUrl: ICON_RESEARCH, background: "#29494e" },
+  { id: "target", name: "Target", iconUrl: ICON_TARGET, background: "#5f5129" },
+  { id: "image", name: "Image", iconUrl: ICON_IMAGE, background: "#304863" },
+  { id: "design", name: "Design", iconUrl: ICON_BRUSH, background: "#5d3642" },
+  { id: "palette", name: "Palette", iconUrl: ICON_SWATCHES, background: "#503f5d" },
+  { id: "playwright", name: "Playwright", iconUrl: ICON_PLAYWRIGHT, background: "#4b3c5f" },
+  { id: "architecture", name: "Architecture", iconUrl: ICON_ARCHITECTURE, background: "#344a4a" },
+  { id: "globe", name: "Globe", iconUrl: ICON_GLOBE, background: "#284953" },
+  { id: "lightbulb", name: "Idea", iconUrl: ICON_LIGHTBULB, background: "#5a4a25" },
+  { id: "pen", name: "Writing", iconUrl: ICON_PEN, background: "#5c4337" },
+  { id: "security", name: "Security", iconUrl: ICON_LOCK, background: "#433f5f" },
+  { id: "bot", name: "Bot", iconUrl: ICON_BOT, background: "#344864" },
+  { id: "openai", name: "OpenAI", iconUrl: ICON_OPENAI, background: "#54493f" },
+];
+
 export function SkillIconPicker({
   name,
   iconUrl,
@@ -100,9 +144,17 @@ export function SkillIconPicker({
   onChange,
 }: SkillIconPickerProps) {
   const { t } = useTranslation();
+  const isDarkMode = useSettingsStore((state) => state.isDarkMode);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const presetIcons = useMemo(() => PRESET_ICONS, []);
+  const presetIcons = useMemo(
+    () => (isDarkMode ? DARK_PRESET_ICONS : LIGHT_PRESET_ICONS),
+    [isDarkMode],
+  );
+  const presetBackgrounds = useMemo(
+    () => (isDarkMode ? DARK_PRESET_BACKGROUNDS : LIGHT_PRESET_BACKGROUNDS),
+    [isDarkMode],
+  );
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -124,7 +176,7 @@ export function SkillIconPicker({
   };
 
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+    <div className="space-y-4 rounded-xl border border-border bg-muted/10 dark:bg-muted/5 p-4">
       <div className="flex items-start gap-4">
         <div className="shrink-0">
           <SkillIcon
@@ -198,8 +250,8 @@ export function SkillIconPicker({
                 }
                 className={`rounded-xl border p-2 transition-all ${
                   active
-                    ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(96,165,250,0.2)]"
-                    : "border-border bg-background hover:border-primary/40 hover:bg-accent/60"
+                    ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(96,165,250,0.2)] dark:bg-primary/15"
+                    : "border-border bg-background/80 dark:bg-background/40 hover:border-primary/40 hover:bg-accent/60"
                 }`}
                 title={preset.name}
               >
@@ -225,12 +277,12 @@ export function SkillIconPicker({
             }
             className={`rounded-xl border p-2 transition-all ${
               !iconUrl && !iconEmoji
-                ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(96,165,250,0.2)]"
-                : "border-border bg-background hover:border-primary/40 hover:bg-accent/60"
+                ? "border-primary bg-primary/10 shadow-[0_0_0_1px_rgba(96,165,250,0.2)] dark:bg-primary/15"
+                : "border-border bg-background/80 dark:bg-background/40 hover:border-primary/40 hover:bg-accent/60"
             }`}
             title={t("skill.useDefaultIcon", "使用默认图标")}
           >
-            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-muted/80 dark:bg-muted/40 text-muted-foreground">
               <ImageIcon className="h-4 w-4" />
             </div>
           </button>
@@ -248,7 +300,7 @@ export function SkillIconPicker({
           )}
         </p>
         <div className="flex flex-wrap gap-2">
-          {PRESET_BACKGROUNDS.map((background) => {
+          {presetBackgrounds.map((background) => {
             const active = iconBackground === background;
             return (
               <button
@@ -263,7 +315,7 @@ export function SkillIconPicker({
                 }
                 className={`h-9 w-9 rounded-xl border transition-all ${
                   active
-                    ? "border-primary ring-2 ring-primary/20"
+                    ? "border-primary ring-2 ring-primary/30"
                     : "border-border hover:border-primary/40"
                 }`}
                 style={{ backgroundColor: background }}
@@ -282,8 +334,8 @@ export function SkillIconPicker({
             }
             className={`inline-flex h-9 items-center rounded-xl border px-3 text-xs font-medium transition-all ${
               !iconBackground
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                ? "border-primary bg-primary/10 text-primary dark:bg-primary/15"
+                : "border-border bg-background/80 dark:bg-background/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
             }`}
           >
             {t("skill.useDefaultBackground", "默认")}

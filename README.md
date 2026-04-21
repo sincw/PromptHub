@@ -14,7 +14,7 @@
   [![GitHub Forks](https://img.shields.io/github/forks/legeling/PromptHub?style=for-the-badge&logo=github)](https://github.com/legeling/PromptHub/network/members)
   [![Downloads](https://img.shields.io/github/downloads/legeling/PromptHub/total?style=for-the-badge&logo=github&color=blue)](https://github.com/legeling/PromptHub/releases)
   
-  [![Version](https://img.shields.io/badge/version-v0.5.2-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
+  [![Version](https://img.shields.io/badge/version-v0.5.4-success?style=for-the-badge)](https://github.com/legeling/PromptHub/releases)
   [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=for-the-badge)](./LICENSE)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge)](https://github.com/legeling/PromptHub/pulls)
   
@@ -55,6 +55,29 @@
 > PromptHub 不仅是 Prompt 管理工具，更是 **AI 技能分发中心**。管理你的 Prompt 和 SKILL.md 技能，一键安装到 Claude Code、Cursor、Windsurf、Codex 等 15+ 主流 AI 编程工具。支持版本控制、变量模板、多模型测试，所有数据都存在本地，隐私安全有保障。
 
 ---
+
+## 目录
+
+- [功能特性](#features)
+- [截图](#screenshots)
+- [安装与部署](#install-and-deploy)
+  - [自部署网页版](#self-hosted-web)
+  - [命令行 CLI](#cli)
+- [快速开始](#quick-start)
+- [技术栈](#tech-stack)
+- [项目结构](#project-structure)
+- [Star History](#star-history)
+- [路线图](#roadmap)
+- [更新日志](#changelog)
+- [贡献](#contributing)
+- [许可证](#license)
+- [支持](#support)
+- [赞助支持](#sponsor)
+- [QQ 交流群](#qq-group)
+
+---
+
+<div id="features"></div>
 
 ## ✨ 功能特性
 
@@ -133,6 +156,8 @@
 </tr>
 </table>
 
+<div id="screenshots"></div>
+
 ## 📸 截图
 
 <div align="center">
@@ -173,7 +198,11 @@
   <img src="./docs/imgs/9-i18n.png" width="80%" alt="多语言支持"/>
 </div>
 
+<div id="install-and-deploy"></div>
+
 ## 安装
+
+<div id="self-hosted-web"></div>
 
 ## 自部署网页版
 
@@ -266,13 +295,13 @@ apps/web/data
 
 ### 下载
 
-从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.5.2：
+从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.5.4：
 
 | 平台    | 下载                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.2-arm64.exe) |
-| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.dmg)     |
-| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.2-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.2_amd64.deb)              |
+| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.4-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.4-arm64.exe) |
+| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.4-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.4-x64.dmg)     |
+| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.4-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.4_amd64.deb)              |
 
 > 💡 **架构选择建议**
 >
@@ -341,6 +370,8 @@ pnpm dev
 # 构建应用
 pnpm build
 ```
+
+<div id="cli"></div>
 
 ## 命令行 CLI
 
@@ -421,6 +452,8 @@ prompthub --app-data-dir /path/to/app-data skill list
 - 桌面版会在首次启动时自动安装 shell 命令包装器
 - 如果你移动了应用安装位置，再次启动 PromptHub 会自动刷新命令包装器路径
 
+<div id="quick-start"></div>
+
 ## 快速开始
 
 ### 1. 创建 Prompt
@@ -460,6 +493,8 @@ prompthub --app-data-dir /path/to/app-data skill list
 
 > 💡 **支持的平台**：Claude Code、GitHub Copilot、Cursor、Windsurf、Kiro、Gemini CLI、Trae、OpenCode、Codex CLI、Roo Code、Amp、OpenClaw、Qoder、QoderWork、CodeBuddy
 
+<div id="tech-stack"></div>
+
 ## 技术栈
 
 | 类别     | 技术                    |
@@ -470,6 +505,8 @@ prompthub --app-data-dir /path/to/app-data skill list
 | 状态管理 | Zustand                 |
 | 本地存储 | SQLite（WASM）          |
 | 构建工具 | Vite + electron-builder |
+
+<div id="project-structure"></div>
 
 ## 项目结构
 
@@ -507,6 +544,8 @@ PromptHub/
 
 代码结构与超长文件治理规范见 [docs/architecture/code-structure-guidelines.md](./docs/architecture/code-structure-guidelines.md)，回归检查清单见 [docs/architecture/refactor-regression-checklist.md](./docs/architecture/refactor-regression-checklist.md)。
 
+<div id="star-history"></div>
+
 ## Star History
 
 <a href="https://star-history.com/#legeling/PromptHub&Date">
@@ -517,14 +556,16 @@ PromptHub/
   </picture>
 </a>
 
+<div id="roadmap"></div>
+
 ## 路线图
 
-### v0.5.2 (当前) 🚀
+### v0.5.4 (当前) 🚀
 
-- [x] **升级前自动备份**：应用内安装更新前自动快照整个 `data/userData` 目录，失败则阻止继续安装
-- [x] **旧数据自动恢复**：当当前库为空时，启动阶段会扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类升级路径
-- [x] **Symlink 安装自动回退**：平台分发创建软链接失败时，会自动降级为复制模式，避免 Windows 权限或文件系统限制导致安装失败
-- [x] **发版文档同步**：README、多语言 README 与官网发布元数据统一同步到 `v0.5.2`
+- [x] **GitHub 仓库导入升级**：导入 Skill 时会先扫描仓库中的多个 `SKILL.md` 并支持多选，不再把整个仓库误当成单个 Skill
+- [x] **README 资源渲染修复**：GitHub 仓库内 Skill 的相对图片和相对链接现在能在商店详情页与已安装预览里正常显示
+- [x] **安全扫描降噪**：修复 `process.env` / `import.meta.env`、`export function` 等静态扫描误报，并将脚本文件告警改为聚合显示
+- [x] **Skill 体验修复**：GitHub 导入弹窗恢复宽版布局与固定底部操作区，Skill 图标选择器补齐暗色模式适配，多语言 `skill.*` 文案补齐
 
 ### v0.4.9
 
@@ -578,26 +619,33 @@ PromptHub/
 - [ ] **增强型变量**：支持选择框、动态日期等更复杂的变量类型
 - [ ] **技能市场**：支持用户上传和分享自己创建的技能
 
+<div id="changelog"></div>
+
 ## 更新日志
 
 查看完整的更新日志：**[CHANGELOG.md](./CHANGELOG.md)**
 
-### 最新版本 v0.5.2 (2026-04-16)
+### 最新版本 v0.5.4 (2026-04-21)
 
-**数据安全 / Data Safety**
+**Skill 导入 / Skill Import**
 
-- 🛡️ **升级前自动备份 data 目录**：应用内安装更新前，会先为当前 `userData` 目录创建本地快照；如果备份失败，会直接阻止安装
-- 🔄 **旧数据自动恢复**：当前数据库为空时，会扫描旧数据位置并提供一键恢复，修复升级后“只看到空库或默认数据”的场景
+- 🧩 **GitHub 仓库导入改为先扫描再选择**：支持扫描多个 `SKILL.md` 并多选导入，没有 `SKILL.md` 时会回退到仓库根目录 `README.md`
+- 🖼️ **README 相对资源修复**：来自 GitHub 仓库的 README 相对图片和链接现在会自动解析为可访问地址
 
-**Skill 分发 / Skill Deployment**
+**安全与可读性 / Safety & Readability**
 
-- 🔗 **Symlink 自动回退复制模式**：当平台目录无法创建符号链接时，会自动降级为复制安装，不再因为 `EPERM` / `EACCES` / `ENOTSUP` 直接失败
+- 🛡️ **静态安全扫描降噪**：修复 `process.env` / `import.meta.env`、`export function` 等误报，并将脚本文件警告改为汇总展示
+- 📋 **安全报告分组展示**：商店详情页与 Skill 详情页的安全 findings 现在按规则分组显示，减少重复告警刷屏
 
-**维护 / Maintenance**
+**界面与文档 / UI & Docs**
 
-- 📚 **发版文档同步**：README、多语言 README 与官网发布元数据统一同步到 `v0.5.2`
+- 🪟 **GitHub 导入弹窗布局修复**：恢复标准宽弹窗、固定底部操作区，只让结果区域滚动
+- 🌙 **Skill 图标选择器暗色模式修复**：深色主题下切换到更低亮度的预设色板，并自动计算自定义背景的可读前景色
+- 🌍 **多语言与发版文档同步**：补齐 `skill.*` locale 文案，并同步 README、多语言 README 与官网发布元数据到 `v0.5.4`
 
 > [查看完整更新日志](./CHANGELOG.md)
+
+<div id="contributing"></div>
 
 ## 贡献
 
@@ -609,9 +657,13 @@ PromptHub/
 4. 推送到分支 (`git push origin feature/amazing-feature`)
 5. 创建 Pull Request
 
+<div id="license"></div>
+
 ## 许可证
 
 本项目采用 [AGPL-3.0 License](./LICENSE) 开源协议。
+
+<div id="support"></div>
 
 ## 支持
 
@@ -651,6 +703,8 @@ PromptHub/
 
 ---
 
+<div id="sponsor"></div>
+
 ## 赞助支持 / Sponsor
 
 如果 PromptHub 对你的工作有帮助，欢迎请作者喝杯咖啡！
@@ -672,6 +726,21 @@ If PromptHub is helpful to your work, feel free to buy the author a coffee!
       </td>
     </tr>
   </table>
+</div>
+
+---
+
+<div id="qq-group"></div>
+
+## QQ 交流群
+
+欢迎加入 PromptHub QQ 交流群，一起反馈问题、交流使用方式和讨论新功能。
+
+- 群号：`704298939`
+
+<div align="center">
+  <img src="./docs/imgs/qq-group.jpg" width="320" alt="PromptHub QQ 交流群二维码"/>
+  <p><strong>扫码加入 PromptHub QQ 交流群</strong></p>
 </div>
 
 <div id="backers"></div>

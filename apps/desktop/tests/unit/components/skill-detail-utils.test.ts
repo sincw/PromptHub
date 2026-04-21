@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   generateTextDiff,
   getSkillSourceMeta,
+  groupSkillSafetyFindings,
+  resolveGitHubMarkdownBase,
+  resolveGitHubMarkdownUrl,
   resolveSkillDescription,
   restoreSkillVersion,
   stripFrontmatter,
@@ -95,5 +98,73 @@ description: |
 
     expect(github?.sourceLabel).toBe("Imported via Store");
     expect(local?.sourceLabel).toBe("Imported from Cursor Folder");
+  });
+
+  it("resolves GitHub markdown base paths for repo subdirectories", () => {
+    expect(
+      resolveGitHubMarkdownBase(
+        "https://github.com/anthropics/skills/tree/main/skills/pdf",
+      ),
+    ).toEqual({
+      hrefBase: "https://github.com/anthropics/skills/blob/main/skills/pdf/",
+      imageBase:
+        "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/",
+    });
+  });
+
+  it("rewrites relative markdown assets against GitHub repo paths", () => {
+    const base = resolveGitHubMarkdownBase(
+      "https://github.com/anthropics/skills/tree/main/skills/pdf",
+    );
+
+    expect(resolveGitHubMarkdownUrl("./images/demo.png", base, "image")).toBe(
+      "https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/images/demo.png",
+    );
+    expect(resolveGitHubMarkdownUrl("docs/setup.md", base, "link")).toBe(
+      "https://github.com/anthropics/skills/blob/main/skills/pdf/docs/setup.md",
+    );
+  });
+
+  it("groups repeated safety findings by code and severity", () => {
+    const grouped = groupSkillSafetyFindings([
+      {
+        code: "script-file",
+        severity: "warn",
+        title: "Repository contains executable scripts",
+        detail: "repo contains scripts",
+        filePath: "scripts/a.ts",
+        evidence: "scripts/a.ts",
+      },
+      {
+        code: "script-file",
+        severity: "warn",
+        title: "Repository contains executable scripts",
+        detail: "repo contains scripts",
+        filePath: "scripts/b.ts",
+        evidence: "scripts/b.ts",
+      },
+      {
+        code: "secret-access",
+        severity: "high",
+        title: "Reads secret-bearing paths",
+        detail: "references .env",
+        filePath: "SKILL.md",
+        evidence: ".env",
+      },
+    ] as any);
+
+    expect(grouped).toHaveLength(2);
+    expect(grouped[0]).toMatchObject({
+      code: "secret-access",
+      severity: "high",
+      count: 1,
+      filePaths: ["SKILL.md"],
+    });
+    expect(grouped[1]).toMatchObject({
+      code: "script-file",
+      severity: "warn",
+      count: 2,
+      filePaths: ["scripts/a.ts", "scripts/b.ts"],
+    });
   });
 });

@@ -40,6 +40,21 @@ function getColorFromName(name: string): string {
   return COLORS[Math.abs(hash) % COLORS.length];
 }
 
+function getAccessibleForegroundColor(backgroundColor: string): string {
+  const normalized = backgroundColor.trim();
+  const hex = normalized.startsWith("#") ? normalized.slice(1) : normalized;
+  if (!/^[0-9a-f]{6}$/i.test(hex)) {
+    return "rgb(15 23 42)";
+  }
+
+  const r = Number.parseInt(hex.slice(0, 2), 16);
+  const g = Number.parseInt(hex.slice(2, 4), 16);
+  const b = Number.parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+  return luminance > 0.72 ? "rgb(30 41 59)" : "rgb(248 250 252)";
+}
+
 /**
  * Skill icon component with fallback chain: URL → Emoji → Initial → Default
  * 技能图标组件，降级链：URL → Emoji → 首字母 → 默认图标
@@ -57,11 +72,14 @@ export function SkillIcon({
   const colorClass = useMemo(() => getColorFromName(name), [name]);
   const initial = name.charAt(0).toUpperCase();
   const hasCustomBackground = Boolean(backgroundColor);
+  const customForegroundColor = backgroundColor
+    ? getAccessibleForegroundColor(backgroundColor)
+    : undefined;
   const containerClass = hasCustomBackground
-    ? 'bg-transparent text-slate-900'
+    ? 'bg-transparent'
     : colorClass;
   const containerStyle = backgroundColor
-    ? { backgroundColor }
+    ? { backgroundColor, color: customForegroundColor }
     : undefined;
 
   // Priority 1: URL icon
@@ -110,10 +128,10 @@ export function SkillIcon({
 
   // Priority 4: Default CuboidIcon
   return (
-    <div
-      className={`${sizeConfig.container} rounded-xl flex items-center justify-center ${hasCustomBackground ? 'bg-transparent text-slate-700' : 'bg-primary/10 text-primary'} ${className}`}
-      style={containerStyle}
-    >
+      <div
+        className={`${sizeConfig.container} rounded-xl flex items-center justify-center ${hasCustomBackground ? 'bg-transparent' : 'bg-primary/10 text-primary'} ${className}`}
+        style={containerStyle}
+      >
       <CuboidIcon className={sizeConfig.icon} />
     </div>
   );

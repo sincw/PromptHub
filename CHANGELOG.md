@@ -1,24 +1,28 @@
 ## [Unreleased]
 
-> ⚠️ **升级前请务必备份数据 / Please back up your data before upgrading**
->
-> 本次更新涉及数据导出格式与设置页结构调整，建议在升级前通过 `设置 → 数据 → 压缩备份` 或手动复制 `userData` 目录做好备份，以防意外。
->
-> This release modifies the data export format and data-settings UI. Back up via **Settings → Data → Compressed Backup** (or copy your `userData` folder) before upgrading.
-
-### 新功能 / Added
-
-- 📦 **选择性导出为 ZIP（可读文件结构）**：`设置 → 数据 → 导出数据` 现在在 Electron 桌面端会生成 `.zip` 文件，ZIP 内含 `prompts/*.md`、`skills/*/SKILL.md`、`images/` 等可直接阅读的文件，以及 `import-with-prompthub.json` 供重新导入；非 Electron 环境 fallback 为原有 JSON 下载
-  - **Selective Export as ZIP (readable file structure)**: *Settings → Data → Export* on Electron now generates a `.zip` containing human-readable `prompts/*.md`, `skills/*/SKILL.md`, `images/`, and an `import-with-prompthub.json` for re-import; non-Electron environments fall back to the existing JSON download
+## [0.5.4] - 2026-04-21
 
 ### 修复 / Fixed
 
-- 🗂️ **数据设置页 UI 重构**：「升级备份」改为「回滚数据（升级前快照）」语义，「扫描历史数据」文案精简为急救入口，底部数据路径块仅显示绝对路径；修复「确认覆盖」对话框加载态与关闭时 dismiss 标记写入问题
-  - **Data Settings UI Refactor**: "Upgrade Backup" now uses "roll back to pre-upgrade snapshot" semantics, history-scan copy shortened to an emergency-recovery entry, the bottom data-path block shows only absolute paths; fixes confirm-overwrite dialog loading state and dismiss-marker write on close
-- 🔍 **修复手动扫描被 `isDbEmpty` 守护误拦截**：即使数据库非空，用户主动发起的手动扫描现在也能正常执行
-  - **Fix Manual Scan Blocked by `isDbEmpty` Guard**: User-initiated manual scans now run even when the database is non-empty
-- 📥 **导入支持 `.zip` 文件**：`设置 → 数据 → 导入` 的文件选择器新增 `.zip` 格式，导入时自动从 ZIP 读取 `import-with-prompthub.json` 恢复数据
-  - **Import Accepts `.zip` Files**: The file picker now accepts `.zip`; import automatically extracts `import-with-prompthub.json` from the archive for restore
+- 🧩 **GitHub Skill 仓库导入改为先扫描再选择**：`Install from GitHub` 不再把整个仓库误当成单个 Skill；现在会先扫描仓库中的多个 `SKILL.md`，支持多选导入，并在没有 `SKILL.md` 时回退到根目录 `README.md`
+  - **GitHub Skill Repo Import Now Scans Before Selection**: `Install from GitHub` no longer treats the whole repository as a single Skill. It now scans for multiple `SKILL.md` entries, supports multi-select import, and falls back to the root `README.md` when no `SKILL.md` exists
+- 🖼️ **Skill README 相对图片与链接修复**：来自 GitHub 仓库的 README / Markdown 相对图片和相对链接现在会自动解析成可访问的 GitHub/blob/raw 地址，商店详情页和已安装 Skill 预览都能正常显示
+  - **Skill README Relative Images and Links Fixed**: Relative Markdown image/link paths from GitHub repositories are now resolved to accessible GitHub blob/raw URLs, so both store detail pages and installed Skill previews render correctly
+- 🪟 **GitHub 导入弹窗布局修复**：扫描结果很多时，弹窗会切到标准宽弹窗，底部操作区固定可见，只让结果列表区域滚动，避免 footer 被内容挤出视口
+  - **GitHub Import Dialog Layout Fix**: When many results are found, the dialog now uses a standard wide layout with a fixed footer and an independently scrollable results area, preventing actions from being pushed out of view
+- 🌍 **Skill 多语言资源补齐**：补齐了 `skill.*` 命名空间在 6 个非英文 locale 中缺失的文案，修复删除弹窗、GitHub 扫描导入和安全报告出现中英混杂回退的问题，并新增 locale key 对齐回归测试
+  - **Skill Localization Coverage Completed**: Filled missing `skill.*` keys across all 6 non-English locales, fixing mixed-language fallback in delete dialogs, GitHub import scanning, and safety reporting, with a regression test that enforces locale-key parity
+- 🛡️ **安全扫描静态规则降噪**：修复 `process.env` / `import.meta.env` 被误判为读取 `.env` 文件、`export function` / `export type` 被误判为环境变量修改的问题；同时将脚本文件告警改为汇总展示，避免重复刷屏
+  - **Static Safety Scan Noise Reduced**: Fixed false positives where `process.env` / `import.meta.env` were treated as `.env` file access and `export function` / `export type` were treated as environment mutation; script-file warnings are now aggregated instead of repeated per file
+- 📋 **安全报告前端分组展示**：商店详情页与 Skill 详情页的安全 findings 改为按规则分组显示，突出问题类别、出现次数和受影响文件，降低重复告警对可读性的影响
+  - **Frontend Safety Report Grouping**: Safety findings in store and skill detail views are now grouped by rule, surfacing issue category, occurrence count, and affected files instead of flooding the UI with repeated entries
+- 🌙 **Skill 图标选择器暗色模式修复**：创建 / 编辑 Skill 时，图标选择器现在会根据主题切换深浅两套预设色板，自定义背景图标前景色也会自动计算，避免 dark mode 下整块区域看起来像未适配的亮色面板
+  - **Skill Icon Picker Dark-Mode Fix**: The icon picker for create/edit Skill now switches between light and dark preset palettes, and custom icon backgrounds compute readable foreground colors automatically, preventing the dark-mode view from looking like an unadapted light panel
+
+### 维护 / Maintenance
+
+- 🔖 **版本与发版文档同步到 `v0.5.4`**：更新项目版本号、CHANGELOG、README/多语言 README 与官网 release metadata，统一本次修复说明和下载版本
+  - **Version and Release Docs Synced to `v0.5.4`**: Updated the project version, changelog, README/localized READMEs, and website release metadata so release notes and download references align with this patch release
 
 ---
 

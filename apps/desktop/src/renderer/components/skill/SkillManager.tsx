@@ -323,7 +323,7 @@ export function SkillManager() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, [filteredSkills, renderedSkillCount]);
+  }, [filteredSkills]);
 
   useEffect(() => {
     if (storeView === "store") {

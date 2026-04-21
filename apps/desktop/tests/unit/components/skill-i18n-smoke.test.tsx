@@ -2,6 +2,12 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "../../../src/renderer/i18n/locales/en.json";
+import zh from "../../../src/renderer/i18n/locales/zh.json";
+import zhTw from "../../../src/renderer/i18n/locales/zh-TW.json";
+import ja from "../../../src/renderer/i18n/locales/ja.json";
+import fr from "../../../src/renderer/i18n/locales/fr.json";
+import de from "../../../src/renderer/i18n/locales/de.json";
+import es from "../../../src/renderer/i18n/locales/es.json";
 import type { Skill } from "@prompthub/shared/types";
 import { SkillFullDetailPage } from "../../../src/renderer/components/skill/SkillFullDetailPage";
 import { SkillManager } from "../../../src/renderer/components/skill/SkillManager";
@@ -19,6 +25,16 @@ function getPathValue(source: TranslationTree, path: string): unknown {
 
 function interpolate(template: string, values: Record<string, unknown>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => String(values[key] ?? ""));
+}
+
+function flattenKeys(source: TranslationTree, prefix = ""): string[] {
+  return Object.entries(source).flatMap(([key, value]) => {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return flattenKeys(value as TranslationTree, nextPrefix);
+    }
+    return [nextPrefix];
+  });
 }
 
 function translate(
@@ -144,6 +160,26 @@ function createSettingsState(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("skill i18n smoke", () => {
+  it("keeps all locale skill keys aligned with english", () => {
+    const locales = {
+      zh,
+      "zh-TW": zhTw,
+      ja,
+      fr,
+      de,
+      es,
+    } as const;
+    const expectedKeys = flattenKeys((en as TranslationTree).skill as TranslationTree);
+
+    for (const [locale, messages] of Object.entries(locales)) {
+      const actualKeys = new Set(
+        flattenKeys((messages as TranslationTree).skill as TranslationTree),
+      );
+      const missing = expectedKeys.filter((key) => !actualKeys.has(key));
+      expect(missing, `${locale} is missing skill keys`).toEqual([]);
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -284,5 +320,34 @@ describe("skill i18n smoke", () => {
     expect(screen.getByText("Skill Workspace")).toBeInTheDocument();
 
     delete (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__;
+  });
+
+  it("finishes progressive rendering for large skill lists", async () => {
+    const manySkills: Skill[] = Array.from({ length: 129 }, (_, index) => ({
+      ...baseSkill,
+      id: `skill-${index}`,
+      name: `skill-${index}`,
+      description: `Skill ${index}`,
+      created_at: Date.now() + index,
+      updated_at: Date.now() + index,
+    }));
+
+    const skillStoreState = createSkillStoreState({
+      skills: manySkills,
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
+    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+
+    render(<SkillManager />);
+
+    expect(screen.getByText("Rendering 120/129 in chunks")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Rendering 120/129 in chunks"),
+      ).not.toBeInTheDocument();
+    });
   });
 });

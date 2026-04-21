@@ -85,3 +85,20 @@ export function getSkillSafetyFindingTitle(
   const localized = t(key, { defaultValue: "" });
   return localized || finding.title;
 }
+
+export function getSkillSafetyMethodDescription(
+  t: TFunction,
+  report: SkillSafetyReport,
+): string {
+  if (report.scanMethod === "ai") {
+    return t(
+      "skill.safetyScanMethodAIDesc",
+      "AI scan reviews the SKILL.md and relevant repo files with model context, so it is the primary signal for installation decisions.",
+    );
+  }
+
+  return t(
+    "skill.safetyScanMethodStaticDesc",
+    "Static scan only checks baseline malicious patterns such as pipe-to-shell, destructive commands, obvious persistence hooks, suspicious downloads, or bundled executables. It cannot replace an AI review of intent and context.",
+  );
+}
