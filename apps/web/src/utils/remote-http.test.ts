@@ -21,7 +21,13 @@ vi.mock('node:https', () => ({
   request: httpsRequestMock,
 }));
 
-import { isBlockedHostname, requestRemoteBuffered, requestRemoteStream } from './remote-http.js';
+import {
+  isBlockedHostname,
+  isPrivateAddress,
+  isPrivateIPv6,
+  requestRemoteBuffered,
+  requestRemoteStream,
+} from './remote-http.js';
 
 type ResponseCallback = (response: MockIncomingMessage) => void;
 
@@ -153,6 +159,23 @@ describe('remote-http', () => {
         method: 'GET',
       }),
     ).rejects.toThrow('Access to internal network addresses is not allowed');
+  });
+
+  it.each([
+    '::1',
+    '::',
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '0:0:0:0:0:ffff:127.0.0.1',
+    '0:0:0:0:0:0:0:1',
+    '::0:1',
+    '0:0::1',
+    '::ffff:a00:1',
+    '::ffff:c0a8:1',
+    '::ffff:a9fe:1',
+  ])('treats %s as a private IPv6 destination', (address) => {
+    expect(isPrivateIPv6(address)).toBe(true);
+    expect(isPrivateAddress(address)).toBe(true);
   });
 
   it('rejects DNS results that resolve to private addresses', async () => {

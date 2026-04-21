@@ -1,8 +1,8 @@
 import * as dns from 'node:dns/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
-import net from 'node:net';
 import { Readable } from 'node:stream';
+import ipaddr from 'ipaddr.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -57,7 +57,19 @@ function normalizeHostname(hostname: string): string {
   return hostname;
 }
 
-function isPrivateIPv4(address: string): boolean {
+const BLOCKED_IPV6_SUBNETS = [
+  ipaddr.parseCIDR('::/128'),
+  ipaddr.parseCIDR('::1/128'),
+  ipaddr.parseCIDR('fc00::/7'),
+  ipaddr.parseCIDR('fe80::/10'),
+  ipaddr.parseCIDR('2001:db8::/32'),
+  ipaddr.parseCIDR('2002::/16'),
+  ipaddr.parseCIDR('64:ff9b::/96'),
+  ipaddr.parseCIDR('100::/64'),
+  ipaddr.parseCIDR('ff00::/8'),
+] as const;
+
+export function isPrivateIPv4(address: string): boolean {
   const parts = address.split('.').map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
     return false;
@@ -81,56 +93,40 @@ function isPrivateIPv4(address: string): boolean {
   );
 }
 
-function isPrivateIPv6(address: string): boolean {
-  const normalized = address.toLowerCase().split('%')[0];
-  if (normalized === '::' || normalized === '::1') {
-    return true;
-  }
+export function isPrivateIPv6(address: string): boolean {
+  let parsed: ipaddr.IPv4 | ipaddr.IPv6;
 
-  if (normalized.startsWith('::ffff:')) {
-    const mapped = normalized.slice('::ffff:'.length);
-    return net.isIP(mapped) === 4 && isPrivateIPv4(mapped);
-  }
-
-  const halves = normalized.split('::');
-  const segments =
-    halves.length === 2
-      ? [
-          ...(halves[0] ? halves[0].split(':') : []),
-          ...Array(8 - (halves[0] ? halves[0].split(':').length : 0) - (halves[1] ? halves[1].split(':').length : 0)).fill('0'),
-          ...(halves[1] ? halves[1].split(':') : []),
-        ]
-      : normalized.split(':');
-
-  if (segments.length < 2) {
+  try {
+    parsed = ipaddr.parse(address);
+  } catch {
     return false;
   }
 
-  const first = Number.parseInt(segments[0], 16);
-  const second = Number.parseInt(segments[1], 16) || 0;
-  if (Number.isNaN(first)) {
-    return false;
+  if (parsed.kind() === 'ipv6') {
+    if (parsed.isIPv4MappedAddress()) {
+      return isPrivateIPv4(parsed.toIPv4Address().toString());
+    }
+
+    return BLOCKED_IPV6_SUBNETS.some(([range, prefix]) => parsed.match(range, prefix));
   }
 
-  return (
-    (first & 0xfe00) === 0xfc00 ||
-    (first & 0xffc0) === 0xfe80 ||
-    first === 0x2002 ||
-    (first === 0x2001 && second === 0x0000) ||
-    (first === 0x2001 && second === 0x0db8) ||
-    first === 0x0100 ||
-    (first === 0x0064 && second === 0xff9b)
-  );
+  return false;
 }
 
-function isPrivateAddress(address: string): boolean {
-  const family = net.isIP(address);
-  if (family === 4) {
+export function isPrivateAddress(address: string): boolean {
+  if (!ipaddr.isValid(address)) {
+    return false;
+  }
+
+  const parsed = ipaddr.parse(address);
+  if (parsed.kind() === 'ipv4') {
     return isPrivateIPv4(address);
   }
-  if (family === 6) {
+
+  if (parsed.kind() === 'ipv6') {
     return isPrivateIPv6(address);
   }
+
   return false;
 }
 
@@ -141,12 +137,12 @@ async function resolvePublicAddress(hostname: string): Promise<ResolvedAddress> 
     throw new Error('Access to local network addresses is not allowed');
   }
 
-  const ipFamily = net.isIP(normalizedHostname);
-  if (ipFamily !== 0) {
+  if (ipaddr.isValid(normalizedHostname)) {
     if (isPrivateAddress(normalizedHostname)) {
       throw new Error('Access to internal network addresses is not allowed');
     }
-    return { address: normalizedHostname, family: ipFamily === 6 ? 6 : 4 };
+    const parsed = ipaddr.parse(normalizedHostname);
+    return { address: normalizedHostname, family: parsed.kind() === 'ipv6' ? 6 : 4 };
   }
 
   const addresses = await dns.lookup(normalizedHostname, { all: true, verbatim: true });
