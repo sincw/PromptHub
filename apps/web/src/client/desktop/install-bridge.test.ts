@@ -22,7 +22,10 @@ describe('installDesktopBridge media helpers', () => {
 
     installDesktopBridge();
 
-    const fileName = await window.electron.saveImageBuffer(new Uint8Array([1, 2, 3]).buffer);
+    const electronBridge = Reflect.get(window, 'electron') as {
+      saveImageBuffer: (buffer: ArrayBuffer) => Promise<string>;
+    };
+    const fileName = await electronBridge.saveImageBuffer(new Uint8Array([1, 2, 3]).buffer);
 
     expect(fileName).toMatch(/^image-/);
     expect(fileName).toMatch(/\.png$/);

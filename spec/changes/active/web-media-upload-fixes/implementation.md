@@ -10,6 +10,7 @@ Fixed self-hosted web media upload regressions by adding a browser-safe UUID fal
 - Made the hidden file input trigger more browser-compatible for web runtime upload buttons.
 - Updated prompt media URL upload handling to show a specific message when self-hosted web blocks LAN/internal image URLs.
 - Added regression tests for the web bridge UUID fallback, blocked internal-network downloads, and the prompt media manager's dedicated LAN/internal URL error toast.
+- Fixed web CI type errors by avoiding a direct typed `window.electron` access inside the bridge regression test and by adding an explicit `ipaddr.js` IPv6 type guard before calling IPv6-only helpers.
 
 ## Verification
 
@@ -19,6 +20,8 @@ Fixed self-hosted web media upload regressions by adding a browser-safe UUID fal
 - `pnpm --filter @prompthub/desktop test -- --run tests/unit/hooks/use-prompt-media-manager.test.ts`
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/web lint`
+- `pnpm --filter @prompthub/web typecheck`
+- `pnpm --filter @prompthub/web test -- --run src/client/desktop/install-bridge.test.ts src/routes/media.test.ts src/routes/settings.test.ts`
 - Tests passed:
 - `src/client/desktop/install-bridge.test.ts`
 - `src/routes/media.test.ts`
@@ -26,3 +29,4 @@ Fixed self-hosted web media upload regressions by adding a browser-safe UUID fal
 - Build / lint status:
 - Desktop lint passed
 - Web lint passed
+- Web typecheck passed

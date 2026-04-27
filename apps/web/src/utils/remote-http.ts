@@ -69,6 +69,10 @@ const BLOCKED_IPV6_SUBNETS = [
   ipaddr.parseCIDR('ff00::/8'),
 ] as const;
 
+function isIPv6Address(address: ipaddr.IPv4 | ipaddr.IPv6): address is ipaddr.IPv6 {
+  return address.kind() === 'ipv6';
+}
+
 export function isPrivateIPv4(address: string): boolean {
   const parts = address.split('.').map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
@@ -102,12 +106,14 @@ export function isPrivateIPv6(address: string): boolean {
     return false;
   }
 
-  if (parsed.kind() === 'ipv6') {
-    if (parsed.isIPv4MappedAddress()) {
-      return isPrivateIPv4(parsed.toIPv4Address().toString());
+  if (isIPv6Address(parsed)) {
+    const ipv6 = parsed;
+
+    if (ipv6.isIPv4MappedAddress()) {
+      return isPrivateIPv4(ipv6.toIPv4Address().toString());
     }
 
-    return BLOCKED_IPV6_SUBNETS.some(([range, prefix]) => parsed.match(range, prefix));
+    return BLOCKED_IPV6_SUBNETS.some(([range, prefix]) => ipv6.match(range, prefix));
   }
 
   return false;
