@@ -6,7 +6,8 @@
 - [x] 2. Add backup/risk messaging and explicit confirmation
 - [x] 3. Ensure update checks keep using stable unless preview is enabled
 - [x] 4. Add or update tests for the settings interaction and update behavior
-- [ ] 5. Update `implementation.md`
+- [x] 5. Update `implementation.md`
+- [x] 6. Sync README and release download tables with a preview entry
 
 ## Verification
 

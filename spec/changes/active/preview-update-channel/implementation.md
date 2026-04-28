@@ -11,6 +11,7 @@ Implemented a guarded desktop preview-update opt-in flow. Stable remains the def
 - Added explicit risk, backup, and consent copy to all 7 desktop locale files.
 - Added component tests covering preview opt-in confirmation and fallback to stable.
 - Synced the stable release spec with the new desktop update-channel contract.
+- Added a dedicated preview-download entry to the README download table and the GitHub release notes download table so prerelease builds have an explicit public entry point.
 
 ## Deviations From Plan
 
@@ -31,6 +32,8 @@ Implemented a guarded desktop preview-update opt-in flow. Stable remains the def
 ## Synced Specs And Docs
 
 - Updated `spec/specs/release/spec.md`
+- Updated `README.md`
+- Updated `.github/workflows/release.yml`
 
 ## Follow-Up
 
