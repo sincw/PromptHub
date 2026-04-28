@@ -171,4 +171,45 @@ describe("UpdateDialog", () => {
       expect(window.electron.updater.install).toHaveBeenCalledTimes(1);
     });
   });
+
+  it("keeps a visible available state when a transient checking event arrives", async () => {
+    let statusHandler: ((status: UpdateStatus) => void) | undefined;
+
+    installWindowMocks({
+      electron: {
+        updater: {
+          check: vi.fn().mockResolvedValue({ success: true }),
+          getVersion: vi.fn().mockResolvedValue("0.5.1"),
+          getPlatform: vi.fn().mockResolvedValue("win32"),
+          onStatus: vi.fn((callback: (status: UpdateStatus) => void) => {
+            statusHandler = callback;
+            callback(availableStatus);
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <UpdateDialog isOpen={true} onClose={vi.fn()} initialStatus={availableStatus} />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.getByText("Update Available"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      statusHandler?.({ status: "checking" });
+    });
+
+    expect(
+      screen.getByText("Update Available"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Checking for updates..."),
+    ).not.toBeInTheDocument();
+  });
 });

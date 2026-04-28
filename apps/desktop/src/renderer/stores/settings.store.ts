@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import i18n, { changeLanguage } from "../i18n";
 import type { Settings } from "@prompthub/shared/types";
 import type { UpdateChannel } from "@prompthub/shared/types";
+import { isPrereleaseVersion } from "@/utils/version";
 
 const SUPPORTED_LANGUAGES = [
   "zh",
@@ -246,6 +247,7 @@ interface SettingsState {
   useUpdateMirror: boolean; // Use GitHub accelerator mirror (e.g. ghfast.top)
   // 使用 GitHub 加速镜像（如 ghfast.top）
   updateChannel: UpdateChannel;
+  updateChannelExplicitlySet: boolean;
 
   // Sidebar settings
   // 侧边栏设置
@@ -330,6 +332,7 @@ interface SettingsState {
   setAutoCheckUpdate: (enabled: boolean) => void;
   setUseUpdateMirror: (enabled: boolean) => void;
   setUpdateChannel: (channel: UpdateChannel) => void;
+  inferUpdateChannel: (version: string) => void;
   setTagsSectionHeight: (height: number) => void;
   setIsTagsSectionCollapsed: (collapsed: boolean) => void;
   setSkillTagsSectionHeight: (height: number) => void;
@@ -442,6 +445,7 @@ export const useSettingsStore = create<SettingsState>()(
         autoCheckUpdate: true,
         useUpdateMirror: false,
         updateChannel: "stable",
+        updateChannelExplicitlySet: false,
         tagsSectionHeight: DEFAULT_TAGS_SECTION_HEIGHT,
         isTagsSectionCollapsed: false,
         skillTagsSectionHeight: DEFAULT_TAGS_SECTION_HEIGHT,
@@ -662,7 +666,27 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ autoCheckUpdate: enabled }),
         setUseUpdateMirror: (enabled) =>
           setTouched({ useUpdateMirror: enabled }),
-        setUpdateChannel: (channel) => setTouched({ updateChannel: channel }),
+        setUpdateChannel: (channel) =>
+          setTouched({
+            updateChannel: channel,
+            updateChannelExplicitlySet: true,
+          }),
+        inferUpdateChannel: (version) => {
+          const state = get();
+          if (state.updateChannelExplicitlySet) {
+            return;
+          }
+
+          const inferredChannel = isPrereleaseVersion(version)
+            ? "preview"
+            : "stable";
+
+          if (state.updateChannel === inferredChannel) {
+            return;
+          }
+
+          setTouched({ updateChannel: inferredChannel });
+        },
         setTagsSectionHeight: (height) =>
           setTouched({ tagsSectionHeight: height }),
         setIsTagsSectionCollapsed: (collapsed) =>
@@ -898,7 +922,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 3,
+      version: 4,
       migrate: (state) => {
         if (!state || typeof state !== "object") {
           return state as SettingsState;
@@ -937,6 +961,9 @@ export const useSettingsStore = create<SettingsState>()(
         }
         if (typeof next.autoScanStoreSkillsBeforeInstall !== "boolean") {
           next.autoScanStoreSkillsBeforeInstall = false;
+        }
+        if (typeof next.updateChannelExplicitlySet !== "boolean") {
+          next.updateChannelExplicitlySet = false;
         }
         return next;
       },

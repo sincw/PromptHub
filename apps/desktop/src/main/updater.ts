@@ -6,6 +6,10 @@ import path from "path";
 import https from "https";
 import http from "http";
 import { createUpgradeDataSnapshot } from "./services/upgrade-backup";
+import {
+  compareVersions,
+  isPrereleaseVersion,
+} from "@/utils/version";
 
 // Simplified update info type (for IPC transmission)
 // 简化的更新信息类型（用于 IPC 传输）
@@ -48,23 +52,15 @@ function normalizeUpdateOptions(
   };
 }
 
-function applyUpdateChannel(channel: UpdateChannel): void {
-  autoUpdater.allowPrerelease = channel === "preview";
-  autoUpdater.channel = channel === "preview" ? "preview" : "latest";
-  if (channel === "stable" && process.platform === "win32" && process.arch === "arm64") {
-    autoUpdater.channel = "arm64";
+function getFeedSuffix(channel: UpdateChannel, releaseTag?: string): string {
+  if (channel === "preview" && releaseTag) {
+    return `download/${releaseTag}`;
   }
+  return "latest/download";
 }
 
-function getFeedSuffix(channel: UpdateChannel): string {
-  if (channel === "stable") {
-    return "latest/download";
-  }
-  return "download/preview";
-}
-
-function getMirrorSources(channel: UpdateChannel): string[] {
-  const suffix = getFeedSuffix(channel);
+function getMirrorSources(channel: UpdateChannel, releaseTag?: string): string[] {
+  const suffix = getFeedSuffix(channel, releaseTag);
   return [
     `https://ghfast.top/https://github.com/legeling/PromptHub/releases/${suffix}`,
     `https://gh-proxy.com/https://github.com/legeling/PromptHub/releases/${suffix}`,
@@ -73,15 +69,16 @@ function getMirrorSources(channel: UpdateChannel): string[] {
   ];
 }
 
-function getOfficialFeedUrl(channel: UpdateChannel): string {
-  return `https://github.com/${OFFICIAL_REPO.owner}/${OFFICIAL_REPO.repo}/releases/${getFeedSuffix(channel)}`;
+function getOfficialFeedUrl(channel: UpdateChannel, releaseTag?: string): string {
+  return `https://github.com/${OFFICIAL_REPO.owner}/${OFFICIAL_REPO.repo}/releases/${getFeedSuffix(channel, releaseTag)}`;
 }
 
-function getOfficialFeedConfig(channel: UpdateChannel) {
+function getOfficialFeedConfig(channel: UpdateChannel, releaseTag?: string) {
   if (channel === "preview") {
     return {
       provider: "generic" as const,
-      url: getOfficialFeedUrl(channel),
+      channel: getGenericChannelName(),
+      url: getOfficialFeedUrl(channel, releaseTag),
     };
   }
   return OFFICIAL_REPO;
@@ -94,20 +91,151 @@ function applyMirrorDownloadSettings(useMirror: boolean) {
   updater.useMultipleRangeRequest = !useMirror;
 }
 
-// Compare version numbers, return 1 (a > b), -1 (a < b), 0 (a == b)
-// 比较版本号，返回 1 (a > b), -1 (a < b), 0 (a == b)
-export function compareVersions(a: string, b: string): number {
-  const partsA = a.replace(/^v/, "").split(".").map(Number);
-  const partsB = b.replace(/^v/, "").split(".").map(Number);
 
-  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-    const numA = partsA[i] || 0;
-    const numB = partsB[i] || 0;
-    if (numA > numB) return 1;
-    if (numA < numB) return -1;
-  }
-  return 0;
+interface FeedContext {
+  channel: UpdateChannel;
+  releaseTag?: string;
 }
+
+let lastFeedContext: FeedContext = { channel: "stable" };
+
+async function fetchLatestPreviewReleaseTag(): Promise<string | null> {
+  return await new Promise<string | null>((resolve, reject) => {
+    const request = https.get(
+      {
+        hostname: "api.github.com",
+        path: `/repos/${OFFICIAL_REPO.owner}/${OFFICIAL_REPO.repo}/releases?per_page=20`,
+        headers: {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "PromptHub-Updater",
+        },
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+
+        response.on("data", (chunk: string) => {
+          body += chunk;
+        });
+
+        response.on("end", () => {
+          if (response.statusCode !== 200) {
+            reject(
+              new Error(
+                `Preview release lookup failed with HTTP ${response.statusCode || 0}`,
+              ),
+            );
+            return;
+          }
+
+          try {
+            const releases = JSON.parse(body) as Array<{
+              draft?: boolean;
+              prerelease?: boolean;
+              tag_name?: string;
+            }>;
+            const latestPreview = releases.find(
+              (release) =>
+                release.prerelease === true &&
+                release.draft !== true &&
+                typeof release.tag_name === "string" &&
+                release.tag_name.length > 0,
+            );
+            resolve(latestPreview?.tag_name || null);
+          } catch (error) {
+            reject(error instanceof Error ? error : new Error(String(error)));
+          }
+        });
+      },
+    );
+
+    request.on("error", (error) => reject(error));
+    request.setTimeout(15000, () => {
+      request.destroy(new Error("Preview release lookup timed out"));
+    });
+  });
+}
+
+async function resolveFeedContext(channel: UpdateChannel): Promise<FeedContext> {
+  if (channel !== "preview") {
+    return { channel };
+  }
+
+  const releaseTag = await fetchLatestPreviewReleaseTag();
+  if (!releaseTag) {
+    throw new Error(
+      "Update check failed: No published preview release is currently available.",
+    );
+  }
+
+  return { channel, releaseTag };
+}
+
+function applyUpdaterPreferences(channel: UpdateChannel): void {
+  autoUpdater.allowPrerelease = channel === "preview";
+  autoUpdater.allowDowngrade = false;
+}
+
+function isRemoteVersionNewer(remoteVersion: string, currentVersion: string): boolean {
+  return compareVersions(remoteVersion, currentVersion) > 0;
+}
+
+function getGenericChannelName(): string | undefined {
+  if (process.platform === "win32" && process.arch === "arm64") {
+    return "latest-arm64";
+  }
+
+  return undefined;
+}
+
+function filterDowngradeStatus(info: ElectronUpdateInfo): boolean {
+  const currentVersion = app.getVersion();
+  const isNewer = isRemoteVersionNewer(info.version, currentVersion);
+
+  if (!isNewer) {
+    console.info(
+      `[Updater] Ignoring downgrade/non-upgrade candidate ${info.version} for current ${currentVersion}`,
+    );
+  }
+
+  return isNewer;
+}
+
+function applyFeedContext(useMirror: boolean, context: FeedContext, mirrorUrl?: string): void {
+  if (useMirror) {
+    autoUpdater.setFeedURL({
+      provider: "generic",
+      channel: getGenericChannelName(),
+      url: mirrorUrl || getMirrorSources(context.channel, context.releaseTag)[0],
+    });
+    return;
+  }
+
+  autoUpdater.setFeedURL(
+    getOfficialFeedConfig(context.channel, context.releaseTag),
+  );
+}
+
+function toCheckResult(result: unknown): {
+  success: boolean;
+  result?: unknown;
+  updateAvailable?: boolean;
+} {
+  const isUpdateAvailable = Boolean(
+    result &&
+      typeof result === "object" &&
+      "isUpdateAvailable" in result &&
+      (result as { isUpdateAvailable?: boolean }).isUpdateAvailable,
+  );
+
+  return {
+    success: true,
+    result,
+    updateAvailable: isUpdateAvailable,
+  };
+}
+
+export { compareVersions };
 
 // Read changelog for specified version range from CHANGELOG.md
 // 从 CHANGELOG.md 读取指定版本区间的更新日志
@@ -356,24 +484,10 @@ export function initUpdater(win: BrowserWindow) {
   // See AGENTS.md §12 and the v0.5.3 regression analysis.
   autoUpdater.autoInstallOnAppQuit = false;
 
-  applyUpdateChannel("stable");
-
-  // electron-updater channel configuration:
-  // electron-updater channel 配置：
-  // - Windows x64: uses default 'latest.yml'
-  // - Windows ARM64: uses 'arm64' channel -> 'latest-arm64.yml'
-  // - macOS: uses default 'latest-mac.yml'
-  // - Linux: uses default 'latest-linux.yml'
-  //
-  // This ensures backward compatibility with older versions that don't set channel.
-  // 这确保了与旧版本的向后兼容性（旧版本不设置 channel）。
-  if (process.platform === "win32" && process.arch === "arm64") {
-    console.log(`[Updater] Windows ARM64 detected, using channel: arm64`);
-  } else {
-    console.log(
-      `[Updater] Platform: ${process.platform}, Arch: ${process.arch}, using default channel`,
-    );
-  }
+  applyUpdaterPreferences(isPrereleaseVersion(app.getVersion()) ? "preview" : "stable");
+  console.log(
+    `[Updater] Platform: ${process.platform}, Arch: ${process.arch}, currentVersion: ${app.getVersion()}`,
+  );
 
   // Update check error
   // 检查更新出错
@@ -421,6 +535,14 @@ export function initUpdater(win: BrowserWindow) {
   // Update available
   // 有可用更新
   autoUpdater.on("update-available", (info) => {
+    if (!filterDowngradeStatus(info)) {
+      sendStatusToWindow({
+        status: "not-available",
+        info: toSimpleInfo(info),
+      });
+      return;
+    }
+
     console.info("Update available:", info.version);
     // macOS: store update info for later DMG download
     // macOS: 保存更新信息，供后续 DMG 下载使用
@@ -608,13 +730,13 @@ function downloadFile(
  * We derive this from the autoUpdater's internal state or from stored context.
  * 构建上次使用的 feed URL（用于拼接 DMG 下载链接）。
  */
-function buildFeedUrl(useMirror: boolean, channel: UpdateChannel): string {
+function buildFeedUrl(useMirror: boolean, context: FeedContext): string {
   if (useMirror) {
     // Return first mirror source as starting point; caller will retry all mirrors
     // 返回第一个镜像源作为起点；调用方会逐一重试
-    return getMirrorSources(channel)[0];
+    return getMirrorSources(context.channel, context.releaseTag)[0];
   }
-  return getOfficialFeedUrl(channel);
+  return getOfficialFeedUrl(context.channel, context.releaseTag);
 }
 
 /**
@@ -623,7 +745,7 @@ function buildFeedUrl(useMirror: boolean, channel: UpdateChannel): string {
  */
 async function macDownloadDmg(
   useMirror: boolean,
-  channel: UpdateChannel,
+  context: FeedContext,
 ): Promise<{ success: boolean; error?: string }> {
   if (!lastUpdateInfo) {
     return {
@@ -682,7 +804,7 @@ async function macDownloadDmg(
   // Mirror mode: try each mirror in order
   // 镜像模式：依次尝试每个镜像源
   if (useMirror) {
-    for (const mirrorUrl of getMirrorSources(channel)) {
+    for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
       try {
         await tryDownload(mirrorUrl);
         macDownloadedDmgPath = destPath;
@@ -711,7 +833,7 @@ async function macDownloadDmg(
   // Official source
   // 官方源
   try {
-    const feedUrl = buildFeedUrl(false, channel);
+    const feedUrl = buildFeedUrl(false, context);
     await tryDownload(feedUrl);
     macDownloadedDmgPath = destPath;
     sendStatusToWindow({
@@ -747,22 +869,32 @@ export function registerUpdaterIPC() {
     }
 
     const { useMirror, channel } = normalizeUpdateOptions(request);
-    applyUpdateChannel(channel);
+    applyUpdaterPreferences(channel);
     applyMirrorDownloadSettings(useMirror);
+    let context: FeedContext;
+
+    try {
+      context = await resolveFeedContext(channel);
+      lastFeedContext = context;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
 
     // If mirror is enabled, use mirror sources directly
     // 如果启用了镜像，直接使用镜像源（不先尝试官方）
     if (useMirror) {
-      for (const mirrorUrl of getMirrorSources(channel)) {
+      for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
         try {
-          console.log(`[Updater] Using ${channel} mirror for check: ${mirrorUrl}`);
-          autoUpdater.setFeedURL({
-            provider: "generic",
-            url: mirrorUrl,
-          });
+          console.log(
+            `[Updater] Using ${context.channel} mirror for check: ${mirrorUrl}`,
+          );
+          applyFeedContext(true, context, mirrorUrl);
           const result = await autoUpdater.checkForUpdates();
           console.log(`[Updater] Mirror check succeeded: ${mirrorUrl}`);
-          return { success: true, result };
+          return toCheckResult(result);
         } catch (mirrorError) {
           console.warn(`[Updater] Mirror check failed: ${mirrorUrl}`);
         }
@@ -778,10 +910,10 @@ export function registerUpdaterIPC() {
     // Mirror disabled, use official source
     // 未启用镜像，使用官方源
     try {
-      console.log(`[Updater] Using official ${channel} source for check`);
-      autoUpdater.setFeedURL(getOfficialFeedConfig(channel));
+      console.log(`[Updater] Using official ${context.channel} source for check`);
+      applyFeedContext(false, context);
       const result = await autoUpdater.checkForUpdates();
-      return { success: true, result };
+      return toCheckResult(result);
     } catch (officialError) {
       const errMsg = (officialError as Error).message || String(officialError);
       return { success: false, error: `Update check failed: ${errMsg}` };
@@ -796,14 +928,29 @@ export function registerUpdaterIPC() {
     }
 
     const { useMirror, channel } = normalizeUpdateOptions(request);
-    applyUpdateChannel(channel);
+    applyUpdaterPreferences(channel);
     lastPercent = 0;
+    let context: FeedContext;
+
+    try {
+      context =
+        lastFeedContext.channel === channel
+          ? lastFeedContext
+          : await resolveFeedContext(channel);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+
+    lastFeedContext = context;
 
     // macOS: bypass Squirrel, download DMG directly to ~/Downloads
     // macOS: 绕过 Squirrel，直接下载 DMG 到 ~/Downloads
     if (isMac) {
       console.log("[Updater/macDMG] Using direct DMG download for macOS");
-      return await macDownloadDmg(useMirror, channel);
+      return await macDownloadDmg(useMirror, context);
     }
 
     // Windows/Linux: use electron-updater's built-in download (Squirrel/NSIS)
@@ -813,13 +960,12 @@ export function registerUpdaterIPC() {
     // If mirror is enabled, use mirror sources directly
     // 如果启用了镜像，直接使用镜像源
     if (useMirror) {
-      for (const mirrorUrl of getMirrorSources(channel)) {
+      for (const mirrorUrl of getMirrorSources(context.channel, context.releaseTag)) {
         try {
-          console.log(`[Updater] Using ${channel} mirror for download: ${mirrorUrl}`);
-          autoUpdater.setFeedURL({
-            provider: "generic",
-            url: mirrorUrl,
-          });
+          console.log(
+            `[Updater] Using ${context.channel} mirror for download: ${mirrorUrl}`,
+          );
+          applyFeedContext(true, context, mirrorUrl);
           await autoUpdater.downloadUpdate();
           return { success: true };
         } catch (mirrorError) {
@@ -838,8 +984,8 @@ export function registerUpdaterIPC() {
     // Mirror disabled, use official source
     // 未启用镜像，使用官方源
     try {
-      console.log(`[Updater] Using official ${channel} source for download`);
-      autoUpdater.setFeedURL(getOfficialFeedConfig(channel));
+      console.log(`[Updater] Using official ${context.channel} source for download`);
+      applyFeedContext(false, context);
       await autoUpdater.downloadUpdate();
       return { success: true };
     } catch (officialError) {

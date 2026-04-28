@@ -283,6 +283,15 @@ jobs:
         run: |
           echo "VERSION=$(node -p "require('./apps/desktop/package.json').version")" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "IS_PRERELEASE=true" >> "$GITHUB_ENV"
+            echo "DOWNLOAD_BASE_URL=https://github.com/legeling/PromptHub/releases/download/${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+            echo "PREVIEW_RELEASE_URL=https://github.com/legeling/PromptHub/releases/tag/${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "IS_PRERELEASE=false" >> "$GITHUB_ENV"
+            echo "DOWNLOAD_BASE_URL=https://github.com/legeling/PromptHub/releases/latest/download" >> "$GITHUB_ENV"
+            echo "PREVIEW_RELEASE_URL=https://github.com/legeling/PromptHub/releases?q=prerelease%3Atrue" >> "$GITHUB_ENV"
+          fi
 
       - name: List artifacts for debugging
         shell: bash
@@ -293,16 +302,22 @@ jobs:
       - name: Create Release with gh CLI
         shell: bash
         run: |
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            PREVIEW_NOTE='> 本次是带 semver prerelease 后缀的 Beta / Preview 发布，下载链接已固定到当前 tag。若该版本低于已发布 stable（例如 `0.5.5-beta.1 < 0.5.5`），请将其视为历史测试版并手动下载安装。'
+          else
+            PREVIEW_NOTE='> 想提前测试即将发布的修复时，可直接下载下面的 GitHub 预览版，或在应用内设置中显式加入预览更新通道。'
+          fi
+
           # 1. Prepare Release Notes
           cat > release_notes.md <<EOF
           ## 📦 下载安装
 
           | 平台 | 下载 |
           |------|------|
-          | Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-${VERSION}-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-${VERSION}-arm64.exe) |
-          | macOS | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-${VERSION}-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-${VERSION}-x64.dmg) |
-          | Linux | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-${VERSION}-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-${VERSION}-amd64.deb) |
-          | 预览版 | [![Preview Prereleases](https://img.shields.io/badge/Preview_Prereleases-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases?q=prerelease%3Atrue) |
+          | Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](${DOWNLOAD_BASE_URL}/PromptHub-Setup-${VERSION}-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](${DOWNLOAD_BASE_URL}/PromptHub-Setup-${VERSION}-arm64.exe) |
+          | macOS | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](${DOWNLOAD_BASE_URL}/PromptHub-${VERSION}-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](${DOWNLOAD_BASE_URL}/PromptHub-${VERSION}-x64.dmg) |
+          | Linux | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](${DOWNLOAD_BASE_URL}/PromptHub-${VERSION}-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](${DOWNLOAD_BASE_URL}/PromptHub-${VERSION}-amd64.deb) |
+          | 预览版 | [![Preview Prereleases](https://img.shields.io/badge/Preview_Prereleases-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](${PREVIEW_RELEASE_URL}) |
 
           ### ⚠️ macOS 首次启动
           如果提示"无法打开"或"已损坏"，请在终端执行：
@@ -310,7 +325,7 @@ jobs:
           sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
           \`\`\`
 
-          > 想提前测试即将发布的修复时，可直接下载上面的 GitHub 预览版，或在应用内设置中显式加入预览更新通道。
+          ${PREVIEW_NOTE}
 
           ---
 

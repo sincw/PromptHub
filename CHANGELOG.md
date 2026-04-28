@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [0.5.5-beta.1] - 2026-04-28
+
+### 修复 / Fixed
+
+- 🔄 **桌面更新链路加固**：预览通道不再依赖缺失的 `preview.yml`，现在会解析最新 prerelease release 并读取真实存在的 `latest*.yml`；同时新增显式降级过滤，避免把旧 stable 错误显示为可用更新
+  - **Desktop Update Flow Hardened**: The preview lane no longer depends on a missing `preview.yml`. It now resolves the latest prerelease release and reads the real `latest*.yml` manifest, with explicit downgrade filtering so older stable builds are never shown as available updates
+- ✨ **预览默认通道推断与状态稳定性**：当应用版本本身带 prerelease 后缀时，客户端会在用户未显式改动前默认使用 preview 通道；后台检查更新也不会再把已显示的 `available` / `downloaded` 状态拉回 `checking`
+  - **Preview Default Inference and UI Stability**: When the installed app version contains a prerelease suffix, PromptHub defaults to the preview lane until the user explicitly changes it; background update checks also no longer force visible `available` / `downloaded` states back into `checking`
+
+### 维护 / Maintenance
+
+- 🔖 **历史 Beta 重新发布规则**：为修正 `0.5.5` 线曾经缺失的机器可判定 preview 标识，本次补发 `0.5.5-beta.1` 作为历史 prerelease。该版本在 semver 排序上低于 `0.5.5` stable，应视为手动下载 / 测试入口，而不是稳定版用户的常规自动升级目标
+  - **Historical Beta Reissue Rule**: To restore a machine-readable preview marker for the `0.5.5` line, this release republishes the preview build as `0.5.5-beta.1`. Because it sorts lower than `0.5.5` stable in semver, it should be treated as a manual-download testing entry point rather than a normal auto-upgrade target for stable users
+
 ## [0.5.5] - 2026-04-24
 
 ### 新增 / Added

@@ -5,6 +5,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // 注意：import 会在 vi.mock 之后真正生效，所以这里得到的是 mock 对象
 import { autoUpdater } from 'electron-updater';
 
+const { httpsGetMock } = vi.hoisted(() => ({
+    httpsGetMock: vi.fn(),
+}));
+
 // Mock electron
 vi.mock('electron', () => ({
     ipcMain: {
@@ -21,6 +25,12 @@ vi.mock('electron', () => ({
     }
 }));
 
+vi.mock('https', () => ({
+    default: {
+        get: httpsGetMock,
+    },
+}));
+
 // Mock electron-updater behavior
 vi.mock('electron-updater', () => {
     const handlers: Record<string, Function> = {};
@@ -35,7 +45,9 @@ vi.mock('electron-updater', () => {
             autoDownload: true, // initial default
             autoInstallOnAppQuit: false, // initial default
             allowPrerelease: false,
+            allowDowngrade: false,
             channel: 'latest',
+            currentVersion: { version: '1.0.0' },
             // Helper to trigger events for testing
             _trigger: (event: string, ...args: any[]) => {
                 if (handlers[event]) handlers[event](...args);
@@ -63,6 +75,32 @@ describe('Updater Service (Main Process)', () => {
         autoUpdater.channel = 'latest';
         // @ts-ignore
         autoUpdater.allowPrerelease = false;
+        // @ts-ignore
+        autoUpdater.allowDowngrade = false;
+
+        httpsGetMock.mockReset();
+        httpsGetMock.mockImplementation((_options, callback) => {
+            const response = {
+                statusCode: 200,
+                setEncoding: vi.fn(),
+                on: vi.fn((event, handler) => {
+                    if (event === 'data') {
+                        handler(JSON.stringify([
+                            { tag_name: 'v1.1.0-beta.2', prerelease: true, draft: false },
+                        ]));
+                    }
+                    if (event === 'end') {
+                        handler();
+                    }
+                }),
+            };
+            callback(response);
+            return {
+                on: vi.fn(),
+                setTimeout: vi.fn(),
+                destroy: vi.fn(),
+            };
+        });
 
         mockWindow = {
             webContents: {
@@ -81,10 +119,10 @@ describe('Updater Service (Main Process)', () => {
         initUpdater(mockWindow);
 
         expect(autoUpdater.autoDownload).toBe(false);
-        expect(autoUpdater.autoInstallOnAppQuit).toBe(process.platform !== 'darwin');
+        expect(autoUpdater.autoInstallOnAppQuit).toBe(false);
     });
 
-    it('should set architecture specific channel on Windows x64', () => {
+    it('should not mutate autoUpdater.channel on Windows x64', () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
         Object.defineProperty(process, 'arch', { value: 'x64' });
 
@@ -93,13 +131,13 @@ describe('Updater Service (Main Process)', () => {
         expect(autoUpdater.channel).toBe('latest');
     });
 
-    it('should set architecture specific channel on Windows arm64', () => {
+    it('should not mutate autoUpdater.channel on Windows arm64', () => {
         Object.defineProperty(process, 'platform', { value: 'win32' });
         Object.defineProperty(process, 'arch', { value: 'arm64' });
 
         initUpdater(mockWindow);
 
-        expect(autoUpdater.channel).toBe('arm64');
+        expect(autoUpdater.channel).toBe('latest');
     });
 
     it('should NOT change channel on macOS', () => {
@@ -165,7 +203,7 @@ describe('Updater Service (Main Process)', () => {
         await checkHandler({}, { useMirror: false, channel: 'stable' });
 
         expect(autoUpdater.allowPrerelease).toBe(false);
-        expect(autoUpdater.channel).toBe('latest');
+        expect(autoUpdater.allowDowngrade).toBe(false);
         expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(
             expect.objectContaining({ provider: 'github', releaseType: 'release' }),
         );
@@ -180,10 +218,28 @@ describe('Updater Service (Main Process)', () => {
         await checkHandler({}, { useMirror: false, channel: 'preview' });
 
         expect(autoUpdater.allowPrerelease).toBe(true);
-        expect(autoUpdater.channel).toBe('preview');
+        expect(autoUpdater.allowDowngrade).toBe(false);
         expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
             provider: 'generic',
-            url: 'https://github.com/legeling/PromptHub/releases/download/preview',
+            channel: undefined,
+            url: 'https://github.com/legeling/PromptHub/releases/download/v1.1.0-beta.2',
         });
+    });
+
+    it('downgrades are surfaced as not-available instead of available', () => {
+        initUpdater(mockWindow);
+
+        const info = { version: '0.9.9', releaseNotes: 'Older build' };
+
+        // @ts-ignore
+        autoUpdater._trigger('update-available', info);
+
+        expect(mockWindow.webContents.send).toHaveBeenCalledWith(
+            'updater:status',
+            expect.objectContaining({
+                status: 'not-available',
+                info: expect.objectContaining({ version: '0.9.9' }),
+            })
+        );
     });
 });

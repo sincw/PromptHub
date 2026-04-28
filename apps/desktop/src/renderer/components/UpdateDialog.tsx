@@ -59,6 +59,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
   const [isCreatingBackup, setIsCreatingBackup] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [hasAcknowledgedBackup, setHasAcknowledgedBackup] = useState(false);
+  const [isManualRefreshPending, setIsManualRefreshPending] = useState(false);
 
   useEffect(() => {
     if (initialStatus) {
@@ -79,7 +80,17 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     // Listen for update status
     // 监听更新状态
     const handleStatus = (status: UpdateStatus) => {
+      if (
+        status.status === 'checking' &&
+        isStableUpgradeState(updateStatus)
+      ) {
+        return;
+      }
+
       setUpdateStatus(status);
+      if (status.status !== 'checking') {
+        setIsManualRefreshPending(false);
+      }
     };
 
     const offUpdaterStatus = window.electron?.updater?.onStatus(handleStatus);
@@ -146,6 +157,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     options?: { preserveVisibleStatus?: boolean },
   ) => {
     setUseMirror(mirror);
+    setIsManualRefreshPending(true);
     if (!options?.preserveVisibleStatus) {
       setUpdateStatus({ status: 'checking' });
     }
@@ -156,6 +168,7 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
     // If update check returns an error (e.g. in dev), set error status
     // 如果检查更新返回错误（例如开发环境），设置错误状态
     if (result && !result.success) {
+      setIsManualRefreshPending(false);
       setUpdateStatus({ status: 'error', error: result.error || '检查更新失败' });
     }
     // Note: success cases are handled via onStatus callback
@@ -494,20 +507,34 @@ export function UpdateDialog({ isOpen, onClose, initialStatus }: UpdateDialogPro
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">{t('settings.checkUpdate')}</h2>
-          <span className="ml-3 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-            {t(
-              updateChannel === 'preview'
-                ? 'settings.previewChannel'
-                : 'settings.stableChannel',
-            )}
-          </span>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg hover:bg-muted transition-colors"
-          >
-            <XIcon className="w-5 h-5 text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold">{t('settings.checkUpdate')}</h2>
+            <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              {t(
+                updateChannel === 'preview'
+                  ? 'settings.previewChannel'
+                  : 'settings.stableChannel',
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleCheckUpdate(useUpdateMirror, {
+                preserveVisibleStatus: isStableUpgradeState(updateStatus),
+              })}
+              disabled={isManualRefreshPending}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCwIcon className={`h-3.5 w-3.5 ${isManualRefreshPending ? 'animate-spin' : ''}`} />
+              {t('settings.checkUpdate')}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg hover:bg-muted transition-colors"
+            >
+              <XIcon className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 flex flex-col">
           {renderContent()}

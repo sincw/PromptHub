@@ -53,6 +53,7 @@ function App() {
   const movePrompts = usePromptStore((state) => state.movePrompts);
   const selectedIds = usePromptStore((state) => state.selectedIds);
   const applyTheme = useSettingsStore((state) => state.applyTheme);
+  const inferUpdateChannel = useSettingsStore((state) => state.inferUpdateChannel);
   const debugMode = useSettingsStore((state) => state.debugMode);
   const shortcutModes = useSettingsStore((state) => state.shortcutModes);
   const [currentPage, setCurrentPage] = useState<PageType>("home");
@@ -81,6 +82,7 @@ function App() {
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [initialUpdateStatus, setInitialUpdateStatus] =
     useState<UpdateStatus | null>(null);
+  const lastUpdateStatusRef = useRef<UpdateStatus | null>(null);
 
   // Close dialog state (Windows)
   // 关闭对话框状态（Windows）
@@ -275,13 +277,26 @@ function App() {
     // Listen for update status
     // 监听更新状态
     const handleStatus = (status: UpdateStatus) => {
-      // If update available, save status for TopBar indicator (don't auto-show dialog)
-      if (status.status === "available") {
+      const previousStatus = lastUpdateStatusRef.current;
+      const shouldIgnoreTransientChecking =
+        status.status === "checking" &&
+        (previousStatus?.status === "available" ||
+          previousStatus?.status === "downloaded");
+
+      if (shouldIgnoreTransientChecking) {
+        return;
+      }
+
+      lastUpdateStatusRef.current = status;
+
+      if (status.status === "available" || status.status === "downloaded") {
         setUpdateAvailable(status);
+      } else if (status.status === "not-available") {
+        setUpdateAvailable(null);
+      }
+
+      if (showUpdateDialog) {
         setInitialUpdateStatus(status);
-        // Do not auto-show dialog; only show after user clicks TopBar indicator
-        // 不再自动弹窗，用户点击顶部栏提示后才显示
-        // setShowUpdateDialog(true);
       }
     };
 
@@ -364,8 +379,7 @@ function App() {
     // Listen for manual check trigger - always force a fresh check
     // 监听手动检查触发（始终强制刷新检查状态）
     const handleOpenUpdate = () => {
-      setInitialUpdateStatus(null);
-      setUpdateAvailable(null); // Clear cached status
+      setInitialUpdateStatus(lastUpdateStatusRef.current);
       setShowUpdateDialog(true);
     };
     window.addEventListener("open-update-dialog", handleOpenUpdate);
@@ -400,7 +414,7 @@ function App() {
       }
       window.removeEventListener("open-update-dialog", handleOpenUpdate);
     };
-  }, []);
+  }, [showUpdateDialog]);
 
   // Handle dragging a prompt into a folder
   // 处理 Prompt 拖拽到文件夹
@@ -750,6 +764,14 @@ function App() {
         return;
       }
 
+      const installedVersion = await window.electron?.updater?.getVersion?.();
+      if (disposed) {
+        return;
+      }
+      if (installedVersion) {
+        inferUpdateChannel(installedVersion);
+      }
+
       await init();
       if (disposed) {
         return;
@@ -807,7 +829,7 @@ function App() {
       window.removeEventListener("focus", handleBackgroundTaskResume);
       window.removeEventListener("online", handleBackgroundTaskResume);
     };
-  }, []);
+  }, [applyTheme, inferUpdateChannel]);
 
   if (isLoading) {
     return (
