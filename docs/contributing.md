@@ -20,8 +20,8 @@ cd PromptHub
 # 2. 安装依赖
 pnpm install
 
-# 3. 启动桌面开发环境
-pnpm electron:dev
+# 3. 启动 Web 开发环境
+pnpm dev
 
 # 4. 运行测试
 pnpm test -- --run
@@ -39,7 +39,7 @@ PromptHub 对非 trivial 改动采用 DOS（Documentation Operating System）工
 - 大型 bug 修复
 - 重构
 - 迁移
-- 跨 desktop / web / packages 的联动修改
+- 跨 web / packages 的联动修改
 
 每个重要变更至少包含：
 
@@ -130,23 +130,14 @@ refactor/xxx
 ## 测试
 
 ```bash
-# 全量桌面测试
-pnpm test -- --run
+# 全量 Web 测试
+pnpm test
 
 # 单文件测试
 pnpm test -- <path> --run
 
 # Web 验证
 pnpm verify:web
-
-# E2E
-pnpm test:e2e
-```
-
-发布相关改动建议执行：
-
-```bash
-pnpm --filter @prompthub/desktop test:release
 ```
 
 ## PR 流程

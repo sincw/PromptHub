@@ -5,7 +5,7 @@ import { config } from './config.js';
  * Web 端运行时路径解析器。
  *
  * 所有磁盘位置均派生自 `DATA_ROOT`（来自环境变量 / config.rootDir），布局
- * 与桌面端保持一致（见 `apps/desktop/src/main/runtime-paths.ts`）：
+ * Web-only runtime layout:
  *
  * ```text
  * <DATA_ROOT>/

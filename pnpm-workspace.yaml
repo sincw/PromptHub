@@ -3,7 +3,6 @@ packages:
   - "apps/*"
 
 onlyBuiltDependencies:
-  - electron
   - esbuild
 
 shamefullyHoist: true

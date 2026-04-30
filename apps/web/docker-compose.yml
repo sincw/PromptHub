@@ -6,6 +6,8 @@ services:
     image: prompthub-web:latest
     container_name: prompthub-web
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${PROMPTHUB_WEB_PORT:-3871}:3000"
     env_file:

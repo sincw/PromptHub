@@ -21,21 +21,21 @@ export default defineConfig({
     alias: {
       '@prompthub/shared': path.resolve(__dirname, '../../packages/shared/types'),
       '@prompthub/db': path.resolve(__dirname, '../../packages/db/src'),
-      '@desktop-renderer-app': path.resolve(
+      '@web-runtime-app': path.resolve(
         __dirname,
-        '../desktop/src/renderer/App.tsx',
+        'vendor/renderer/App.tsx',
       ),
-      '@desktop-toast-provider': path.resolve(
+      '@web-runtime-toast-provider': path.resolve(
         __dirname,
-        '../desktop/src/renderer/components/ui/Toast.tsx',
+        'vendor/renderer/components/ui/Toast.tsx',
       ),
-      '@desktop-renderer-i18n': path.resolve(
+      '@web-runtime-i18n': path.resolve(
         __dirname,
         'src/client/i18n.ts',
       ),
-      '@desktop-renderer-globals-css': path.resolve(
+      '@web-runtime-globals-css': path.resolve(
         __dirname,
-        '../desktop/src/renderer/styles/globals.css',
+        'vendor/renderer/styles/globals.css',
       ),
     },
   },

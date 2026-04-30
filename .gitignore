@@ -46,6 +46,7 @@ yarn.lock
 .claude/
 .agent/
 .sisyphus/
+.codex/
 文档/
 
 # ========================
@@ -90,6 +91,9 @@ playwright-report/
 *.sqlite
 *.sqlite3
 apps/web/data/
+apps/web/config/
+apps/web/logs/
+apps/web/backups/
 apps/web/data-first-run-*/
 packages/db/src/index.js
 packages/db/src/index.js.map

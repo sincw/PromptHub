@@ -22,7 +22,8 @@
   
   <!-- Tech Stack -->
   ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
-  ![Electron](https://img.shields.io/badge/Electron-47848F?style=flat-square&logo=electron&logoColor=white)
+  ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+  ![Hono](https://img.shields.io/badge/Hono-E36002?style=flat-square&logo=hono&logoColor=white)
   ![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
   ![TailwindCSS](https://img.shields.io/badge/Tailwind-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white)
   ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white)
@@ -30,9 +31,8 @@
   <br/>
   
   <!-- Platform Support -->
-  ![macOS](https://img.shields.io/badge/macOS-000000?style=flat-square&logo=apple&logoColor=white)
-  ![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat-square&logo=windows&logoColor=white)
-  ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat-square&logo=linux&logoColor=black)
+  ![Web](https://img.shields.io/badge/Web-self--hosted-0EA5E9?style=flat-square)
+  ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
   
   <br/>
   
@@ -508,12 +508,12 @@ prompthub --app-data-dir /path/to/app-data skill list
 
 | 类别     | 技术                    |
 | -------- | ----------------------- |
-| 框架     | Electron 33             |
+| 框架     | Hono + Vite             |
 | 前端     | React 18 + TypeScript 5 |
 | 样式     | TailwindCSS             |
 | 状态管理 | Zustand                 |
 | 本地存储 | SQLite（WASM）          |
-| 构建工具 | Vite + electron-builder |
+| 构建工具 | Vite                    |
 
 <div id="project-structure"></div>
 
@@ -521,32 +521,14 @@ prompthub --app-data-dir /path/to/app-data skill list
 
 ```
 PromptHub/
-├── src/
-│   ├── main/                # Electron 主进程
-│   │   ├── database/        # SQLite 数据库操作
-│   │   ├── ipc/             # IPC 通信处理
-│   │   ├── services/        # 核心服务 (Skill 安装器等)
-│   │   ├── index.ts         # 主进程入口
-│   │   ├── menu.ts          # 应用菜单
-│   │   ├── shortcuts.ts     # 快捷键
-│   │   └── updater.ts       # 自动更新
-│   ├── preload/             # 预加载脚本
-│   ├── renderer/            # React 渲染进程
-│   │   ├── components/      # UI 组件
-│   │   │   ├── folder/      # 文件夹组件
-│   │   │   ├── layout/      # 布局组件
-│   │   │   ├── prompt/      # Prompt 组件
-│   │   │   ├── skill/       # Skill 组件
-│   │   │   ├── settings/    # 设置页面
-│   │   │   └── ui/          # 通用 UI 组件
-│   │   ├── i18n/            # 国际化 (7 种语言)
-│   │   ├── services/        # 服务层 (AI, WebDAV)
-│   │   ├── stores/          # Zustand 状态管理
-│   │   └── styles/          # 全局样式
+├── apps/
+│   └── web/                 # 自部署 Web 应用
+│       ├── src/             # Hono 服务端与 React 客户端
+│       ├── vendor/          # Web 自有运行时 UI 资源
+│       └── Dockerfile       # Web 镜像构建
+├── packages/
+│   ├── db/                  # SQLite 数据库层
 │   └── shared/              # 共享类型和常量
-│       ├── constants/       # 常量定义 (平台配置、技能注册表)
-│       └── types/           # TypeScript 类型
-├── resources/               # 应用图标等静态资源
 ├── .github/workflows/       # CI/CD 配置
 └── package.json
 ```
@@ -726,7 +708,7 @@ PromptHub 现在采用 `docs/` 与 `spec/` 双层文档职责：`docs/` 负责�
 
 ## 致谢
 
-- [Electron](https://www.electronjs.org/) - 跨平台桌面应用框架
+- [Hono](https://hono.dev/) - Web 服务框架
 - [React](https://react.dev/) - UI 框架
 - [TailwindCSS](https://tailwindcss.com/) - CSS 框架
 - [Zustand](https://zustand-demo.pmnd.rs/) - 状态管理

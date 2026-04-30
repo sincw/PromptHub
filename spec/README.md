@@ -11,14 +11,14 @@ PromptHub 这套结构明确对齐 OpenSpec 的几个核心能力：
 - **changes archive**：完成或终止的变更进入 `spec/changes/archive/`
 - **iterative workflow**：按 `proposal -> spec -> design -> tasks -> implementation -> sync -> archive` 迭代推进，而不是把需求只留在聊天记录或 PR diff 里
 
-选择这套结构的原因很直接：PromptHub 同时有 desktop、web、skills、数据布局、同步与发布流程，内部知识如果只散落在 `docs/` 或 issue 里，很快就会失去稳定真相源，也不利于后续变更做 delta 对照。
+选择这套结构的原因很直接：PromptHub 当前以 web、skills、数据布局、同步与发布流程为核心，内部知识如果只散落在 `docs/` 或 issue 里，很快就会失去稳定真相源，也不利于后续变更做 delta 对照。
 
 ## 比上一版更完整在哪里
 
 这次的小写 `spec/` 方案，不只是把旧内部文档从 `docs/` 挪过来，而是把缺失的 OpenSpec 核心层级补齐了：
 
 - 补齐了稳定层：`spec/specs/`
-- 补齐了更多稳定领域：`system`、`desktop`、`web`、`skills`、`sync`、`data-recovery`、`release`、`prompt-workspace`
+- 补齐了更多稳定领域：`system`、`web`、`skills`、`sync`、`data-recovery`、`release`、`prompt-workspace`
 - 补齐了增量层：`spec/changes/active/<change-key>/specs/<domain>/spec.md`
 - 补齐了架构层：`spec/architecture/`
 - 补齐了问题层：`spec/issues/active/`
@@ -34,7 +34,6 @@ spec/
 ├── README.md
 ├── specs/
 │   ├── system/spec.md
-│   ├── desktop/spec.md
 │   ├── sync/spec.md
 │   ├── data-recovery/spec.md
 │   ├── release/spec.md
@@ -77,7 +76,6 @@ spec/
 ## 当前稳定入口
 
 - 系统总规范：`spec/specs/system/spec.md`
-- 桌面端边界：`spec/specs/desktop/spec.md`
 - Web 自部署与服务边界：`spec/specs/web/spec.md`
 - Skill 体系规范：`spec/specs/skills/spec.md`
 - 同步语义：`spec/specs/sync/spec.md`

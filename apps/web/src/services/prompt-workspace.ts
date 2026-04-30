@@ -7,7 +7,7 @@ import { getPromptsDir } from '../runtime-paths.js';
 /**
  * Web 端 Prompt 工作区服务。
  *
- * 磁盘布局（与桌面端一致，见 apps/desktop/src/main/services/prompt-workspace.ts）：
+ * Web-only prompt workspace disk layout:
  *
  * ```text
  * <promptsDir>/                      = <DATA_ROOT>/data/prompts/

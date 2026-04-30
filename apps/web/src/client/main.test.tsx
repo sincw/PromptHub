@@ -24,8 +24,8 @@ vi.mock('./App', () => ({
 }));
 
 vi.mock('./index.css', () => ({}));
-vi.mock('@desktop-renderer-globals-css', () => ({}));
-vi.mock('@desktop-renderer-i18n', () => ({}));
+vi.mock('@web-runtime-globals-css', () => ({}));
+vi.mock('@web-runtime-i18n', () => ({}));
 
 describe('client main bootstrap', () => {
   beforeEach(() => {

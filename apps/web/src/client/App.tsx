@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useTranslation } from 'react-i18next';
 import { LoginPage } from './pages/Login';
 import { SetupPage } from './pages/Setup';
-import { DesktopWorkspacePage } from './pages/DesktopWorkspace';
+import { WorkspacePage } from './pages/Workspace';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -48,8 +48,8 @@ export function App() {
         <Routes>
           <Route path="/setup" element={<SetupRoute><SetupPage /></SetupRoute>} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<ProtectedRoute><DesktopWorkspacePage /></ProtectedRoute>} />
-          <Route path="*" element={<ProtectedRoute><DesktopWorkspacePage /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
+          <Route path="*" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

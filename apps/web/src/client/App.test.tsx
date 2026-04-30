@@ -26,8 +26,8 @@ vi.mock('./contexts/AuthContext', () => ({
 
 vi.mock('./pages/Login', () => ({ LoginPage: () => <div>login page</div> }));
 vi.mock('./pages/Setup', () => ({ SetupPage: () => <div>setup page</div> }));
-vi.mock('./pages/DesktopWorkspace', () => ({
-  DesktopWorkspacePage: () => <div>desktop workspace</div>,
+vi.mock('./pages/Workspace', () => ({
+  WorkspacePage: () => <div>workspace</div>,
 }));
 
 import { App } from './App';
@@ -73,16 +73,16 @@ describe('client App routing', () => {
     expect(screen.getByText('dashboard.loading')).toBeTruthy();
   });
 
-  it('renders the desktop workspace for authenticated users on any protected route', async () => {
+  it('renders the workspace for authenticated users on any protected route', async () => {
     window.history.pushState({}, '', '/');
     const { unmount } = render(<App />);
 
-    expect(await screen.findByText('desktop workspace')).toBeTruthy();
+    expect(await screen.findByText('workspace')).toBeTruthy();
 
     unmount();
     window.history.pushState({}, '', '/missing');
     render(<App />);
 
-    expect(await screen.findByText('desktop workspace')).toBeTruthy();
+    expect(await screen.findByText('workspace')).toBeTruthy();
   });
 });

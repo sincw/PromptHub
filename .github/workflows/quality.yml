@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  desktop-verify:
+  web-verify:
     runs-on: ubuntu-latest
 
     steps:
@@ -48,14 +48,8 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: Integration tests
-        run: pnpm test:integration
-
-      - name: Performance budget
-        run: pnpm test:perf
+      - name: Tests
+        run: pnpm test
 
       - name: Build
         run: pnpm build

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-本规范定义 PromptHub 当前系统级稳定真相，覆盖仓库文档分层、内部 SSD 流程、核心产品边界与稳定入口约束。
+本规范定义 PromptHub 当前系统级稳定真相，覆盖仓库文档分层、内部 SSD 流程、Web-only 产品边界与稳定入口约束。
 
 ## Stable Requirements
 
@@ -29,6 +29,12 @@
 
 - 迁移内部文档时必须保留原始内容，不得用“见 git 历史”代替。
 - 已删除的内部文档应优先从 `HEAD` 恢复后再迁移。
+
+### 5. Product Boundary
+
+- `apps/web` 是当前仓库唯一应用入口。
+- `packages/shared` 与 `packages/db` 保留为 web 运行时共享基础层。
+- Electron desktop build, release, and app source paths are no longer stable system surfaces.
 
 ## Stable Scenarios
 

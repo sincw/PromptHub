@@ -1,14 +1,14 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-// Desktop locale files – provides all keys used by embedded desktop UI components
-import desktopEn from '../../../desktop/src/renderer/i18n/locales/en.json';
-import desktopZh from '../../../desktop/src/renderer/i18n/locales/zh.json';
-import desktopZhTW from '../../../desktop/src/renderer/i18n/locales/zh-TW.json';
-import desktopJa from '../../../desktop/src/renderer/i18n/locales/ja.json';
-import desktopFr from '../../../desktop/src/renderer/i18n/locales/fr.json';
-import desktopDe from '../../../desktop/src/renderer/i18n/locales/de.json';
-import desktopEs from '../../../desktop/src/renderer/i18n/locales/es.json';
+// Runtime locale files provide all keys used by the embedded workspace UI.
+import runtimeEn from '../../vendor/renderer/i18n/locales/en.json';
+import runtimeZh from '../../vendor/renderer/i18n/locales/zh.json';
+import runtimeZhTW from '../../vendor/renderer/i18n/locales/zh-TW.json';
+import runtimeJa from '../../vendor/renderer/i18n/locales/ja.json';
+import runtimeFr from '../../vendor/renderer/i18n/locales/fr.json';
+import runtimeDe from '../../vendor/renderer/i18n/locales/de.json';
+import runtimeEs from '../../vendor/renderer/i18n/locales/es.json';
 
 // Web-specific locale additions (auth, dashboard, sync, etc.)
 import webEn from './locales/en.json';
@@ -39,13 +39,13 @@ function deepMerge(base: LocaleObj, override: LocaleObj): LocaleObj {
 }
 
 const resources = {
-  en:     { translation: deepMerge(desktopEn as LocaleObj, webEn as LocaleObj) },
-  zh:     { translation: deepMerge(desktopZh as LocaleObj, webZh as LocaleObj) },
-  'zh-TW': { translation: deepMerge(desktopZhTW as LocaleObj, webZhTW as LocaleObj) },
-  ja:     { translation: deepMerge(desktopJa as LocaleObj, webJa as LocaleObj) },
-  fr:     { translation: deepMerge(desktopFr as LocaleObj, webFr as LocaleObj) },
-  de:     { translation: deepMerge(desktopDe as LocaleObj, webDe as LocaleObj) },
-  es:     { translation: deepMerge(desktopEs as LocaleObj, webEs as LocaleObj) },
+  en:     { translation: deepMerge(runtimeEn as LocaleObj, webEn as LocaleObj) },
+  zh:     { translation: deepMerge(runtimeZh as LocaleObj, webZh as LocaleObj) },
+  'zh-TW': { translation: deepMerge(runtimeZhTW as LocaleObj, webZhTW as LocaleObj) },
+  ja:     { translation: deepMerge(runtimeJa as LocaleObj, webJa as LocaleObj) },
+  fr:     { translation: deepMerge(runtimeFr as LocaleObj, webFr as LocaleObj) },
+  de:     { translation: deepMerge(runtimeDe as LocaleObj, webDe as LocaleObj) },
+  es:     { translation: deepMerge(runtimeEs as LocaleObj, webEs as LocaleObj) },
 };
 
 const browserLanguage = navigator.language.startsWith('zh-TW') || navigator.language.startsWith('zh-HK')

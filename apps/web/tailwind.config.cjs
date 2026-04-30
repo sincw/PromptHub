@@ -4,8 +4,7 @@ module.exports = {
   content: [
     './index.html',
     './src/client/**/*.{ts,tsx}',
-    '../desktop/src/renderer/**/*.{ts,tsx}',
-    '../desktop/src/renderer/index.html',
+    './vendor/renderer/**/*.{ts,tsx}',
   ],
   theme: {
     container: {

@@ -9,7 +9,7 @@
 ### 1. Product Role
 
 - `apps/web` 的目标是可自部署网页版 PromptHub，而不只是纯 API helper。
-- Web 版本应支持浏览器访问、认证、核心 Prompt/Folder/Skill 管理，以及作为 desktop 的同步目标。
+- Web 版本应支持浏览器访问、认证、核心 Prompt/Folder/Skill 管理，并作为当前仓库唯一应用入口。
 
 ### 2. Documentation Ownership
 
@@ -20,6 +20,7 @@
 
 - Web 的架构与数据布局参考 `spec/architecture/data-layout-v0.5.5-zh.md`。
 - Web 的长期实施规划与布局迁移历史保存在 `spec/changes/legacy/docs-08-todo/`。
+- Web workspace UI runtime assets live under `apps/web/vendor/renderer` until they are refactored into native web modules.
 
 ## Stable Scenarios
 
