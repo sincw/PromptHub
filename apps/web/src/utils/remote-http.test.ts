@@ -145,6 +145,149 @@ describe('remote-http', () => {
     expect(dnsLookupMock).not.toHaveBeenCalled();
   });
 
+  it('allows localhost destinations when explicitly requested', async () => {
+    setLookupResult([{ address: '127.0.0.1', family: 4 }]);
+
+    const response = createResponse({
+      statusCode: 200,
+      statusMessage: 'OK',
+      headers: { 'content-type': 'application/json' },
+    });
+
+    setRequestScenarios(httpRequestMock, [
+      {
+        onEnd: (_request, callback) => {
+          callback(response);
+          queueMicrotask(() => response.end('{"ok":true}'));
+        },
+      },
+    ]);
+
+    const result = await requestRemoteBuffered({
+      url: 'http://localhost:8317/v1/models',
+      method: 'GET',
+      allowPrivateAddresses: true,
+    });
+
+    expect(result.body.toString('utf-8')).toBe('{"ok":true}');
+    expect(dnsLookupMock).toHaveBeenCalledWith('localhost', { all: true, verbatim: true });
+    expect(httpRequestMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostname: '127.0.0.1',
+        port: 8317,
+        path: '/v1/models',
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('uses the configured HTTP proxy when requested', async () => {
+    const originalProxy = process.env.HTTP_PROXY;
+    const originalProxyLower = process.env.http_proxy;
+
+    try {
+      process.env.HTTP_PROXY = 'http://127.0.0.1:33210';
+      delete process.env.http_proxy;
+
+      const response = createResponse({
+        statusCode: 200,
+        statusMessage: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      setRequestScenarios(httpRequestMock, [
+        {
+          onEnd: (_request, callback) => {
+            callback(response);
+            queueMicrotask(() => response.end('{"proxied":true}'));
+          },
+        },
+      ]);
+
+      const result = await requestRemoteBuffered({
+        url: 'http://example.com/v1/models',
+        method: 'GET',
+        useEnvironmentProxy: true,
+      });
+
+      expect(result.body.toString('utf-8')).toBe('{"proxied":true}');
+      expect(dnsLookupMock).not.toHaveBeenCalled();
+      expect(httpRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: 'http:',
+          hostname: '127.0.0.1',
+          port: 33210,
+          path: 'http://example.com/v1/models',
+        }),
+        expect.any(Function),
+      );
+    } finally {
+      if (originalProxy === undefined) {
+        delete process.env.HTTP_PROXY;
+      } else {
+        process.env.HTTP_PROXY = originalProxy;
+      }
+      if (originalProxyLower === undefined) {
+        delete process.env.http_proxy;
+      } else {
+        process.env.http_proxy = originalProxyLower;
+      }
+    }
+  });
+
+  it('honors CIDR entries in NO_PROXY before using an environment proxy', async () => {
+    const originalProxy = process.env.HTTP_PROXY;
+    const originalNoProxy = process.env.NO_PROXY;
+
+    try {
+      process.env.HTTP_PROXY = 'http://127.0.0.1:33210';
+      process.env.NO_PROXY = '192.168.0.0/16';
+
+      const response = createResponse({
+        statusCode: 200,
+        statusMessage: 'OK',
+        headers: { 'content-type': 'application/json' },
+      });
+
+      setRequestScenarios(httpRequestMock, [
+        {
+          onEnd: (_request, callback) => {
+            callback(response);
+            queueMicrotask(() => response.end('{"direct":true}'));
+          },
+        },
+      ]);
+
+      const result = await requestRemoteBuffered({
+        url: 'http://192.168.1.20/v1/models',
+        method: 'GET',
+        allowPrivateAddresses: true,
+        useEnvironmentProxy: true,
+      });
+
+      expect(result.body.toString('utf-8')).toBe('{"direct":true}');
+      expect(httpRequestMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hostname: '192.168.1.20',
+          port: 80,
+          path: '/v1/models',
+        }),
+        expect.any(Function),
+      );
+    } finally {
+      if (originalProxy === undefined) {
+        delete process.env.HTTP_PROXY;
+      } else {
+        process.env.HTTP_PROXY = originalProxy;
+      }
+      if (originalNoProxy === undefined) {
+        delete process.env.NO_PROXY;
+      } else {
+        process.env.NO_PROXY = originalNoProxy;
+      }
+    }
+  });
+
   it('rejects private IP literals', async () => {
     await expect(
       requestRemoteBuffered({

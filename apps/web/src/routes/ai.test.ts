@@ -201,6 +201,16 @@ describe('web ai routes', () => {
           'x-upstream': 'buffered',
         },
       });
+
+      const { requestRemoteBuffered } = await import('../utils/remote-http.js');
+      expect(vi.mocked(requestRemoteBuffered)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com/ai',
+          method: 'POST',
+          allowPrivateAddresses: true,
+          useEnvironmentProxy: true,
+        }),
+      );
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }

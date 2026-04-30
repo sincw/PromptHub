@@ -415,11 +415,16 @@ export function AISettingsPrototype() {
           "success",
         );
       } else {
+        const chatParams = buildChatParams(modelForm);
+        if (!chatParams) {
+          throw new Error(t("settings.aiWorkbenchInvalidCustomParams"));
+        }
         const result = await testAIConnection({
           provider: modelForm.provider,
           apiKey: modelForm.apiKey,
           apiUrl: modelForm.apiUrl,
           model: modelForm.model,
+          chatParams,
         });
         if (!result.success) {
           throw new Error(result.error || t("toast.connectionFailed"));
@@ -563,6 +568,7 @@ export function AISettingsPrototype() {
           apiKey: model.apiKey,
           apiUrl: model.apiUrl,
           model: model.model,
+          chatParams: model.chatParams,
         });
         if (!result.success) {
           throw new Error(result.error || t("toast.connectionFailed"));
@@ -622,6 +628,7 @@ export function AISettingsPrototype() {
           apiKey: targetModel.apiKey,
           apiUrl: targetModel.apiUrl,
           model: targetModel.model,
+          chatParams: targetModel.chatParams,
         });
         if (!result.success) {
           throw new Error(result.error || t("toast.connectionFailed"));

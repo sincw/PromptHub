@@ -49,6 +49,8 @@ async function executeBufferedRequest(request: AITransportRequest): Promise<AITr
       headers: request.headers,
       body: request.body,
       allowedProtocols: ['https:', 'http:'],
+      allowPrivateAddresses: true,
+      useEnvironmentProxy: true,
     });
 
     return toTransportResponse({
@@ -85,6 +87,8 @@ ai.post('/stream', async (c) => {
       headers: parsed.data.headers,
       body: parsed.data.body,
       allowedProtocols: ['https:', 'http:'],
+      allowPrivateAddresses: true,
+      useEnvironmentProxy: true,
     });
 
     if (response.status < 200 || response.status >= 300 || !response.body) {

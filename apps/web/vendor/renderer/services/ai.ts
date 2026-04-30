@@ -169,7 +169,7 @@ function createResponseLike(response: AITransportResponse): ResponseLike {
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
-    text: async () => response.body,
+    text: async () => response.body || response.error || response.statusText,
     json: async <T = unknown>() => JSON.parse(response.body) as T,
   };
 }
@@ -303,6 +303,24 @@ async function getErrorMessageFromResponse(
   }
 
   return errorMessage;
+}
+
+function isUnsupportedRequestParamError(
+  errorMessage: string,
+  paramName: string,
+): boolean {
+  const normalized = errorMessage.toLowerCase();
+  const param = paramName.toLowerCase();
+
+  return (
+    normalized.includes(param) &&
+    (normalized.includes("not supported") ||
+      normalized.includes("unsupported") ||
+      normalized.includes("unknown parameter") ||
+      normalized.includes("unrecognized") ||
+      normalized.includes("does not support") ||
+      normalized.includes("only the default"))
+  );
 }
 
 /**
@@ -602,8 +620,11 @@ export async function chatCompletion(
   try {
     let requestResult = await sendRequest();
     let response = requestResult.response;
+    let retriedTokenParam = false;
+    let retriedThinkingParam = false;
+    const removedUnsupportedParams = new Set<string>();
 
-    if (response && !response.ok) {
+    for (let attempt = 0; response && !response.ok && attempt < 4; attempt += 1) {
       const errorMessage = await getErrorMessageFromResponse(response);
 
       // Check for token parameter compatibility issues (Issue #21)
@@ -621,7 +642,9 @@ export async function chatCompletion(
         errorMessage.includes("enable_thinking only support stream") ||
         errorMessage.includes("parameter.enable_thinking");
 
-      if (isTokenParamError) {
+      let shouldRetry = false;
+
+      if (isTokenParamError && !retriedTokenParam) {
         console.warn(
           `[AI Service] Token parameter mismatch detected: "${errorMessage}". Retrying with alternative parameter...`,
         );
@@ -634,27 +657,54 @@ export async function chatCompletion(
           body.max_completion_tokens = mergedParams.maxTokens;
         }
 
-        requestResult = await sendRequest();
-        response = requestResult.response;
-
-        if (response && !response.ok) {
-          throw new Error(await getErrorMessageFromResponse(response));
-        }
-      } else if (isThinkingParamError) {
+        retriedTokenParam = true;
+        shouldRetry = true;
+      } else if (isThinkingParamError && !retriedThinkingParam) {
         console.warn(
           `[AI Service] enable_thinking parameter error detected: "${errorMessage}". Retrying with enable_thinking=false...`,
         );
 
         body.enable_thinking = false;
+        retriedThinkingParam = true;
+        shouldRetry = true;
+      } else {
+        const bodyParams = body as unknown as Record<string, unknown>;
+        const unsupportedOptionalParams = [
+          "temperature",
+          "top_p",
+          "top_k",
+          "frequency_penalty",
+          "presence_penalty",
+        ].filter(
+          (param) =>
+            Object.prototype.hasOwnProperty.call(bodyParams, param) &&
+            !removedUnsupportedParams.has(param) &&
+            isUnsupportedRequestParamError(errorMessage, param),
+        );
+
+        if (unsupportedOptionalParams.length > 0) {
+          console.warn(
+            `[AI Service] Unsupported optional parameter detected: "${errorMessage}". Retrying without ${unsupportedOptionalParams.join(", ")}...`,
+          );
+
+          for (const param of unsupportedOptionalParams) {
+            delete bodyParams[param];
+            removedUnsupportedParams.add(param);
+          }
+          shouldRetry = true;
+        }
+      }
+
+      if (shouldRetry) {
         requestResult = await sendRequest();
         response = requestResult.response;
-
-        if (response && !response.ok) {
-          throw new Error(await getErrorMessageFromResponse(response));
-        }
       } else {
         throw new Error(errorMessage);
       }
+    }
+
+    if (response && !response.ok) {
+      throw new Error(await getErrorMessageFromResponse(response));
     }
 
     if (requestResult.streamResult) {
