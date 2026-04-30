@@ -95,6 +95,8 @@ export function EditPromptModal({
   const [showSourceSuggestions, setShowSourceSuggestions] = useState(false);
   // 属性面板折叠状态
   const [showAttributes, setShowAttributes] = useState(false);
+  const [showSystemPromptEditor, setShowSystemPromptEditor] = useState(true);
+  const [showUserPromptEditor, setShowUserPromptEditor] = useState(true);
   const fullscreenTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Only subscribe to the fields we need, not the entire store
@@ -363,6 +365,8 @@ export function EditPromptModal({
       setSource(form.source);
       setNotes(form.notes);
       setShowEnglishVersion(!!(form.systemPromptEn || form.userPromptEn));
+      setShowSystemPromptEditor(true);
+      setShowUserPromptEditor(true);
     }
   }, [prompt, initialData, isOpen]);
 
@@ -669,6 +673,54 @@ export function EditPromptModal({
     },
     [fullscreenValue, updateFullscreenValue],
   );
+
+  const renderPromptEditorSection = ({
+    isExpanded,
+    onToggle,
+    title,
+    required = false,
+    onFullscreen,
+    children,
+  }: {
+    isExpanded: boolean;
+    onToggle: () => void;
+    title: string;
+    required?: boolean;
+    onFullscreen: () => void;
+    children: React.ReactNode;
+  }) => {
+    const ToggleIcon = isExpanded ? ChevronDownIcon : ChevronRightIcon;
+
+    return (
+      <div className="rounded-xl border border-border overflow-hidden bg-background">
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-muted/20 border-b border-border">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="min-w-0 flex items-center gap-2 text-sm font-medium text-foreground hover:text-primary transition-colors"
+            aria-expanded={isExpanded}
+          >
+            <ToggleIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="truncate">{title}</span>
+            {required && <span className="text-xs text-destructive shrink-0">*</span>}
+          </button>
+          <button
+            type="button"
+            onClick={onFullscreen}
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border bg-background"
+            title={t("prompt.fullscreen", "全屏编辑")}
+          >
+            <Maximize2Icon className="w-4 h-4" />
+          </button>
+        </div>
+        {isExpanded && (
+          <div className="p-3 space-y-3 animate-in fade-in slide-in-from-top-1">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // 如果是真正的全屏模式，渲染全屏编辑器（左右分屏：编辑 + 预览）
   if (isNativeFullscreen && activeFullscreenField) {
@@ -1381,163 +1433,99 @@ export function EditPromptModal({
         )}
 
         {/* System Prompt */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-foreground">
-              {t("prompt.systemPromptOptional")}
-            </label>
-            <button
-              onClick={() => enterNativeFullscreen("system")}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-              title={t("prompt.fullscreen", "全屏编辑")}
-            >
-              <Maximize2Icon className="w-4 h-4" />
-            </button>
-          </div>
-          {/* 分屏布局：左边编辑 + 右边预览 */}
-          <div className="flex rounded-xl border border-border overflow-hidden min-h-[200px]">
-            {/* 左边：编辑区 */}
-            <div className="w-1/2 border-r border-border flex flex-col">
+        {renderPromptEditorSection({
+          isExpanded: showSystemPromptEditor,
+          onToggle: () => setShowSystemPromptEditor((prev) => !prev),
+          title: t("prompt.systemPromptOptional"),
+          onFullscreen: () => enterNativeFullscreen("system"),
+          children: (
+            <>
               <Textarea
                 placeholder={t("prompt.systemPromptPlaceholder")}
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                className="flex-1 min-h-[200px] rounded-none border-0"
+                className="min-h-[300px]"
                 enableMarkdownList
               />
-            </div>
-            {/* 右边：实时预览 */}
-            <div className="w-1/2 flex flex-col bg-muted/30">
-              <div className="px-3 py-1.5 border-b border-border bg-muted/50 text-xs font-medium text-muted-foreground shrink-0">
-                {t("prompt.preview", "预览")}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                <div className="prose prose-sm max-w-none markdown-content">
-                  {systemPrompt ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={rehypePlugins}
-                      components={markdownComponents}
+              {/* System Prompt English */}
+              {showEnglishVersion && (
+                <div className="pl-4 border-l-2 border-primary/20 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
+                        EN
+                      </span>
+                      {t("prompt.systemPromptEn")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => enterNativeFullscreen("systemEn")}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title={t("prompt.fullscreen")}
                     >
-                      {systemPrompt}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="text-muted-foreground text-sm italic">
-                      {t("prompt.noContent", "暂无内容")}
-                    </div>
-                  )}
+                      <Maximize2Icon className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <Textarea
+                    placeholder="Enter English System Prompt..."
+                    value={systemPromptEn}
+                    onChange={(e) => setSystemPromptEn(e.target.value)}
+                    className="min-h-[80px]"
+                    enableMarkdownList
+                  />
                 </div>
-              </div>
-            </div>
-          </div>
-          {/* System Prompt English */}
-          {showEnglishVersion && (
-            <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-2">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
-                    EN
-                  </span>
-                  {t("prompt.systemPromptEn")}
-                </label>
-                <button
-                  onClick={() => enterNativeFullscreen("systemEn")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("prompt.fullscreen")}
-                >
-                  <Maximize2Icon className="w-3 h-3" />
-                </button>
-              </div>
-              <Textarea
-                placeholder="Enter English System Prompt..."
-                value={systemPromptEn}
-                onChange={(e) => setSystemPromptEn(e.target.value)}
-                className="min-h-[80px]"
-                enableMarkdownList
-              />
-            </div>
-          )}
-        </div>
+              )}
+            </>
+          ),
+        })}
 
         {/* User Prompt */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="block text-sm font-medium text-foreground">
-              {t("prompt.userPromptLabel")}
-              <span className="ml-2 text-xs text-destructive">*</span>
-            </label>
-            <button
-              onClick={() => enterNativeFullscreen("user")}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors border border-border"
-              title={t("prompt.fullscreen", "全屏编辑")}
-            >
-              <Maximize2Icon className="w-4 h-4" />
-            </button>
-          </div>
-          {/* 分屏布局：左边编辑 + 右边预览 */}
-          <div className="flex rounded-xl border border-border overflow-hidden min-h-[280px]">
-            {/* 左边：编辑区 */}
-            <div className="w-1/2 border-r border-border flex flex-col">
+        {renderPromptEditorSection({
+          isExpanded: showUserPromptEditor,
+          onToggle: () => setShowUserPromptEditor((prev) => !prev),
+          title: t("prompt.userPromptLabel"),
+          required: true,
+          onFullscreen: () => enterNativeFullscreen("user"),
+          children: (
+            <>
               <Textarea
                 placeholder={t("prompt.userPromptPlaceholder")}
                 value={userPrompt}
                 onChange={(e) => setUserPrompt(e.target.value)}
-                className="flex-1 min-h-[280px] rounded-none border-0"
+                className="min-h-[280px]"
                 enableMarkdownList
               />
-            </div>
-            {/* 右边：实时预览 */}
-            <div className="w-1/2 flex flex-col bg-muted/30">
-              <div className="px-3 py-1.5 border-b border-border bg-muted/50 text-xs font-medium text-muted-foreground shrink-0">
-                {t("prompt.preview", "预览")}
-              </div>
-              <div className="flex-1 overflow-auto p-4">
-                <div className="prose prose-sm max-w-none markdown-content">
-                  {userPrompt ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={rehypePlugins}
-                      components={markdownComponents}
+              {/* User Prompt English */}
+              {showEnglishVersion && (
+                <div className="pl-4 border-l-2 border-primary/20 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
+                        EN
+                      </span>
+                      {t("prompt.userPromptEn")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => enterNativeFullscreen("userEn")}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      title={t("prompt.fullscreen")}
                     >
-                      {userPrompt}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="text-muted-foreground text-sm italic">
-                      {t("prompt.noContent", "暂无内容")}
-                    </div>
-                  )}
+                      <Maximize2Icon className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <Textarea
+                    placeholder="Enter English User Prompt..."
+                    value={userPromptEn}
+                    onChange={(e) => setUserPromptEn(e.target.value)}
+                    className="min-h-[120px]"
+                    enableMarkdownList
+                  />
                 </div>
-              </div>
-            </div>
-          </div>
-          {/* User Prompt English */}
-          {showEnglishVersion && (
-            <div className="mt-2 pl-4 border-l-2 border-primary/20 space-y-2">
-              <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
-                    EN
-                  </span>
-                  {t("prompt.userPromptEn")}
-                </label>
-                <button
-                  onClick={() => enterNativeFullscreen("userEn")}
-                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={t("prompt.fullscreen")}
-                >
-                  <Maximize2Icon className="w-3 h-3" />
-                </button>
-              </div>
-              <Textarea
-                placeholder="Enter English User Prompt..."
-                value={userPromptEn}
-                onChange={(e) => setUserPromptEn(e.target.value)}
-                className="min-h-[120px]"
-                enableMarkdownList
-              />
-            </div>
-          )}
-        </div>
+              )}
+            </>
+          ),
+        })}
       </div>
 
       {/* 未保存更改提示弹窗 */}
