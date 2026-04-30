@@ -115,9 +115,39 @@ describe('web prompt workspace storage', () => {
         tags: ['launch', 'marketing'],
         promptType: 'text',
       });
+      const aiTestSessions = [
+        {
+          id: 'session-workspace-1',
+          promptSnapshot: {
+            title: 'Launch Copy',
+            systemPrompt: 'You write crisp product copy.',
+            userPrompt: 'Draft a launch message for enterprise buyers.',
+            promptVersion: 1,
+          },
+          model: { provider: 'openai', model: 'gpt-test' },
+          messages: [
+            {
+              id: 'turn-workspace-1',
+              role: 'user',
+              content: 'Draft a launch message for enterprise buyers.',
+              createdAt: '2026-04-30T00:00:00.000Z',
+            },
+            {
+              id: 'turn-workspace-2',
+              role: 'assistant',
+              content: 'Launch message',
+              createdAt: '2026-04-30T00:00:02.000Z',
+            },
+          ],
+          status: 'completed',
+          lastLatencyMs: 2000,
+          createdAt: '2026-04-30T00:00:00.000Z',
+          updatedAt: '2026-04-30T00:00:02.000Z',
+        },
+      ];
       db.prepare(
-        'UPDATE prompts SET owner_user_id = ?, visibility = ?, usage_count = ?, last_ai_response = ? WHERE id = ?',
-      ).run(owner.user.id, 'shared', 9, 'Latest AI answer', prompt.id);
+        'UPDATE prompts SET owner_user_id = ?, visibility = ?, usage_count = ?, last_ai_response = ?, ai_test_sessions = ? WHERE id = ?',
+      ).run(owner.user.id, 'shared', 9, 'Latest AI answer', JSON.stringify(aiTestSessions), prompt.id);
       promptDb.update(prompt.id, {
         userPrompt: 'Draft a launch message for {{audience}} with urgency.',
       });
@@ -152,6 +182,7 @@ describe('web prompt workspace storage', () => {
       expect(rawPromptFile).toContain('visibility: "shared"');
       expect(rawPromptFile).toContain('usageCount: 9');
       expect(rawPromptFile).toContain('lastAiResponse: "Latest AI answer"');
+      expect(rawPromptFile).toContain('aiTestSessions: [{"id":"session-workspace-1"');
       expect(rawPromptFile).toContain('<!-- PROMPTHUB:SYSTEM -->');
       expect(rawPromptFile).toContain('You write crisp product copy.');
       expect(rawPromptFile).toContain(
@@ -218,6 +249,7 @@ isFavorite: false
 isPinned: false
 usageCount: 11
 lastAiResponse: "healthy"
+aiTestSessions: [{"id":"session_import_1","promptSnapshot":{"title":"Deploy Check","systemPrompt":"You verify production deployment safety.","userPrompt":"Check deployment health for {{service}}.","promptVersion":1},"model":{"provider":"openai","model":"gpt-test"},"messages":[{"id":"turn_import_1","role":"user","content":"Check deployment health for api.","createdAt":"2026-04-30T00:00:00.000Z"},{"id":"turn_import_2","role":"assistant","content":"healthy","createdAt":"2026-04-30T00:00:01.000Z"}],"status":"completed","lastLatencyMs":1000,"createdAt":"2026-04-30T00:00:00.000Z","updatedAt":"2026-04-30T00:00:01.000Z"}]
 createdAt: "2026-04-13T00:00:00.000Z"
 updatedAt: "2026-04-13T00:00:00.000Z"
 ---
@@ -274,6 +306,8 @@ Check deployment health for {{service}}.
       expect(prompt?.systemPrompt).toBe('You verify production deployment safety.');
       expect(prompt?.usageCount).toBe(11);
       expect(prompt?.lastAiResponse).toBe('healthy');
+      expect(prompt?.aiTestSessions).toHaveLength(1);
+      expect(prompt?.aiTestSessions?.[0]?.messages).toHaveLength(2);
       expect(prompt?.variables).toEqual([
         { name: 'service', type: 'text', required: true },
       ]);

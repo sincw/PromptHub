@@ -184,6 +184,11 @@ export function initDatabase(
       db!.prepare("ALTER TABLE prompts ADD COLUMN last_ai_response TEXT").run();
     }
 
+    if (!promptCols.includes("ai_test_sessions")) {
+      console.log("Migrating: Adding ai_test_sessions column to prompts table");
+      db!.prepare("ALTER TABLE prompts ADD COLUMN ai_test_sessions TEXT").run();
+    }
+
     if (!promptCols.includes("owner_user_id")) {
       console.log("Migrating: Adding owner_user_id column to prompts table");
       db!.prepare("ALTER TABLE prompts ADD COLUMN owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL").run();

@@ -18,6 +18,34 @@ const variableSchema = z.object({
   required: z.boolean(),
 });
 
+const aiTestSessionMessageSchema = z.object({
+  id: z.string().trim().min(1),
+  role: z.enum(['system', 'user', 'assistant']),
+  content: z.string().max(100000),
+  thinkingContent: z.string().max(100000).nullable().optional(),
+  createdAt: z.string().trim().min(1),
+});
+
+const aiTestSessionSchema = z.object({
+  id: z.string().trim().min(1),
+  promptSnapshot: z.object({
+    title: z.string().max(200),
+    systemPrompt: z.string().max(100000).nullable().optional(),
+    userPrompt: z.string().max(100000),
+    promptVersion: z.number().int().nonnegative().optional(),
+  }),
+  model: z.object({
+    provider: z.string().max(200),
+    model: z.string().max(500),
+    apiUrl: z.string().max(5000).optional(),
+  }),
+  messages: z.array(aiTestSessionMessageSchema).max(200),
+  status: z.literal('completed'),
+  lastLatencyMs: z.number().int().nonnegative().optional(),
+  createdAt: z.string().trim().min(1),
+  updatedAt: z.string().trim().min(1),
+});
+
 const createPromptSchema = z.object({
   visibility: z.enum(['private', 'shared']).optional(),
   title: z.string().trim().min(1, 'title is required').max(200, 'title is too long'),
@@ -41,6 +69,7 @@ const updatePromptSchema = createPromptSchema.partial().extend({
   isPinned: z.boolean().optional(),
   usageCount: z.number().int().nonnegative().optional(),
   lastAiResponse: z.string().max(100000).optional(),
+  aiTestSessions: z.array(aiTestSessionSchema).max(50).optional(),
 });
 
 const createVersionSchema = z.object({

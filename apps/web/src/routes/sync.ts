@@ -51,6 +51,34 @@ const skillSafetyReportSchema = z.object({
   score: z.number().min(0).max(100).optional(),
 });
 
+const aiTestSessionMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(['system', 'user', 'assistant']),
+  content: z.string(),
+  thinkingContent: z.string().nullable().optional(),
+  createdAt: z.string(),
+});
+
+const aiTestSessionSchema = z.object({
+  id: z.string(),
+  promptSnapshot: z.object({
+    title: z.string(),
+    systemPrompt: z.string().nullable().optional(),
+    userPrompt: z.string(),
+    promptVersion: z.number().int().nonnegative().optional(),
+  }),
+  model: z.object({
+    provider: z.string(),
+    model: z.string(),
+    apiUrl: z.string().optional(),
+  }),
+  messages: z.array(aiTestSessionMessageSchema),
+  status: z.literal('completed'),
+  lastLatencyMs: z.number().int().nonnegative().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 const promptSchema = z.object({
   id: z.string(),
   ownerUserId: z.string().nullable().optional(),
@@ -82,6 +110,7 @@ const promptSchema = z.object({
   source: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   lastAiResponse: z.string().nullable().optional(),
+  aiTestSessions: z.array(aiTestSessionSchema).optional(),
   createdAt: z.union([z.string(), z.number().int().nonnegative()]),
   updatedAt: z.union([z.string(), z.number().int().nonnegative()]),
 });
@@ -305,6 +334,7 @@ function normalizeSyncPayload(payload: z.infer<typeof importPayloadSchema>['payl
       source: prompt.source,
       notes: prompt.notes,
       lastAiResponse: prompt.lastAiResponse,
+      aiTestSessions: prompt.aiTestSessions ?? [],
       createdAt: typeof prompt.createdAt === 'number' ? new Date(prompt.createdAt).toISOString() : prompt.createdAt,
       updatedAt: typeof prompt.updatedAt === 'number' ? new Date(prompt.updatedAt).toISOString() : prompt.updatedAt,
     })),

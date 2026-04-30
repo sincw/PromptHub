@@ -150,6 +150,61 @@ describe('web prompt routes', () => {
       expect(updatePayload.data.isPinned).toBe(true);
       expect(updatePayload.data.userPrompt).toBe('Say hello loudly');
       expect(updatePayload.data.currentVersion).toBeGreaterThan(1);
+      const contentVersion = updatePayload.data.currentVersion;
+
+      const aiTestSessions = [
+        {
+          id: 'session-1',
+          promptSnapshot: {
+            title: 'My Prompt',
+            systemPrompt: null,
+            userPrompt: 'Say hello loudly',
+            promptVersion: contentVersion,
+          },
+          model: {
+            provider: 'openai',
+            model: 'gpt-test',
+            apiUrl: 'https://example.com/v1',
+          },
+          messages: [
+            {
+              id: 'turn-1',
+              role: 'user',
+              content: 'Say hello loudly',
+              createdAt: '2026-04-30T00:00:00.000Z',
+            },
+            {
+              id: 'turn-2',
+              role: 'assistant',
+              content: 'HELLO',
+              thinkingContent: 'Need loud greeting',
+              createdAt: '2026-04-30T00:00:01.000Z',
+            },
+          ],
+          status: 'completed',
+          lastLatencyMs: 321,
+          createdAt: '2026-04-30T00:00:00.000Z',
+          updatedAt: '2026-04-30T00:00:01.000Z',
+        },
+      ];
+
+      const sessionUpdateResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            lastAiResponse: 'HELLO',
+            aiTestSessions,
+          }),
+        }),
+      );
+      expect(sessionUpdateResponse.status).toBe(200);
+      const sessionUpdatePayload = await sessionUpdateResponse.json() as {
+        data: { lastAiResponse: string; aiTestSessions: unknown[]; currentVersion: number };
+      };
+      expect(sessionUpdatePayload.data.lastAiResponse).toBe('HELLO');
+      expect(sessionUpdatePayload.data.aiTestSessions).toEqual(aiTestSessions);
+      expect(sessionUpdatePayload.data.currentVersion).toBe(contentVersion);
 
       const listResponse = await app.request(
         new Request('http://local/api/prompts?scope=private&isFavorite=true', {
@@ -184,6 +239,80 @@ describe('web prompt routes', () => {
         }),
       );
       expect(missingResponse.status).toBe(404);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, TEST_TIMEOUT);
+
+  it('rejects aiTestSessions beyond persistence limits', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
+
+    try {
+      const app = await createTestApp(dataDir);
+      const { payload: registerPayload } = await registerUser(app, 'sessionlimits', 'debugpass001');
+      const token = registerPayload.data.accessToken;
+
+      const { payload: createPayload } = await createPrompt(app, token, {
+        title: 'Session Limits',
+        userPrompt: 'Say hello',
+      });
+      const promptId = createPayload.data!.id;
+      const session = {
+        id: 'session-limit',
+        promptSnapshot: {
+          title: 'Session Limits',
+          systemPrompt: null,
+          userPrompt: 'Say hello',
+          promptVersion: 1,
+        },
+        model: { provider: 'openai', model: 'gpt-test' },
+        messages: [
+          {
+            id: 'turn-limit',
+            role: 'user',
+            content: 'Say hello',
+            createdAt: '2026-04-30T00:00:00.000Z',
+          },
+        ],
+        status: 'completed',
+        createdAt: '2026-04-30T00:00:00.000Z',
+        updatedAt: '2026-04-30T00:00:00.000Z',
+      };
+
+      const tooManySessionsResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            aiTestSessions: Array.from({ length: 51 }, (_, index) => ({
+              ...session,
+              id: `session-limit-${index}`,
+            })),
+          }),
+        }),
+      );
+      expect(tooManySessionsResponse.status).toBe(422);
+
+      const tooManyMessagesResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            aiTestSessions: [
+              {
+                ...session,
+                messages: Array.from({ length: 201 }, (_, index) => ({
+                  id: `turn-limit-${index}`,
+                  role: index % 2 === 0 ? 'user' : 'assistant',
+                  content: `message ${index}`,
+                  createdAt: '2026-04-30T00:00:00.000Z',
+                })),
+              },
+            ],
+          }),
+        }),
+      );
+      expect(tooManyMessagesResponse.status).toBe(422);
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }

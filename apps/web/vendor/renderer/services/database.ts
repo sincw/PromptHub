@@ -280,6 +280,7 @@ export async function updatePrompt(
       source: data.source ?? undefined,
       notes: data.notes ?? undefined,
       lastAiResponse: data.lastAiResponse ?? undefined,
+      aiTestSessions: data.aiTestSessions,
     });
     if (!updated) {
       throw new Error(`Prompt not found: ${id}`);

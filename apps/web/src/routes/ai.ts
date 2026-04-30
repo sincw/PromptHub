@@ -4,6 +4,7 @@ import type { AITransportRequest, AITransportResponse } from '@prompthub/shared'
 import { error, ErrorCode, success } from '../utils/response.js';
 import { parseJsonBody } from '../utils/validation.js';
 import { requestRemoteBuffered, requestRemoteStream } from '../utils/remote-http.js';
+import { config } from '../config.js';
 
 const ai = new Hono();
 
@@ -48,6 +49,7 @@ async function executeBufferedRequest(request: AITransportRequest): Promise<AITr
       method: request.method,
       headers: request.headers,
       body: request.body,
+      timeoutMs: config.ai.requestTimeoutMs,
       allowedProtocols: ['https:', 'http:'],
       allowPrivateAddresses: true,
       useEnvironmentProxy: true,
@@ -86,6 +88,7 @@ ai.post('/stream', async (c) => {
       method: parsed.data.method,
       headers: parsed.data.headers,
       body: parsed.data.body,
+      timeoutMs: config.ai.requestTimeoutMs,
       allowedProtocols: ['https:', 'http:'],
       allowPrivateAddresses: true,
       useEnvironmentProxy: true,

@@ -175,6 +175,44 @@ describe('web import/export routes', () => {
         tags: ['exported'],
       });
       expect(prompt.response.status).toBe(201);
+      const aiTestSessions = [
+        {
+          id: 'export-session-1',
+          promptSnapshot: {
+            title: 'Export Prompt',
+            systemPrompt: null,
+            userPrompt: 'Export body',
+            promptVersion: 1,
+          },
+          model: { provider: 'openai', model: 'gpt-test' },
+          messages: [
+            {
+              id: 'export-turn-1',
+              role: 'user',
+              content: 'Export body',
+              createdAt: '2026-04-30T00:00:00.000Z',
+            },
+            {
+              id: 'export-turn-2',
+              role: 'assistant',
+              content: 'Exported answer',
+              createdAt: '2026-04-30T00:00:01.000Z',
+            },
+          ],
+          status: 'completed',
+          lastLatencyMs: 100,
+          createdAt: '2026-04-30T00:00:00.000Z',
+          updatedAt: '2026-04-30T00:00:01.000Z',
+        },
+      ];
+      const sessionUpdate = await app.request(
+        new Request(`http://local/api/prompts/${prompt.payload.data!.id}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({ lastAiResponse: 'Exported answer', aiTestSessions }),
+        }),
+      );
+      expect(sessionUpdate.status).toBe(200);
 
       const skill = await createSkill(app, token, {
         name: 'export-skill',
@@ -193,6 +231,7 @@ describe('web import/export routes', () => {
         expect.objectContaining({
           title: 'Export Prompt',
           folderId: rootFolder.payload.data!.id,
+          aiTestSessions,
         }),
       ]);
       expect(payload.promptVersions.length).toBeGreaterThanOrEqual(1);

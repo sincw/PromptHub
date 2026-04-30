@@ -10,6 +10,7 @@ const ENV_KEYS = [
   'JWT_SECRET',
   'JWT_ACCESS_TTL',
   'JWT_REFRESH_TTL',
+  'AI_REQUEST_TIMEOUT_MS',
   'DATA_ROOT',
   'ALLOW_REGISTRATION',
   'LOG_LEVEL',
@@ -45,6 +46,7 @@ async function createTestApp(
   process.env.JWT_SECRET = 'test-secret-for-web-ai-flow-1234567890';
   process.env.JWT_ACCESS_TTL = '900';
   process.env.JWT_REFRESH_TTL = '604800';
+  process.env.AI_REQUEST_TIMEOUT_MS = '1200000';
   process.env.DATA_ROOT = dataDir;
   process.env.ALLOW_REGISTRATION = 'true';
   process.env.LOG_LEVEL = 'debug';
@@ -207,6 +209,7 @@ describe('web ai routes', () => {
         expect.objectContaining({
           url: 'https://example.com/ai',
           method: 'POST',
+          timeoutMs: 1200000,
           allowPrivateAddresses: true,
           useEnvironmentProxy: true,
         }),
@@ -263,6 +266,17 @@ describe('web ai routes', () => {
       expect(response.headers.get('x-upstream')).toBe('streamed');
       expect(response.headers.get('content-length')).toBeNull();
       expect(await response.text()).toBe('data: hello\n\n');
+
+      const { requestRemoteStream } = await import('../utils/remote-http.js');
+      expect(vi.mocked(requestRemoteStream)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com/ai',
+          method: 'POST',
+          timeoutMs: 1200000,
+          allowPrivateAddresses: true,
+          useEnvironmentProxy: true,
+        }),
+      );
     } finally {
       fs.rmSync(dataDir, { recursive: true, force: true });
     }

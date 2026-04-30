@@ -7,6 +7,36 @@
 export type PromptType = "text" | "image" | "video";
 export type ResourceVisibility = 'private' | 'shared';
 
+export interface AiTestSessionMessage {
+  id: string;
+  role: "system" | "user" | "assistant";
+  content: string;
+  thinkingContent?: string | null;
+  createdAt: string;
+}
+
+export interface AiTestPromptSnapshot {
+  title: string;
+  systemPrompt?: string | null;
+  userPrompt: string;
+  promptVersion?: number;
+}
+
+export interface AiTestSession {
+  id: string;
+  promptSnapshot: AiTestPromptSnapshot;
+  model: {
+    provider: string;
+    model: string;
+    apiUrl?: string;
+  };
+  messages: AiTestSessionMessage[];
+  status: "completed";
+  lastLatencyMs?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Prompt {
   id: string;
   ownerUserId?: string | null;
@@ -31,6 +61,7 @@ export interface Prompt {
   source?: string | null; // 来源 / Source URL or reference
   notes?: string | null; // 备注 / Personal notes about the prompt
   lastAiResponse?: string | null; // Last AI test response / 最后一次 AI 测试的响应
+  aiTestSessions?: AiTestSession[]; // Persistent AI test conversation sessions / 持久化 AI 测试对话会话
   createdAt: string; // ISO 8601 format / ISO 8601 格式
   updatedAt: string; // ISO 8601 format / ISO 8601 格式
 }
@@ -99,6 +130,7 @@ export interface UpdatePromptDTO {
   source?: string;
   notes?: string;
   lastAiResponse?: string;
+  aiTestSessions?: AiTestSession[];
 }
 
 export interface SearchQuery {

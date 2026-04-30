@@ -32,6 +32,7 @@ interface PromptRow {
   source: string | null;
   notes: string | null;
   last_ai_response: string | null;
+  ai_test_sessions: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -65,8 +66,8 @@ export class PromptDB {
       INSERT INTO prompts (
         id, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
         user_prompt_en, variables, tags, folder_id, images, videos, source, notes,
-        last_ai_response, is_favorite, current_version, usage_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        last_ai_response, ai_test_sessions, is_favorite, current_version, usage_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -86,6 +87,7 @@ export class PromptDB {
       data.source || null,
       data.notes || null,
       null,
+      JSON.stringify([]),
       0,
         0,
         0,
@@ -209,6 +211,10 @@ export class PromptDB {
       updates.push("last_ai_response = ?");
       values.push(data.lastAiResponse);
     }
+    if (data.aiTestSessions !== undefined) {
+      updates.push("ai_test_sessions = ?");
+      values.push(JSON.stringify(data.aiTestSessions));
+    }
 
     values.push(id);
 
@@ -262,6 +268,9 @@ export class PromptDB {
       ...(data.notes !== undefined && { notes: data.notes }),
       ...(data.lastAiResponse !== undefined && {
         lastAiResponse: data.lastAiResponse,
+      }),
+      ...(data.aiTestSessions !== undefined && {
+        aiTestSessions: data.aiTestSessions,
       }),
     };
 
@@ -488,11 +497,11 @@ export class PromptDB {
         `INSERT OR REPLACE INTO prompts (
           id, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
           user_prompt_en, variables, tags, folder_id, images, videos, is_favorite, is_pinned,
-          current_version, usage_count, source, notes, last_ai_response, created_at, updated_at
+          current_version, usage_count, source, notes, last_ai_response, ai_test_sessions, created_at, updated_at
         ) VALUES (
           @id, @title, @description, @prompt_type, @system_prompt, @system_prompt_en, @user_prompt,
           @user_prompt_en, @variables, @tags, @folder_id, @images, @videos, @is_favorite, @is_pinned,
-          @current_version, @usage_count, @source, @notes, @last_ai_response, @created_at, @updated_at
+          @current_version, @usage_count, @source, @notes, @last_ai_response, @ai_test_sessions, @created_at, @updated_at
         )`,
       )
       .run({
@@ -516,6 +525,7 @@ export class PromptDB {
         "@source": prompt.source ?? null,
         "@notes": prompt.notes ?? null,
         "@last_ai_response": prompt.lastAiResponse ?? null,
+        "@ai_test_sessions": JSON.stringify(prompt.aiTestSessions ?? []),
         "@created_at": prompt.createdAt
           ? new Date(prompt.createdAt).getTime()
           : Date.now(),
@@ -577,6 +587,7 @@ export class PromptDB {
       source: row.source,
       notes: row.notes,
       lastAiResponse: row.last_ai_response,
+      aiTestSessions: JSON.parse(row.ai_test_sessions || "[]"),
       createdAt: new Date(row.created_at).toISOString(),
       updatedAt: new Date(row.updated_at).toISOString(),
     };

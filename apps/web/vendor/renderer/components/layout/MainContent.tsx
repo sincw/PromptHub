@@ -9,7 +9,7 @@ import { resolveScenarioModel } from '../../services/ai-defaults';
 // Lazy load SkillManager for better initial load performance
 // 懒加载 SkillManager 以提升初始加载性能
 const SkillManager = lazy(() => import('../skill/SkillManager').then(m => ({ default: m.SkillManager })));
-import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon } from 'lucide-react';
+import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PlusIcon, ChevronDownIcon } from 'lucide-react';
 import { EditPromptModal, VersionHistoryModal, VariableInputModal, PromptListHeader, PromptListView, PromptTableView, AiTestModal, PromptDetailModal, PromptGalleryView, PromptKanbanView } from '../prompt';
 import type { OutputFormatConfig } from '../prompt/VariableInputModal';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
@@ -20,7 +20,8 @@ import { CollapsibleThinking } from '../ui/CollapsibleThinking';
 import { useToast } from '../ui/Toast';
 import { chatCompletion, generateImage, buildMessagesFromPrompt, multiModelCompare, AITestResult, StreamCallbacks } from '../../services/ai';
 import { useTranslation } from 'react-i18next';
-import type { Prompt, PromptVersion } from '@prompthub/shared/types';
+import type { AiTestSession, AiTestSessionMessage, Prompt, PromptVersion } from '@prompthub/shared/types';
+import type { ChatMessage, ChatCompletionResult } from '../../services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -41,6 +42,55 @@ const INITIAL_PROMPT_RENDER_COUNT = 160;
 const PROMPT_RENDER_CHUNK_SIZE = 160;
 const PROMPT_RENDER_CHUNK_DELAY_MS = 24;
 const PROMPT_CARD_INTRINSIC_SIZE = "76px";
+const MAX_AI_TEST_SESSIONS = 50;
+
+interface PromptTestState {
+  isTestingAI: boolean;
+  isComparingModels: boolean;
+  aiResponse: string | null;
+  aiThinking: string | null;
+  aiError: string | null;
+  isAiResponseImage?: boolean;
+  compareResults: AITestResult[] | null;
+  compareError: string | null;
+  activeAiTestSession: AiTestSession | null;
+}
+
+function createAiTestId(prefix: string): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function toAiTestMessage(message: ChatMessage, createdAt: string): AiTestSessionMessage {
+  return {
+    id: createAiTestId('aiturn'),
+    role: message.role,
+    content: message.content,
+    createdAt,
+  };
+}
+
+function toChatMessages(session: AiTestSession): ChatMessage[] {
+  return session.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+  }));
+}
+
+function getSessionTurnCount(session: AiTestSession): number {
+  return session.messages.filter((message) => message.role === 'assistant').length;
+}
+
+function upsertAiTestSession(
+  sessions: AiTestSession[] | undefined,
+  nextSession: AiTestSession,
+): AiTestSession[] {
+  const existingSessions = sessions ?? [];
+  const withoutCurrent = existingSessions.filter((session) => session.id !== nextSession.id);
+  return [nextSession, ...withoutCurrent].slice(0, MAX_AI_TEST_SESSIONS);
+}
 
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -297,15 +347,9 @@ export function MainContent() {
 
   // Store test states/results by prompt ID (persisted in component state)
   // 按 prompt ID 保存测试状态和结果（持久化）
-  const [promptTestStates, setPromptTestStates] = useState<Record<string, {
-    isTestingAI: boolean;
-    isComparingModels: boolean;
-    aiResponse: string | null;
-    aiThinking: string | null;
-    isAiResponseImage?: boolean;
-    compareResults: AITestResult[] | null;
-    compareError: string | null;
-  }>>({});
+  const [promptTestStates, setPromptTestStates] = useState<Record<string, PromptTestState>>({});
+  const [aiFollowUpInputs, setAiFollowUpInputs] = useState<Record<string, string>>({});
+  const [expandedAiSessionIds, setExpandedAiSessionIds] = useState<Record<string, boolean>>({});
 
   // Get current prompt test state and results
   // 获取当前 prompt 的测试状态和结果
@@ -314,6 +358,13 @@ export function MainContent() {
   const isComparingModels = currentState?.isComparingModels || false;
   const compareResults = currentState?.compareResults || null;
   const compareError = currentState?.compareError || null;
+  const aiError = currentState?.aiError || null;
+  const selectedPrompt = selectedId ? prompts.find((p) => p.id === selectedId) : null;
+  const hasPromptTestState = selectedId ? Object.prototype.hasOwnProperty.call(promptTestStates, selectedId) : false;
+  const activeAiTestSession = hasPromptTestState
+    ? (currentState?.activeAiTestSession ?? null)
+    : (selectedPrompt?.aiTestSessions?.[0] ?? null);
+  const selectedPromptAiTestHistory = selectedPrompt?.aiTestSessions ?? [];
 
   // Separate streaming state for real-time display (bypasses complex state updates)
   // 独立的流式状态，用于实时显示（绕过复杂的状态更新）
@@ -329,7 +380,7 @@ export function MainContent() {
 
   // Update current prompt test state
   // 更新当前 prompt 的测试状态
-  const updatePromptState = (promptId: string, updates: Partial<typeof currentState>) => {
+  const updatePromptState = (promptId: string, updates: Partial<PromptTestState>) => {
     setPromptTestStates(prev => ({
       ...prev,
       [promptId]: {
@@ -337,9 +388,11 @@ export function MainContent() {
         isComparingModels: prev[promptId]?.isComparingModels || false,
         aiResponse: prev[promptId]?.aiResponse || null,
         aiThinking: prev[promptId]?.aiThinking || null,
+        aiError: prev[promptId]?.aiError || null,
         isAiResponseImage: prev[promptId]?.isAiResponseImage || false,
         compareResults: prev[promptId]?.compareResults || null,
         compareError: prev[promptId]?.compareError || null,
+        activeAiTestSession: prev[promptId]?.activeAiTestSession || null,
         ...updates
       }
     }));
@@ -373,6 +426,10 @@ export function MainContent() {
         updatePromptState(selectedId, { aiThinking: thinking });
       }
     }
+  };
+
+  const setAiError = (error: string | null) => {
+    if (selectedId) updatePromptState(selectedId, { aiError: error });
   };
 
   const setIsAiResponseImage = (isImage: boolean) => {
@@ -599,12 +656,127 @@ export function MainContent() {
     }
   };
 
+  const executeAiChat = async (
+    messages: ChatMessage[],
+    outputFormat?: OutputFormatConfig,
+  ): Promise<{ result: ChatCompletionResult; latencyMs: number }> => {
+    const useStream = !!singleChatConfig.chatParams?.stream;
+    const useThinking = !!singleChatConfig.chatParams?.enableThinking;
+
+    console.log('[MainContent] AI Test - Stream:', useStream, 'Thinking:', useThinking);
+    console.log('[MainContent] chatParams:', singleChatConfig.chatParams);
+
+    if (useStream) {
+      setIsStreaming(true);
+      setStreamingContent('');
+      setStreamingThinking('');
+    }
+
+    const fullContentRef = { current: '' };
+    const fullThinkingRef = { current: '' };
+
+    let contentRafId: number | null = null;
+    let thinkingRafId: number | null = null;
+
+    const scheduleContentFlush = () => {
+      if (contentRafId !== null) return;
+      contentRafId = requestAnimationFrame(() => {
+        contentRafId = null;
+        flushSync(() => {
+          setStreamingContent(fullContentRef.current);
+        });
+      });
+    };
+
+    const scheduleThinkingFlush = () => {
+      if (thinkingRafId !== null) return;
+      thinkingRafId = requestAnimationFrame(() => {
+        thinkingRafId = null;
+        flushSync(() => {
+          setStreamingThinking(fullThinkingRef.current);
+        });
+      });
+    };
+
+    const startedAt = Date.now();
+    const result = await chatCompletion(singleChatConfig as any, messages, {
+      stream: useStream,
+      enableThinking: useThinking,
+      responseFormat: outputFormat,
+      streamCallbacks: useStream ? {
+        onContent: (chunk) => {
+          fullContentRef.current += chunk;
+          scheduleContentFlush();
+        },
+        onThinking: (chunk) => {
+          fullThinkingRef.current += chunk;
+          scheduleThinkingFlush();
+        },
+        onComplete: (fullContent, thinkingContent) => {
+          console.log(`[Stream UI] Complete!`);
+          if (contentRafId !== null) {
+            cancelAnimationFrame(contentRafId);
+            contentRafId = null;
+          }
+          if (thinkingRafId !== null) {
+            cancelAnimationFrame(thinkingRafId);
+            thinkingRafId = null;
+          }
+          setIsStreaming(false);
+          setAiResponse(fullContent);
+          if (thinkingContent) {
+            setAiThinking(thinkingContent);
+          }
+        }
+      } : undefined,
+    });
+    const latencyMs = Date.now() - startedAt;
+
+    if (!useStream) {
+      setAiResponse(result.content);
+      setAiThinking(result.thinkingContent || null);
+      return { result, latencyMs };
+    }
+
+    const streamedResult: ChatCompletionResult = {
+      content: fullContentRef.current || result.content,
+      thinkingContent: fullThinkingRef.current || result.thinkingContent,
+    };
+
+    setIsStreaming(false);
+    setAiResponse(streamedResult.content);
+    if (streamedResult.thinkingContent) {
+      setAiThinking(streamedResult.thinkingContent);
+    }
+
+    return { result: streamedResult, latencyMs };
+  };
+
+  const persistAiTestSession = async (
+    prompt: Prompt,
+    session: AiTestSession,
+    response: string,
+  ) => {
+    await updatePrompt(prompt.id, {
+      lastAiResponse: response,
+      aiTestSessions: upsertAiTestSession(prompt.aiTestSessions, session),
+    });
+    updatePromptState(prompt.id, {
+      activeAiTestSession: session,
+      aiResponse: response,
+      aiThinking: session.messages.at(-1)?.thinkingContent ?? null,
+      aiError: null,
+      isAiResponseImage: false,
+    });
+  };
+
   const runAiTest = async (systemPrompt: string | undefined, userPrompt: string, promptId?: string, outputFormat?: OutputFormatConfig) => {
     // Do not use modal in card view; render results inline
     // 卡片视图不使用弹窗，直接在页面内显示结果
     setIsTestingAI(true);
     setAiResponse(null);
     setAiThinking(null);
+    setAiError(null);
     setIsAiResponseImage(false);
     setIsAiTestVariableModalOpen(false);
 
@@ -705,104 +877,163 @@ export function MainContent() {
       }
 
       const messages = buildMessagesFromPrompt(systemPrompt, userPrompt);
-      const useStream = !!singleChatConfig.chatParams?.stream;
-      const useThinking = !!singleChatConfig.chatParams?.enableThinking;
+      const createdAt = new Date().toISOString();
+      const draftSession: AiTestSession = {
+        id: createAiTestId('aitest'),
+        promptSnapshot: {
+          title: currentPrompt?.title ?? selectedPrompt?.title ?? t('prompt.untitled', 'Untitled Prompt'),
+          systemPrompt: systemPrompt ?? null,
+          userPrompt,
+          promptVersion: currentPrompt?.currentVersion ?? currentPrompt?.version,
+        },
+        model: {
+          provider: singleChatConfig.provider,
+          model: singleChatConfig.model,
+          apiUrl: singleChatConfig.apiUrl,
+        },
+        messages: messages.map((message) => toAiTestMessage(message, createdAt)),
+        status: 'completed',
+        createdAt,
+        updatedAt: createdAt,
+      };
 
-      // Debug: Log stream configuration / 调试：记录流式配置
-      console.log('[MainContent] AI Test - Stream:', useStream, 'Thinking:', useThinking);
-      console.log('[MainContent] chatParams:', singleChatConfig.chatParams);
-
-      if (useStream) {
-        // Start streaming mode - use independent state for real-time updates
-        // 开始流式模式 - 使用独立状态进行实时更新
-        setIsStreaming(true);
-        setStreamingContent('');
-        setStreamingThinking('');
+      if (targetId) {
+        updatePromptState(targetId, { activeAiTestSession: draftSession });
       }
 
-      // Use refs for buffering raw data / 使用 ref 缓冲原始数据
-      const fullContentRef = { current: '' };
-      const fullThinkingRef = { current: '' };
-
-      let contentRafId: number | null = null;
-      let thinkingRafId: number | null = null;
-
-      const scheduleContentFlush = () => {
-        if (contentRafId !== null) return;
-        contentRafId = requestAnimationFrame(() => {
-          contentRafId = null;
-          flushSync(() => {
-            setStreamingContent(fullContentRef.current);
-          });
-        });
+      const { result, latencyMs } = await executeAiChat(messages, outputFormat);
+      const completedAt = new Date().toISOString();
+      const completedSession: AiTestSession = {
+        ...draftSession,
+        messages: [
+          ...draftSession.messages,
+          {
+            id: createAiTestId('aiturn'),
+            role: 'assistant',
+            content: result.content,
+            thinkingContent: result.thinkingContent ?? null,
+            createdAt: completedAt,
+          },
+        ],
+        lastLatencyMs: latencyMs,
+        updatedAt: completedAt,
       };
 
-      const scheduleThinkingFlush = () => {
-        if (thinkingRafId !== null) return;
-        thinkingRafId = requestAnimationFrame(() => {
-          thinkingRafId = null;
-          flushSync(() => {
-            setStreamingThinking(fullThinkingRef.current);
-          });
-        });
-      };
-
-      const result = await chatCompletion(singleChatConfig as any, messages, {
-        stream: useStream,
-        enableThinking: useThinking,
-        // Pass output format if specified (Issue #38)
-        // 传递输出格式（如果指定）
-        responseFormat: outputFormat,
-        streamCallbacks: useStream ? {
-          onContent: (chunk) => {
-            fullContentRef.current += chunk;
-            scheduleContentFlush();
-          },
-          onThinking: (chunk) => {
-            fullThinkingRef.current += chunk;
-            scheduleThinkingFlush();
-          },
-          onComplete: (fullContent, thinkingContent) => {
-            console.log(`[Stream UI] Complete!`);
-            if (contentRafId !== null) {
-              cancelAnimationFrame(contentRafId);
-              contentRafId = null;
-            }
-            if (thinkingRafId !== null) {
-              cancelAnimationFrame(thinkingRafId);
-              thinkingRafId = null;
-            }
-            // End streaming mode and save to persistent state
-            // 结束流式模式并保存到持久状态
-            setIsStreaming(false);
-            setAiResponse(fullContent);
-            if (thinkingContent) {
-              setAiThinking(thinkingContent);
-            }
-          }
-        } : undefined,
-      });
-
-      // Final consistency guarantee
-      // 最终一致性保证
-      if (!useStream) {
-        setAiResponse(result.content);
-        setAiThinking(result.thinkingContent || null);
-      } else {
-        // Ensure streaming state is off and content is saved
-        setIsStreaming(false);
-        setAiResponse(fullContentRef.current || result.content);
-        if (fullThinkingRef.current) {
-          setAiThinking(fullThinkingRef.current);
-        }
+      const promptForPersistence = currentPrompt ?? selectedPrompt;
+      if (targetId && promptForPersistence) {
+        await persistAiTestSession(promptForPersistence, completedSession, result.content);
       }
     } catch (error) {
+      const message = `${t('common.error')}: ${error instanceof Error ? error.message : t('common.error')}`;
       setIsStreaming(false);
-      setAiResponse(`${t('common.error')}: ${error instanceof Error ? error.message : t('common.error')}`);
+      setAiResponse(message);
+      setAiError(message);
+      if (targetId && currentPromptType !== 'image' && currentPromptType !== 'video') {
+        updatePromptState(targetId, { activeAiTestSession: null });
+      }
       showToast(t('toast.aiFailed'), 'error');
     } finally {
       setIsTestingAI(false);
     }
+  };
+
+  const runAiFollowUp = async () => {
+    if (!selectedPrompt || !activeAiTestSession) return;
+
+    const followUp = (aiFollowUpInputs[selectedPrompt.id] || '').trim();
+    if (!followUp || isTestingAI) return;
+
+    if (!(singleChatConfig.apiKey && singleChatConfig.apiUrl && singleChatConfig.model)) {
+      showToast(t('toast.configAI'), 'error');
+      return;
+    }
+
+    const createdAt = new Date().toISOString();
+    const userMessage: AiTestSessionMessage = {
+      id: createAiTestId('aiturn'),
+      role: 'user',
+      content: followUp,
+      createdAt,
+    };
+    const transientSession: AiTestSession = {
+      ...activeAiTestSession,
+      messages: [...activeAiTestSession.messages, userMessage],
+      updatedAt: createdAt,
+    };
+
+    updatePromptState(selectedPrompt.id, {
+      isTestingAI: true,
+      aiResponse: null,
+      aiThinking: null,
+      aiError: null,
+      isAiResponseImage: false,
+      activeAiTestSession: transientSession,
+    });
+    setAiFollowUpInputs((prev) => ({ ...prev, [selectedPrompt.id]: '' }));
+
+    try {
+      await incrementUsageCount(selectedPrompt.id);
+      const { result, latencyMs } = await executeAiChat(toChatMessages(transientSession));
+      const completedAt = new Date().toISOString();
+      const completedSession: AiTestSession = {
+        ...transientSession,
+        messages: [
+          ...transientSession.messages,
+          {
+            id: createAiTestId('aiturn'),
+            role: 'assistant',
+            content: result.content,
+            thinkingContent: result.thinkingContent ?? null,
+            createdAt: completedAt,
+          },
+        ],
+        lastLatencyMs: latencyMs,
+        updatedAt: completedAt,
+      };
+
+      await persistAiTestSession(selectedPrompt, completedSession, result.content);
+    } catch (error) {
+      const message = `${t('common.error')}: ${error instanceof Error ? error.message : t('common.error')}`;
+      setIsStreaming(false);
+      updatePromptState(selectedPrompt.id, {
+        activeAiTestSession,
+        aiResponse: null,
+        aiThinking: null,
+        aiError: message,
+        isAiResponseImage: false,
+      });
+      setAiFollowUpInputs((prev) => ({ ...prev, [selectedPrompt.id]: followUp }));
+      showToast(t('toast.aiFailed'), 'error');
+    } finally {
+      setIsTestingAI(false);
+    }
+  };
+
+  const startNewAiTestConversation = () => {
+    if (!selectedPrompt) return;
+    updatePromptState(selectedPrompt.id, {
+      activeAiTestSession: null,
+      aiResponse: null,
+      aiThinking: null,
+      aiError: null,
+      isAiResponseImage: false,
+    });
+    setAiFollowUpInputs((prev) => ({ ...prev, [selectedPrompt.id]: '' }));
+  };
+
+  const toggleAiSessionExpanded = (sessionId: string) => {
+    setExpandedAiSessionIds((prev) => ({
+      ...prev,
+      [sessionId]: !prev[sessionId],
+    }));
+  };
+
+  const copyAiSessionTranscript = async (session: AiTestSession) => {
+    const transcript = session.messages
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join('\n\n');
+    await navigator.clipboard.writeText(transcript);
+    showToast(t('toast.copied'), 'success');
   };
 
   // Multi-model comparison (supports variable substitution)
@@ -968,8 +1199,6 @@ export function MainContent() {
     }
     return sortedPrompts.slice(0, renderedPromptCount);
   }, [renderedPromptCount, sortedPrompts, viewMode]);
-
-  const selectedPrompt = prompts.find((p) => p.id === selectedId);
 
   // Auto-select prompt language based on UI language (if English version exists)
   // 根据界面语言自动选择 Prompt 语言（如果有英文版本）
@@ -1690,9 +1919,193 @@ export function MainContent() {
                     </div>
                   )}
 
+                  {selectedPrompt?.promptType !== 'image' && activeAiTestSession && (
+                    <div className="mb-4 rounded-xl bg-card border border-border overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <MessageSquareTextIcon className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-semibold">{t('prompt.aiTestConversation', 'AI 测试会话')}</span>
+                            <span className="text-[11px] text-muted-foreground truncate">
+                              {activeAiTestSession.model.model}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                            <span>{getSessionTurnCount(activeAiTestSession)} {t('prompt.turns', '轮')}</span>
+                            {activeAiTestSession.lastLatencyMs !== undefined && (
+                              <span>{activeAiTestSession.lastLatencyMs}ms</span>
+                            )}
+                            <span>{new Date(activeAiTestSession.updatedAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => copyAiSessionTranscript(activeAiTestSession)}
+                            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                            title={t('prompt.copy')}
+                          >
+                            <CopyIcon className="w-4 h-4 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={startNewAiTestConversation}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-background text-xs font-medium hover:bg-accent transition-colors"
+                          >
+                            <PlusIcon className="w-3.5 h-3.5" />
+                            <span>{t('prompt.newConversation', '新会话')}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-4 space-y-3 max-h-[28rem] overflow-y-auto">
+                        {activeAiTestSession.messages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`max-w-[88%] rounded-xl border px-3 py-2 ${
+                                message.role === 'user'
+                                  ? 'bg-primary text-primary-foreground border-primary/80'
+                                  : message.role === 'system'
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-foreground'
+                                    : 'bg-background border-border text-foreground'
+                              }`}
+                            >
+                              <div className="mb-1 text-[10px] uppercase opacity-70">
+                                {message.role}
+                              </div>
+                              {message.thinkingContent && (
+                                <CollapsibleThinking
+                                  content={message.thinkingContent}
+                                  className="mb-2 text-[11px]"
+                                />
+                              )}
+                              <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {message.role === 'assistant'
+                                  ? renderAiResponseContent(message.content)
+                                  : message.content}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {isTestingAI && (
+                          <div className="flex justify-start">
+                            <div className="max-w-[88%] rounded-xl border border-border bg-background px-3 py-2 text-sm">
+                              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                <LoaderIcon className="w-3 h-3 animate-spin" />
+                                <span>{t('prompt.testing', '测试中...')}</span>
+                              </div>
+                              <CollapsibleThinking content={aiThinking} isLoading={isTestingAI} />
+                              {aiResponse ? (
+                                <div className="mt-2 text-sm leading-relaxed break-words">
+                                  {renderAiResponseContent(aiResponse)}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
+
+                        {aiError && !isTestingAI && (
+                          <div className="flex justify-start">
+                            <div className="max-w-[88%] rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+                              <div className="mb-1 text-[10px] uppercase opacity-70">
+                                {t('common.error')}
+                              </div>
+                              <div className="leading-relaxed whitespace-pre-wrap break-words">
+                                {aiError}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="px-4 py-3 border-t border-border bg-muted/10">
+                        <div className="flex items-end gap-2">
+                          <textarea
+                            value={aiFollowUpInputs[selectedPrompt.id] || ''}
+                            onChange={(event) => setAiFollowUpInputs((prev) => ({
+                              ...prev,
+                              [selectedPrompt.id]: event.target.value,
+                            }))}
+                            rows={2}
+                            disabled={isTestingAI}
+                            className="min-h-10 flex-1 resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                            placeholder={t('prompt.followUpPlaceholder', '继续输入追问...')}
+                          />
+                          <button
+                            onClick={runAiFollowUp}
+                            disabled={isTestingAI || !(aiFollowUpInputs[selectedPrompt.id] || '').trim()}
+                            className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                          >
+                            {isTestingAI ? <LoaderIcon className="w-4 h-4 animate-spin" /> : <PlayIcon className="w-4 h-4" />}
+                            <span>{t('prompt.send', '发送')}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPromptAiTestHistory.length > 0 && (
+                    <div className="mb-4 rounded-xl bg-card border border-border overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <HistoryIcon className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-semibold">{t('prompt.aiTestHistory', 'AI 测试历史')}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">{selectedPromptAiTestHistory.length}</span>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {selectedPromptAiTestHistory.map((session) => {
+                          const expanded = expandedAiSessionIds[session.id] || session.id === activeAiTestSession?.id;
+                          return (
+                            <div key={session.id} className="px-4 py-3">
+                              <button
+                                onClick={() => toggleAiSessionExpanded(session.id)}
+                                className="w-full flex items-center justify-between gap-3 text-left"
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-sm font-medium truncate">
+                                    {session.promptSnapshot.title || selectedPrompt?.title}
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                                    <span>{session.model.model}</span>
+                                    <span>{getSessionTurnCount(session)} {t('prompt.turns', '轮')}</span>
+                                    <span>{new Date(session.updatedAt).toLocaleString()}</span>
+                                  </div>
+                                </div>
+                                <ChevronDownIcon className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                              </button>
+                              {expanded && (
+                                <div className="mt-3 space-y-2">
+                                  {session.messages.map((message) => (
+                                    <div key={message.id} className="rounded-lg bg-muted/30 border border-border px-3 py-2">
+                                      <div className="mb-1 text-[10px] uppercase text-muted-foreground">
+                                        {message.role}
+                                      </div>
+                                      {message.thinkingContent && (
+                                        <CollapsibleThinking
+                                          content={message.thinkingContent}
+                                          className="mb-2 text-[11px]"
+                                        />
+                                      )}
+                                      <div className="text-xs leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                                        {message.content}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* AI response panel */}
                   {/* AI 测试响应区域 */}
-                  {(isTestingAI || aiResponse) && (
+                  {(isTestingAI || aiResponse) && (!activeAiTestSession || selectedPrompt?.promptType === 'image' || isAiResponseImage) && (
                     <div className="mb-4 p-4 rounded-xl bg-card border border-border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
