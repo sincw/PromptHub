@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import WebRuntimeApp from '@web-runtime-app';
 import { ToastProvider } from '@web-runtime-toast-provider';
 import { installRuntimeBridge } from '../runtime-bridge/install-bridge';
@@ -38,9 +38,11 @@ function detectClientPlatform(userAgent: string): string {
 
 export function WorkspacePage() {
   const { user, registrationAllowed, isInitialized, logout } = useAuth();
+  const [isRuntimeBridgeReady, setIsRuntimeBridgeReady] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     installRuntimeBridge();
+    setIsRuntimeBridgeReady(true);
   }, []);
 
   useEffect(() => {
@@ -91,7 +93,7 @@ export function WorkspacePage() {
 
   return (
     <ToastProvider>
-      <WebRuntimeApp />
+      {isRuntimeBridgeReady ? <WebRuntimeApp /> : null}
     </ToastProvider>
   );
 }

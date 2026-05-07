@@ -64,6 +64,7 @@ export const useFolderStore = create<FolderState>((set, get) => ({
       }));
     } catch (error) {
       console.error("Failed to update folder:", error);
+      throw error;
     }
   },
 

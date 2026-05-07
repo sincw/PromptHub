@@ -44,6 +44,17 @@ const STORES = {
 
 let db: IDBDatabase | null = null;
 
+function normalizeFolderParentPayload<T extends { parentId?: string | null }>(
+  payload: T,
+): Omit<T, "parentId"> & { parentId?: string } {
+  const { parentId, ...rest } = payload;
+  if (parentId == null) {
+    return rest;
+  }
+
+  return { ...rest, parentId };
+}
+
 /**
  * 初始化数据库
  * Initialize database
@@ -493,13 +504,13 @@ export async function createFolder(
   data: Omit<Folder, "id" | "createdAt" | "updatedAt">,
 ): Promise<Folder> {
   if (window.api?.folder?.create) {
-    return window.api.folder.create({
+    return window.api.folder.create(normalizeFolderParentPayload({
       name: data.name,
       icon: data.icon,
       parentId: data.parentId,
       isPrivate: data.isPrivate,
       visibility: data.visibility,
-    });
+    }));
   }
 
   const database = await getDatabase();
@@ -526,14 +537,14 @@ export async function updateFolder(
   data: Partial<Folder>,
 ): Promise<Folder> {
   if (window.api?.folder?.update) {
-    const updated = await window.api.folder.update(id, {
+    const updated = await window.api.folder.update(id, normalizeFolderParentPayload({
       name: data.name,
       icon: data.icon,
       parentId: data.parentId,
       order: data.order,
       isPrivate: data.isPrivate,
       visibility: data.visibility,
-    });
+    }));
     if (!updated) {
       throw new Error(`Folder not found: ${id}`);
     }
