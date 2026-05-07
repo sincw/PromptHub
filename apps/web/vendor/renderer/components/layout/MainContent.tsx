@@ -9,11 +9,13 @@ import { resolveScenarioModel } from '../../services/ai-defaults';
 // Lazy load SkillManager for better initial load performance
 // 懒加载 SkillManager 以提升初始加载性能
 const SkillManager = lazy(() => import('../skill/SkillManager').then(m => ({ default: m.SkillManager })));
-import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
+import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PlusIcon, ChevronDownIcon, ChevronRightIcon, Maximize2Icon } from 'lucide-react';
 import { EditPromptModal, VersionHistoryModal, VariableInputModal, PromptListHeader, PromptListView, PromptTableView, AiTestModal, PromptDetailModal, PromptGalleryView, PromptKanbanView } from '../prompt';
 import type { OutputFormatConfig } from '../prompt/VariableInputModal';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { ImagePreviewModal } from '../ui/ImagePreviewModal';
+import { Modal } from '../ui/Modal';
+import { FullscreenTextViewerModal, type FullscreenTextViewerMode } from '../ui/FullscreenTextViewerModal';
 import { LocalImage } from '../ui/LocalImage';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { CollapsibleThinking } from '../ui/CollapsibleThinking';
@@ -56,7 +58,14 @@ interface PromptTestState {
   activeAiTestSession: AiTestSession | null;
 }
 
-type DetailSectionId = 'system' | 'user' | 'compare';
+type DetailSectionId = 'system' | 'user';
+
+interface TextViewerState {
+  title: string;
+  subtitle?: string;
+  content: string;
+  initialMode?: FullscreenTextViewerMode;
+}
 
 function createAiTestId(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -254,6 +263,9 @@ export function MainContent() {
   const [isVariableModalOpen, setIsVariableModalOpen] = useState(false);
   const [isAiTestVariableModalOpen, setIsAiTestVariableModalOpen] = useState(false);
   const [isCompareVariableModalOpen, setIsCompareVariableModalOpen] = useState(false);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [isAiHistoryModalOpen, setIsAiHistoryModalOpen] = useState(false);
+  const [textViewer, setTextViewer] = useState<TextViewerState | null>(null);
   // 用于列表/画廊视图复制时的变量弹窗
   const [isCopyVariableModalOpen, setIsCopyVariableModalOpen] = useState(false);
   const [copyPrompt, setCopyPrompt] = useState<Prompt | null>(null);
@@ -351,11 +363,10 @@ export function MainContent() {
   // 按 prompt ID 保存测试状态和结果（持久化）
   const [promptTestStates, setPromptTestStates] = useState<Record<string, PromptTestState>>({});
   const [aiFollowUpInputs, setAiFollowUpInputs] = useState<Record<string, string>>({});
-  const [expandedAiSessionIds, setExpandedAiSessionIds] = useState<Record<string, boolean>>({});
+  const [collapsedAiMessageIds, setCollapsedAiMessageIds] = useState<Record<string, boolean>>({});
   const [detailSectionsExpanded, setDetailSectionsExpanded] = useState<Record<DetailSectionId, boolean>>({
     system: true,
     user: true,
-    compare: false,
   });
 
   // Get current prompt test state and results
@@ -372,13 +383,17 @@ export function MainContent() {
     ? (currentState?.activeAiTestSession ?? null)
     : (selectedPrompt?.aiTestSessions?.[0] ?? null);
   const selectedPromptAiTestHistory = selectedPrompt?.aiTestSessions ?? [];
+  const selectedPromptIsText = !selectedPrompt?.promptType || selectedPrompt.promptType === 'text';
 
   useEffect(() => {
     setDetailSectionsExpanded({
       system: true,
       user: true,
-      compare: false,
     });
+    setIsCompareModalOpen(false);
+    setIsAiHistoryModalOpen(false);
+    setCollapsedAiMessageIds({});
+    setTextViewer(null);
   }, [selectedPrompt?.id]);
 
   const toggleDetailSection = useCallback((section: DetailSectionId) => {
@@ -506,12 +521,13 @@ export function MainContent() {
   }, [aiModels, scenarioModelDefaults]);
 
   const compareModels = useMemo(() => {
-    const isImagePrompt = prompts.find((p) => p.id === selectedId)?.promptType === 'image';
-    if (isImagePrompt) {
+    const promptType = prompts.find((p) => p.id === selectedId)?.promptType ?? 'text';
+    if (promptType !== 'text') {
       return [];
     }
     return aiModels.filter((model) => (model.type ?? 'chat') === 'chat');
   }, [aiModels, prompts, selectedId]);
+  const canOpenCompareModal = selectedPromptIsText && compareModels.length > 0;
 
   useEffect(() => {
     setSelectedModelIds((prev) => {
@@ -636,6 +652,17 @@ export function MainContent() {
     );
   };
 
+  const openTextViewer = useCallback((viewer: TextViewerState) => {
+    setTextViewer(viewer);
+  }, []);
+
+  const toggleAiMessageCollapsed = useCallback((messageId: string) => {
+    setCollapsedAiMessageIds((prev) => ({
+      ...prev,
+      [messageId]: !prev[messageId],
+    }));
+  }, []);
+
   const renderPromptDetailSection = ({
     id,
     title,
@@ -665,7 +692,23 @@ export function MainContent() {
             <span className="truncate">{title}</span>
             {showEnglishBadge && <span className="px-1 py-0.5 rounded bg-primary/10 text-primary text-[10px]">EN</span>}
           </button>
-          {headerActions}
+          <div className="flex items-center gap-2 shrink-0">
+            {headerActions}
+            <button
+              type="button"
+              onClick={() => openTextViewer({
+                title,
+                content: content || '',
+                initialMode: renderMarkdownEnabled ? 'markdown' : 'raw',
+              })}
+              disabled={!content}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-border text-[12px] text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-50 disabled:hover:bg-transparent transition-colors"
+              title={t('common.open', 'Open')}
+            >
+              <Maximize2Icon className="w-3.5 h-3.5" />
+              <span>{t('common.open', 'Open')}</span>
+            </button>
+          </div>
         </div>
         {isExpanded && (
           <div className="max-h-[min(42vh,32rem)] overflow-y-auto rounded-xl">
@@ -701,6 +744,123 @@ export function MainContent() {
       </div>
     );
   };
+
+  const renderAiSessionMessages = (
+    session: AiTestSession,
+    options: { includeLiveDraft?: boolean } = {},
+  ) => (
+    <div className="space-y-3">
+      {session.messages.map((message) => {
+        const isCollapsed = !!collapsedAiMessageIds[message.id];
+        const messageMetaClass =
+          message.role === 'user'
+            ? 'text-primary-foreground/80'
+            : message.role === 'system'
+              ? 'text-amber-700/80 dark:text-amber-200/80'
+              : 'text-muted-foreground';
+        const messageActionClass =
+          message.role === 'user'
+            ? 'text-primary-foreground/85 hover:text-primary-foreground hover:bg-white/15 focus-visible:ring-white/50'
+            : 'text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:ring-primary/40';
+
+        return (
+          <div
+            key={message.id}
+            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[88%] rounded-xl border px-3 py-2 ${
+                message.role === 'user'
+                  ? 'bg-primary text-primary-foreground border-primary/80'
+                  : message.role === 'system'
+                    ? 'bg-amber-500/10 border-amber-500/30 text-foreground'
+                    : 'bg-background border-border text-foreground'
+              }`}
+            >
+              <div className={`flex items-center justify-between gap-2 text-[10px] uppercase ${messageMetaClass} ${isCollapsed ? '' : 'mb-1'}`}>
+                <span className="min-w-0 truncate">{message.role}</span>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => openTextViewer({
+                      title: `${message.role.toUpperCase()} ${t('prompt.message', 'Message')}`,
+                      subtitle: new Date(message.createdAt).toLocaleString(),
+                      content: message.content,
+                      initialMode: message.role === 'assistant' ? 'markdown' : 'raw',
+                    })}
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 ${messageActionClass}`}
+                    title={t('common.open', 'Open')}
+                    aria-label={t('common.open', 'Open')}
+                  >
+                    <Maximize2Icon className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleAiMessageCollapsed(message.id)}
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 ${messageActionClass}`}
+                    title={isCollapsed ? t('common.expand', 'Expand') : t('common.collapse', 'Collapse')}
+                    aria-label={isCollapsed ? t('common.expand', 'Expand') : t('common.collapse', 'Collapse')}
+                    aria-expanded={!isCollapsed}
+                  >
+                    {isCollapsed ? (
+                      <ChevronRightIcon className="w-3 h-3" />
+                    ) : (
+                      <ChevronDownIcon className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              {!isCollapsed && (
+                <>
+                  {message.thinkingContent && (
+                    <CollapsibleThinking
+                      content={message.thinkingContent}
+                      className="mb-2 text-[11px]"
+                    />
+                  )}
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {message.role === 'assistant'
+                      ? renderAiResponseContent(message.content)
+                      : message.content}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {options.includeLiveDraft && isTestingAI && (
+        <div className="flex justify-start">
+          <div className="max-w-[88%] rounded-xl border border-border bg-background px-3 py-2 text-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <LoaderIcon className="w-3 h-3 animate-spin" />
+              <span>{t('prompt.testing', '测试中...')}</span>
+            </div>
+            <CollapsibleThinking content={aiThinking} isLoading={isTestingAI} />
+            {aiResponse ? (
+              <div className="mt-2 text-sm leading-relaxed break-words">
+                {renderAiResponseContent(aiResponse)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {options.includeLiveDraft && aiError && !isTestingAI && (
+        <div className="flex justify-start">
+          <div className="max-w-[88%] rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+            <div className="mb-1 text-[10px] uppercase opacity-70">
+              {t('common.error')}
+            </div>
+            <div className="leading-relaxed whitespace-pre-wrap break-words">
+              {aiError}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const toggleRenderMarkdown = () => {
     const next = !renderMarkdownEnabled;
@@ -1083,17 +1243,14 @@ export function MainContent() {
     setAiFollowUpInputs((prev) => ({ ...prev, [selectedPrompt.id]: '' }));
   };
 
-  const toggleAiSessionExpanded = (sessionId: string) => {
-    setExpandedAiSessionIds((prev) => ({
-      ...prev,
-      [sessionId]: !prev[sessionId],
-    }));
+  const formatAiSessionTranscript = (session: AiTestSession) => {
+    return session.messages
+      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+      .join('\n\n');
   };
 
   const copyAiSessionTranscript = async (session: AiTestSession) => {
-    const transcript = session.messages
-      .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-      .join('\n\n');
+    const transcript = formatAiSessionTranscript(session);
     await navigator.clipboard.writeText(transcript);
     showToast(t('toast.copied'), 'success');
   };
@@ -1849,149 +2006,7 @@ export function MainContent() {
                     ),
                   })}
 
-                  {/* Multi-model comparison */}
-                  {/* 多模型对比区域 */}
-                  {selectedPrompt.promptType !== 'image' && compareModels.length > 0 && (
-                    <div className="mb-4 p-4 rounded-xl bg-card border border-border">
-                      <div className="flex items-center justify-between mb-4">
-                        <button
-                          type="button"
-                          onClick={() => toggleDetailSection('compare')}
-                          className="min-w-0 flex items-center gap-2 text-left hover:text-foreground transition-colors"
-                          aria-expanded={detailSectionsExpanded.compare}
-                        >
-                          {detailSectionsExpanded.compare ? (
-                            <ChevronDownIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                          ) : (
-                            <ChevronRightIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                          )}
-                          <GitCompareIcon className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-medium">{t('settings.multiModelCompare')}</span>
-                          <span className="text-xs text-muted-foreground">{t('prompt.selectModelsHint')}</span>
-                        </button>
-                      </div>
-
-                      {detailSectionsExpanded.compare && (
-                        <>
-                          {/* Model selection list */}
-                          {/* 模型选择列表 */}
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            {compareModels.map((model) => {
-                              const isSelected = selectedModelIds.includes(model.id);
-                              // Get provider display name
-                              // 获取供应商简称
-                              const providerName = model.name || model.provider;
-                              const displayName = `${providerName} | ${model.model}`;
-                              return (
-                                <button
-                                  key={model.id}
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      setSelectedModelIds(selectedModelIds.filter((id) => id !== model.id));
-                                    } else {
-                                      setSelectedModelIds([...selectedModelIds, model.id]);
-                                    }
-                                  }}
-                                  className={`
-                                px-3 py-1.5 rounded-lg text-xs font-medium transition-all
-                                ${isSelected
-                                      ? 'bg-primary text-white'
-                                      : 'bg-muted hover:bg-accent text-foreground'
-                                    }
-                              `}
-                                  title={displayName}
-                                >
-                                  {model.model}
-                                  {model.isDefault && (
-                                    <span className="ml-1 opacity-60">★</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          <div className="flex items-center justify-end gap-3">
-                            {selectedModelIds.length > 0 && (
-                              <button
-                                onClick={() => setSelectedModelIds([])}
-                                className="text-xs text-muted-foreground hover:text-foreground"
-                              >
-                                {t('prompt.clearSelection')}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => {
-                                if (selectedModelIds.length < 2) {
-                                  showToast(t('prompt.selectAtLeast2'), 'error');
-                                  return;
-                                }
-                                if (!selectedPrompt) return;
-
-                                // Check variables (create a new regex per string to avoid global flag state)
-                                // 检查是否有变量（为每个字符串创建新的正则实例，避免全局标志导致的状态问题）
-                                const hasVariables =
-                                  /\{\{([^}]+)\}\}/.test(selectedPrompt.userPrompt) ||
-                                  (selectedPrompt.systemPrompt && /\{\{([^}]+)\}\}/.test(selectedPrompt.systemPrompt));
-
-                                if (hasVariables) {
-                                  setIsCompareVariableModalOpen(true);
-                                } else {
-                                  runModelCompare(selectedPrompt.systemPrompt, selectedPrompt.userPrompt);
-                                }
-                              }}
-                              disabled={isComparingModels || selectedModelIds.length < 2}
-                              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                            >
-                              {isComparingModels ? (
-                                <LoaderIcon className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <GitCompareIcon className="w-3 h-3" />
-                              )}
-                              <span>{isComparingModels ? t('prompt.comparing') : t('prompt.compareModels', { count: selectedModelIds.length })}</span>
-                            </button>
-                          </div>
-
-                          {compareError && (
-                            <p className="mt-3 text-xs text-red-500">{compareError}</p>
-                          )}
-
-                          {compareResults && compareResults.length > 0 && (
-                            <div className="mt-4 grid md:grid-cols-2 gap-3">
-                              {compareResults.map((res) => (
-                                <div
-                                  key={`${res.provider}-${res.model}`}
-                                  className={`p-3 rounded-lg border text-xs space-y-2 ${res.success ? 'border-emerald-400/50 bg-emerald-500/5' : 'border-red-400/50 bg-red-500/5'
-                                    }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="font-medium truncate">
-                                      {res.model}
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                      {res.latency}ms
-                                    </div>
-                                  </div>
-                                  {res.success && res.thinkingContent && (
-                                    <CollapsibleThinking
-                                      content={res.thinkingContent}
-                                      className="text-[10px]"
-                                    />
-                                  )}
-                                  <div className="text-[11px] leading-relaxed max-h-40 overflow-y-auto">
-                                    {res.success
-                                      ? (renderAiResponseContent(res.response || '(空)') ?? '(空)')
-                                      : (res.error || '未知错误')}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {selectedPrompt?.promptType !== 'image' && activeAiTestSession && (
+                  {selectedPromptIsText && activeAiTestSession && (
                     <div className="mb-4 rounded-xl bg-card border border-border overflow-hidden">
                       <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
                         <div className="min-w-0">
@@ -2029,67 +2044,7 @@ export function MainContent() {
                       </div>
 
                       <div className="p-4 space-y-3 max-h-[28rem] overflow-y-auto">
-                        {activeAiTestSession.messages.map((message) => (
-                          <div
-                            key={message.id}
-                            className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                          >
-                            <div
-                              className={`max-w-[88%] rounded-xl border px-3 py-2 ${
-                                message.role === 'user'
-                                  ? 'bg-primary text-primary-foreground border-primary/80'
-                                  : message.role === 'system'
-                                    ? 'bg-amber-500/10 border-amber-500/30 text-foreground'
-                                    : 'bg-background border-border text-foreground'
-                              }`}
-                            >
-                              <div className="mb-1 text-[10px] uppercase opacity-70">
-                                {message.role}
-                              </div>
-                              {message.thinkingContent && (
-                                <CollapsibleThinking
-                                  content={message.thinkingContent}
-                                  className="mb-2 text-[11px]"
-                                />
-                              )}
-                              <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                                {message.role === 'assistant'
-                                  ? renderAiResponseContent(message.content)
-                                  : message.content}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-
-                        {isTestingAI && (
-                          <div className="flex justify-start">
-                            <div className="max-w-[88%] rounded-xl border border-border bg-background px-3 py-2 text-sm">
-                              <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-                                <LoaderIcon className="w-3 h-3 animate-spin" />
-                                <span>{t('prompt.testing', '测试中...')}</span>
-                              </div>
-                              <CollapsibleThinking content={aiThinking} isLoading={isTestingAI} />
-                              {aiResponse ? (
-                                <div className="mt-2 text-sm leading-relaxed break-words">
-                                  {renderAiResponseContent(aiResponse)}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        )}
-
-                        {aiError && !isTestingAI && (
-                          <div className="flex justify-start">
-                            <div className="max-w-[88%] rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-                              <div className="mb-1 text-[10px] uppercase opacity-70">
-                                {t('common.error')}
-                              </div>
-                              <div className="leading-relaxed whitespace-pre-wrap break-words">
-                                {aiError}
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                        {renderAiSessionMessages(activeAiTestSession, { includeLiveDraft: true })}
                       </div>
 
                       <div className="px-4 py-3 border-t border-border bg-muted/10">
@@ -2114,63 +2069,6 @@ export function MainContent() {
                             <span>{t('prompt.send', '发送')}</span>
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedPromptAiTestHistory.length > 0 && (
-                    <div className="mb-4 rounded-xl bg-card border border-border overflow-hidden">
-                      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <HistoryIcon className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-semibold">{t('prompt.aiTestHistory', 'AI 测试历史')}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{selectedPromptAiTestHistory.length}</span>
-                      </div>
-                      <div className="divide-y divide-border">
-                        {selectedPromptAiTestHistory.map((session) => {
-                          const expanded = expandedAiSessionIds[session.id] || session.id === activeAiTestSession?.id;
-                          return (
-                            <div key={session.id} className="px-4 py-3">
-                              <button
-                                onClick={() => toggleAiSessionExpanded(session.id)}
-                                className="w-full flex items-center justify-between gap-3 text-left"
-                              >
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium truncate">
-                                    {session.promptSnapshot.title || selectedPrompt?.title}
-                                  </div>
-                                  <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                                    <span>{session.model.model}</span>
-                                    <span>{getSessionTurnCount(session)} {t('prompt.turns', '轮')}</span>
-                                    <span>{new Date(session.updatedAt).toLocaleString()}</span>
-                                  </div>
-                                </div>
-                                <ChevronDownIcon className={`w-4 h-4 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                              </button>
-                              {expanded && (
-                                <div className="mt-3 space-y-2">
-                                  {session.messages.map((message) => (
-                                    <div key={message.id} className="rounded-lg bg-muted/30 border border-border px-3 py-2">
-                                      <div className="mb-1 text-[10px] uppercase text-muted-foreground">
-                                        {message.role}
-                                      </div>
-                                      {message.thinkingContent && (
-                                        <CollapsibleThinking
-                                          content={message.thinkingContent}
-                                          className="mb-2 text-[11px]"
-                                        />
-                                      )}
-                                      <div className="text-xs leading-relaxed whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
-                                        {message.content}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
                       </div>
                     </div>
                   )}
@@ -2350,8 +2248,30 @@ export function MainContent() {
                     className="flex items-center gap-2 h-9 px-4 rounded-lg bg-card border border-border text-sm font-medium hover:bg-accent transition-colors"
                   >
                     <HistoryIcon className="w-4 h-4" />
-                    <span>{t('prompt.history')}</span>
+                    <span>{t('prompt.versionHistory', 'Version History')}</span>
                   </button>
+                  {selectedPromptIsText && (
+                    <button
+                      onClick={() => setIsCompareModalOpen(true)}
+                      disabled={!canOpenCompareModal}
+                      className="flex items-center gap-2 h-9 px-4 rounded-lg bg-card border border-border text-sm font-medium hover:bg-accent disabled:opacity-50 disabled:hover:bg-card transition-colors"
+                      title={canOpenCompareModal ? t('settings.multiModelCompare') : t('prompt.noCompareModels', 'No compare models available')}
+                    >
+                      <GitCompareIcon className="w-4 h-4" />
+                      <span>{t('settings.multiModelCompare')}</span>
+                    </button>
+                  )}
+                  {selectedPromptIsText && (
+                    <button
+                      onClick={() => setIsAiHistoryModalOpen(true)}
+                      className="flex items-center gap-2 h-9 px-4 rounded-lg bg-card border border-border text-sm font-medium hover:bg-accent transition-colors"
+                      title={t('prompt.conversationHistory', 'Conversation History')}
+                    >
+                      <MessageSquareTextIcon className="w-4 h-4" />
+                      <span>{t('prompt.conversationHistory', 'Conversation History')}</span>
+                      <span className="text-xs text-muted-foreground">{selectedPromptAiTestHistory.length}</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeletePrompt(selectedPrompt)}
                     className="flex items-center gap-2 h-9 px-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm font-medium hover:bg-destructive/20 transition-colors"
@@ -2422,6 +2342,190 @@ export function MainContent() {
         prompt={detailPrompt}
         onCopy={handleCopyPrompt}
         onEdit={(prompt) => setEditingPrompt(prompt)}
+      />
+
+      {selectedPrompt && (
+        <Modal
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          title={t('settings.multiModelCompare')}
+          subtitle={selectedPrompt.title}
+          size="fullscreen"
+        >
+          {compareModels.length > 0 ? (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <GitCompareIcon className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-semibold">{t('settings.multiModelCompare')}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{t('prompt.selectModelsHint')}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {selectedModelIds.length > 0 && (
+                      <button
+                        onClick={() => setSelectedModelIds([])}
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        {t('prompt.clearSelection')}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        if (selectedModelIds.length < 2) {
+                          showToast(t('prompt.selectAtLeast2'), 'error');
+                          return;
+                        }
+
+                        const currentUserPrompt = showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt;
+                        const currentSystemPrompt = showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt;
+                        const hasVariables =
+                          /\{\{([^}]+)\}\}/.test(currentUserPrompt) ||
+                          (currentSystemPrompt && /\{\{([^}]+)\}\}/.test(currentSystemPrompt));
+
+                        if (hasVariables) {
+                          setIsCompareVariableModalOpen(true);
+                        } else {
+                          runModelCompare(currentSystemPrompt, currentUserPrompt);
+                        }
+                      }}
+                      disabled={isComparingModels || selectedModelIds.length < 2}
+                      className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-xs font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {isComparingModels ? (
+                        <LoaderIcon className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <GitCompareIcon className="w-3 h-3" />
+                      )}
+                      <span>{isComparingModels ? t('prompt.comparing') : t('prompt.compareModels', { count: selectedModelIds.length })}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {compareModels.map((model) => {
+                    const isSelected = selectedModelIds.includes(model.id);
+                    const providerName = model.name || model.provider;
+                    const displayName = `${providerName} | ${model.model}`;
+                    return (
+                      <button
+                        key={model.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedModelIds(selectedModelIds.filter((id) => id !== model.id));
+                          } else {
+                            setSelectedModelIds([...selectedModelIds, model.id]);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                          isSelected
+                            ? 'bg-primary text-white'
+                            : 'bg-muted hover:bg-accent text-foreground'
+                        }`}
+                        title={displayName}
+                      >
+                        {model.model}
+                        {model.isDefault && (
+                          <span className="ml-1 opacity-60">★</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {compareError && (
+                  <p className="mt-3 text-xs text-red-500">{compareError}</p>
+                )}
+              </div>
+
+              {compareResults && compareResults.length > 0 ? (
+                <div className="grid lg:grid-cols-2 gap-4">
+                  {compareResults.map((res) => (
+                    <div
+                      key={`${res.provider}-${res.model}`}
+                      className={`p-4 rounded-xl border text-sm space-y-3 ${res.success ? 'border-emerald-400/50 bg-emerald-500/5' : 'border-red-400/50 bg-red-500/5'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-medium truncate">
+                          {res.model}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {res.latency}ms
+                        </div>
+                      </div>
+                      {res.success && res.thinkingContent && (
+                        <CollapsibleThinking
+                          content={res.thinkingContent}
+                          className="text-xs"
+                        />
+                      )}
+                      <div className="text-sm leading-relaxed max-h-[55vh] overflow-y-auto">
+                        {res.success
+                          ? (renderAiResponseContent(res.response || '(空)') ?? '(空)')
+                          : (res.error || '未知错误')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+                  {t('prompt.compareResultsEmpty', 'Select at least two models to run a comparison.')}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+              {t('prompt.noCompareModels', 'No compare models available')}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {selectedPrompt && (
+        <Modal
+          isOpen={isAiHistoryModalOpen}
+          onClose={() => setIsAiHistoryModalOpen(false)}
+          title={t('prompt.conversationHistory', 'Conversation History')}
+          subtitle={selectedPrompt.title}
+          size="fullscreen"
+        >
+          {selectedPromptAiTestHistory.length > 0 ? (
+            <div className="divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+              {selectedPromptAiTestHistory.map((session) => (
+                <div key={session.id} className="px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {session.promptSnapshot.title || selectedPrompt.title}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                      <span>{session.model.model}</span>
+                      <span>{getSessionTurnCount(session)} {t('prompt.turns', '轮')}</span>
+                      <span>{new Date(session.updatedAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-xl bg-muted/20 border border-border p-4">
+                    {renderAiSessionMessages(session)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+              {t('prompt.noConversationHistory', 'No conversation history yet.')}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      <FullscreenTextViewerModal
+        isOpen={!!textViewer}
+        onClose={() => setTextViewer(null)}
+        title={textViewer?.title || ''}
+        subtitle={textViewer?.subtitle}
+        content={textViewer?.content || ''}
+        initialMode={textViewer?.initialMode}
       />
 
       {/* Variable input modal (copy) - choose content by language mode */}

@@ -3,6 +3,8 @@ export { Input } from './Input';
 export { Textarea } from './Textarea';
 export { Select } from './Select';
 export { Modal } from './Modal';
+export { FullscreenTextViewerModal } from './FullscreenTextViewerModal';
+export type { FullscreenTextViewerMode } from './FullscreenTextViewerModal';
 export { useToast, ToastProvider } from './Toast';
 export { ConfirmDialog } from './ConfirmDialog';
 export { UnsavedChangesDialog } from './UnsavedChangesDialog';

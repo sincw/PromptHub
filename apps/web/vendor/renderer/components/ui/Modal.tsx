@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { createPortal } from "react-dom";
@@ -14,6 +14,13 @@ interface ModalProps {
   showCloseButton?: boolean;
   closeOnBackdrop?: boolean;
   closeOnEscape?: boolean;
+}
+
+let openModalStack: symbol[] = [];
+
+function removeModalFromStack(modalId: symbol) {
+  openModalStack = openModalStack.filter((id) => id !== modalId);
+  document.body.style.overflow = openModalStack.length > 0 ? "hidden" : "";
 }
 
 /**
@@ -47,6 +54,7 @@ export function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
 }: ModalProps) {
+  const modalId = useRef(Symbol("modal"));
   const [isAnimating, setIsAnimating] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
 
@@ -71,20 +79,32 @@ export function Modal({
     }
   }, [isOpen]);
 
+  // Track modal stack for nested modal keyboard and scroll behavior
+  useEffect(() => {
+    if (isOpen) {
+      openModalStack = openModalStack.filter((id) => id !== modalId.current);
+      openModalStack.push(modalId.current);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      removeModalFromStack(modalId.current);
+    };
+  }, [isOpen]);
+
   // Handle ESC key close
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      const isTopModal = openModalStack[openModalStack.length - 1] === modalId.current;
+      if (e.key === "Escape" && isTopModal) {
+        e.stopPropagation();
+        onClose();
+      }
     };
     if (isOpen && closeOnEscape) {
       document.addEventListener("keydown", handleEsc);
     }
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    }
     return () => {
       document.removeEventListener("keydown", handleEsc);
-      document.body.style.overflow = "";
     };
   }, [isOpen, onClose, closeOnEscape]);
 
