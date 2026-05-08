@@ -147,6 +147,7 @@ export type TranslationMode = "immersive" | "full";
 export type AIUsageScenario =
   | "quickAdd"
   | "promptTest"
+  | "promptOptimize"
   | "imageTest"
   | "translation";
 

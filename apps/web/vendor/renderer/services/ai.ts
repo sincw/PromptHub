@@ -286,6 +286,34 @@ function finalizeStreamState(
   };
 }
 
+function extractChatCompletionResult(
+  data: ChatCompletionResponse,
+): ChatCompletionResult {
+  if (!data.choices || data.choices.length === 0) {
+    throw new Error("AI 返回结果为空");
+  }
+
+  const message = data.choices[0].message;
+  return {
+    content: typeof message.content === "string" ? message.content : "",
+    thinkingContent: message.reasoning_content,
+  };
+}
+
+function parseBufferedChatCompletionBody(
+  body: string | undefined,
+): ChatCompletionResult | null {
+  if (!body?.trim()) {
+    return null;
+  }
+
+  try {
+    return extractChatCompletionResult(JSON.parse(body) as ChatCompletionResponse);
+  } catch {
+    return null;
+  }
+}
+
 async function getErrorMessageFromResponse(
   response: ResponseLike,
 ): Promise<string> {
@@ -549,7 +577,7 @@ export async function chatCompletion(
           body: requestBody,
         },
         {
-          onChunk: (chunk) => {
+          onChunk: (chunk: string) => {
             void processStreamTextChunk(
               chunk,
               streamState,
@@ -557,7 +585,7 @@ export async function chatCompletion(
               options?.streamCallbacks,
             );
           },
-          onError: (error) => {
+          onError: (error: string) => {
             streamError = error;
           },
         },
@@ -578,6 +606,17 @@ export async function chatCompletion(
         options?.streamCallbacks,
         { flush: true },
       );
+
+      if (!streamState.fullContent) {
+        const bufferedResult = parseBufferedChatCompletionBody(response.body);
+        if (bufferedResult) {
+          options?.streamCallbacks?.onComplete?.(
+            bufferedResult.content,
+            bufferedResult.thinkingContent,
+          );
+          return { streamResult: bufferedResult };
+        }
+      }
 
       return {
         streamResult: finalizeStreamState(
@@ -604,6 +643,9 @@ export async function chatCompletion(
     });
 
     if (mergedParams.stream) {
+      if (!response.ok) {
+        return { response: createFetchResponseLike(response) };
+      }
       console.log("[AI Service] Starting stream response handling...");
       return {
         streamResult: await handleStreamResponse(
@@ -725,18 +767,7 @@ export async function chatCompletion(
     );
 
     // 非流式响应 / Non-streaming response
-    const data: ChatCompletionResponse = await response.json();
-
-    if (!data.choices || data.choices.length === 0) {
-      throw new Error("AI 返回结果为空");
-      // AI returned empty result
-    }
-
-    const message = data.choices[0].message;
-    return {
-      content: message.content,
-      thinkingContent: message.reasoning_content,
-    };
+    return extractChatCompletionResult(await response.json<ChatCompletionResponse>());
   } catch (error) {
     if (error instanceof Error) {
       throw error;
@@ -755,6 +786,15 @@ async function handleStreamResponse(
   onStream?: (chunk: string) => void,
   streamCallbacks?: StreamCallbacks,
 ): Promise<ChatCompletionResult> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.toLowerCase().includes("application/json")) {
+    const result = extractChatCompletionResult(
+      (await response.json()) as ChatCompletionResponse,
+    );
+    streamCallbacks?.onComplete?.(result.content, result.thinkingContent);
+    return result;
+  }
+
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error("无法读取响应流");

@@ -25,7 +25,8 @@ import { getPromptsDir } from '../runtime-paths.js';
  * 与桌面端的关键差异（本文件独有）：
  * 1. `ownerUserId` / `visibility` 写入 prompt frontmatter 和 `_folder.json`
  *    以保留多租户归属。
- * 2. `usageCount` / `lastAiResponse` / `aiTestSessions` 写入 prompt frontmatter（桌面端不持久化）。
+ * 2. `usageCount` / `lastAiResponse` / `aiTestSessions` / `promptOptimizationSessions`
+ *    写入 prompt frontmatter（桌面端不持久化）。
  * 3. 同步采用推土机式 `rmSync(promptsDir) + 重写`——Web 服务进程独占数据目录，
  *    不需要 `.trash/`、同名冲突裁决、restore marker、四象限 bootstrap 等保护。
  */
@@ -177,6 +178,7 @@ function promptFrontmatter(prompt: Prompt): Record<string, unknown> {
     notes: prompt.notes ?? null,
     lastAiResponse: prompt.lastAiResponse ?? null,
     aiTestSessions: prompt.aiTestSessions ?? [],
+    promptOptimizationSessions: prompt.promptOptimizationSessions ?? [],
     createdAt: prompt.createdAt,
     updatedAt: prompt.updatedAt,
   };
@@ -429,6 +431,9 @@ function parsePromptFile(filePath: string): Prompt {
         : null,
     aiTestSessions: Array.isArray(metadata.aiTestSessions)
       ? (metadata.aiTestSessions as Prompt['aiTestSessions'])
+      : [],
+    promptOptimizationSessions: Array.isArray(metadata.promptOptimizationSessions)
+      ? (metadata.promptOptimizationSessions as Prompt['promptOptimizationSessions'])
       : [],
     createdAt: toIsoString(metadata.createdAt, now),
     updatedAt: toIsoString(metadata.updatedAt, now),

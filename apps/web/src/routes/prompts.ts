@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Context } from 'hono';
 import { getAuthUser } from '../middleware/auth.js';
 import { PromptService, PromptServiceError } from '../services/prompt.service.js';
+import { promptOptimizationSessionSchema } from '../utils/prompt-optimization-validation.js';
 import { error, ErrorCode, paginated, success } from '../utils/response.js';
 import { parseJsonBody } from '../utils/validation.js';
 
@@ -70,6 +71,7 @@ const updatePromptSchema = createPromptSchema.partial().extend({
   usageCount: z.number().int().nonnegative().optional(),
   lastAiResponse: z.string().max(100000).optional(),
   aiTestSessions: z.array(aiTestSessionSchema).max(50).optional(),
+  promptOptimizationSessions: z.array(promptOptimizationSessionSchema).max(20).optional(),
 });
 
 const createVersionSchema = z.object({
@@ -152,9 +154,18 @@ prompts.put('/:id', async (c) => {
   if (!parsed.success) {
     return parsed.response;
   }
+  const promptId = c.req.param('id');
+  if (parsed.data.promptOptimizationSessions?.some((session) => session.promptId !== promptId)) {
+    return error(
+      c,
+      422,
+      ErrorCode.VALIDATION_ERROR,
+      'promptOptimizationSessions must belong to the prompt being updated',
+    );
+  }
 
   try {
-    return success(c, promptService.update(getAuthUser(c), c.req.param('id'), parsed.data));
+    return success(c, promptService.update(getAuthUser(c), promptId, parsed.data));
   } catch (routeError) {
     return toPromptErrorResponse(c, routeError);
   }

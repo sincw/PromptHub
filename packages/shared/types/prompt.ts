@@ -37,6 +37,118 @@ export interface AiTestSession {
   updatedAt: string;
 }
 
+export interface PromptOptimizationPromptContent {
+  systemPrompt?: string | null;
+  userPrompt: string;
+}
+
+export interface PromptOptimizationPromptSnapshot
+  extends PromptOptimizationPromptContent {
+  title: string;
+  description?: string | null;
+  promptVersion?: number;
+}
+
+export interface PromptOptimizationModelSnapshot {
+  id?: string;
+  name?: string;
+  provider: string;
+  model: string;
+  apiUrl?: string;
+}
+
+export interface PromptOptimizerTemplateSnapshot {
+  id?: string;
+  title: string;
+  sourcePromptId?: string;
+  strategyPrompt: string;
+}
+
+export interface PromptOptimizationFailureSummary {
+  unmetItems: string[];
+  cause: string;
+  avoidRepeatAdvice: string;
+}
+
+export interface PromptOptimizationFailedItem {
+  requirement: string;
+  actual: string;
+  severity: "high" | "medium" | "low";
+  evidence?: string;
+}
+
+export interface PromptOptimizationPassedItem {
+  requirement: string;
+  evidence?: string;
+}
+
+export interface PromptOptimizationResult {
+  passed: boolean;
+  score: number;
+  confidence: "high" | "medium" | "low";
+  assumptions: string[];
+  failedItems: PromptOptimizationFailedItem[];
+  passedItems: PromptOptimizationPassedItem[];
+  analysis: string;
+  changeSummary: string;
+  nextFailureSummary: PromptOptimizationFailureSummary;
+  optimizedPrompt: PromptOptimizationPromptContent;
+  warnings: string[];
+}
+
+export type PromptOptimizationIterationMode = "auto" | "manual";
+
+export type PromptOptimizationIterationStatus =
+  | "generating"
+  | "checking"
+  | "passed"
+  | "optimized"
+  | "failed"
+  | "error";
+
+export interface PromptOptimizationIteration {
+  id: string;
+  index: number;
+  mode: PromptOptimizationIterationMode;
+  candidatePrompt: PromptOptimizationPromptContent;
+  previousFailureSummary?: PromptOptimizationFailureSummary | null;
+  aModel: PromptOptimizationModelSnapshot;
+  bModel: PromptOptimizationModelSnapshot;
+  aOutput?: string;
+  bResult?: PromptOptimizationResult;
+  status: PromptOptimizationIterationStatus;
+  error?: string;
+  startedAt: string;
+  completedAt?: string;
+  latencyMs?: number;
+}
+
+export type PromptOptimizationSessionStatus =
+  | "running"
+  | "passed"
+  | "stopped"
+  | "maxed"
+  | "error";
+
+export interface PromptOptimizationSession {
+  id: string;
+  promptId: string;
+  promptSnapshot: PromptOptimizationPromptSnapshot;
+  aModel: PromptOptimizationModelSnapshot;
+  bModel: PromptOptimizationModelSnapshot;
+  optimizerTemplate: PromptOptimizerTemplateSnapshot;
+  userCheckFocus: string;
+  explicitRequirements: string[];
+  iterations: PromptOptimizationIteration[];
+  currentCandidatePrompt: PromptOptimizationPromptContent;
+  status: PromptOptimizationSessionStatus;
+  autoIterationLimit: number;
+  maxIterations: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
 export interface Prompt {
   id: string;
   ownerUserId?: string | null;
@@ -62,6 +174,7 @@ export interface Prompt {
   notes?: string | null; // 备注 / Personal notes about the prompt
   lastAiResponse?: string | null; // Last AI test response / 最后一次 AI 测试的响应
   aiTestSessions?: AiTestSession[]; // Persistent AI test conversation sessions / 持久化 AI 测试对话会话
+  promptOptimizationSessions?: PromptOptimizationSession[]; // Prompt optimization session history / 提示词优化会话历史
   createdAt: string; // ISO 8601 format / ISO 8601 格式
   updatedAt: string; // ISO 8601 format / ISO 8601 格式
 }
@@ -131,6 +244,7 @@ export interface UpdatePromptDTO {
   notes?: string;
   lastAiResponse?: string;
   aiTestSessions?: AiTestSession[];
+  promptOptimizationSessions?: PromptOptimizationSession[];
 }
 
 export interface SearchQuery {

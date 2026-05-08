@@ -81,6 +81,13 @@ export const SCENARIO_DEFINITIONS: ScenarioDefinition[] = [
     badgeKey: "settings.aiWorkbenchBadgePromptTest",
   },
   {
+    key: "promptOptimize",
+    labelKey: "settings.aiWorkbenchScenarioPromptOptimize",
+    descKey: "settings.aiWorkbenchScenarioPromptOptimizeDesc",
+    type: "chat",
+    badgeKey: "settings.aiWorkbenchBadgePromptOptimize",
+  },
+  {
     key: "imageTest",
     labelKey: "settings.aiWorkbenchScenarioImageTest",
     descKey: "settings.aiWorkbenchScenarioImageTestDesc",

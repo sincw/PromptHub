@@ -145,9 +145,47 @@ describe('web prompt workspace storage', () => {
           updatedAt: '2026-04-30T00:00:02.000Z',
         },
       ];
+      const promptOptimizationSessions = [
+        {
+          id: 'opt-workspace-1',
+          promptId: prompt.id,
+          promptSnapshot: {
+            title: 'Launch Copy',
+            systemPrompt: 'You write crisp product copy.',
+            userPrompt: 'Draft a launch message for {{audience}}.',
+            promptVersion: 1,
+          },
+          aModel: { provider: 'openai', model: 'gpt-a' },
+          bModel: { provider: 'openai', model: 'gpt-b' },
+          optimizerTemplate: {
+            title: 'Darwin',
+            strategyPrompt: 'Check and optimize.',
+          },
+          userCheckFocus: 'Keep it concise.',
+          explicitRequirements: ['Draft a launch message'],
+          iterations: [],
+          currentCandidatePrompt: {
+            systemPrompt: 'You write crisp product copy.',
+            userPrompt: 'Draft a launch message for {{audience}}.',
+          },
+          status: 'stopped',
+          autoIterationLimit: 3,
+          maxIterations: 10,
+          createdAt: '2026-05-01T00:00:00.000Z',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+        },
+      ];
       db.prepare(
-        'UPDATE prompts SET owner_user_id = ?, visibility = ?, usage_count = ?, last_ai_response = ?, ai_test_sessions = ? WHERE id = ?',
-      ).run(owner.user.id, 'shared', 9, 'Latest AI answer', JSON.stringify(aiTestSessions), prompt.id);
+        'UPDATE prompts SET owner_user_id = ?, visibility = ?, usage_count = ?, last_ai_response = ?, ai_test_sessions = ?, prompt_optimization_sessions = ? WHERE id = ?',
+      ).run(
+        owner.user.id,
+        'shared',
+        9,
+        'Latest AI answer',
+        JSON.stringify(aiTestSessions),
+        JSON.stringify(promptOptimizationSessions),
+        prompt.id,
+      );
       promptDb.update(prompt.id, {
         userPrompt: 'Draft a launch message for {{audience}} with urgency.',
       });
@@ -183,6 +221,7 @@ describe('web prompt workspace storage', () => {
       expect(rawPromptFile).toContain('usageCount: 9');
       expect(rawPromptFile).toContain('lastAiResponse: "Latest AI answer"');
       expect(rawPromptFile).toContain('aiTestSessions: [{"id":"session-workspace-1"');
+      expect(rawPromptFile).toContain('promptOptimizationSessions: [{"id":"opt-workspace-1"');
       expect(rawPromptFile).toContain('<!-- PROMPTHUB:SYSTEM -->');
       expect(rawPromptFile).toContain('You write crisp product copy.');
       expect(rawPromptFile).toContain(
@@ -250,6 +289,7 @@ isPinned: false
 usageCount: 11
 lastAiResponse: "healthy"
 aiTestSessions: [{"id":"session_import_1","promptSnapshot":{"title":"Deploy Check","systemPrompt":"You verify production deployment safety.","userPrompt":"Check deployment health for {{service}}.","promptVersion":1},"model":{"provider":"openai","model":"gpt-test"},"messages":[{"id":"turn_import_1","role":"user","content":"Check deployment health for api.","createdAt":"2026-04-30T00:00:00.000Z"},{"id":"turn_import_2","role":"assistant","content":"healthy","createdAt":"2026-04-30T00:00:01.000Z"}],"status":"completed","lastLatencyMs":1000,"createdAt":"2026-04-30T00:00:00.000Z","updatedAt":"2026-04-30T00:00:01.000Z"}]
+promptOptimizationSessions: [{"id":"opt_import_1","promptId":"prompt_1","promptSnapshot":{"title":"Deploy Check","systemPrompt":"You verify production deployment safety.","userPrompt":"Check deployment health for {{service}}.","promptVersion":1},"aModel":{"provider":"openai","model":"gpt-a"},"bModel":{"provider":"openai","model":"gpt-b"},"optimizerTemplate":{"title":"Darwin","strategyPrompt":"Check and optimize."},"userCheckFocus":"Health only","explicitRequirements":["Check deployment health"],"iterations":[],"currentCandidatePrompt":{"systemPrompt":"You verify production deployment safety.","userPrompt":"Check deployment health for {{service}}."},"status":"stopped","autoIterationLimit":3,"maxIterations":10,"createdAt":"2026-05-01T00:00:00.000Z","updatedAt":"2026-05-01T00:00:00.000Z"}]
 createdAt: "2026-04-13T00:00:00.000Z"
 updatedAt: "2026-04-13T00:00:00.000Z"
 ---
@@ -308,6 +348,8 @@ Check deployment health for {{service}}.
       expect(prompt?.lastAiResponse).toBe('healthy');
       expect(prompt?.aiTestSessions).toHaveLength(1);
       expect(prompt?.aiTestSessions?.[0]?.messages).toHaveLength(2);
+      expect(prompt?.promptOptimizationSessions).toHaveLength(1);
+      expect(prompt?.promptOptimizationSessions?.[0]?.optimizerTemplate.title).toBe('Darwin');
       expect(prompt?.variables).toEqual([
         { name: 'service', type: 'text', required: true },
       ]);

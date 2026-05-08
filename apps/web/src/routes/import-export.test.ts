@@ -205,11 +205,45 @@ describe('web import/export routes', () => {
           updatedAt: '2026-04-30T00:00:01.000Z',
         },
       ];
+      const promptOptimizationSessions = [
+        {
+          id: 'export-opt-session-1',
+          promptId: prompt.payload.data!.id,
+          promptSnapshot: {
+            title: 'Export Prompt',
+            systemPrompt: null,
+            userPrompt: 'Export body',
+            promptVersion: 1,
+          },
+          aModel: { provider: 'openai', model: 'gpt-a' },
+          bModel: { provider: 'openai', model: 'gpt-b' },
+          optimizerTemplate: {
+            title: 'Darwin',
+            strategyPrompt: 'Check and optimize.',
+          },
+          userCheckFocus: 'Export focus',
+          explicitRequirements: ['Export body'],
+          iterations: [],
+          currentCandidatePrompt: {
+            systemPrompt: null,
+            userPrompt: 'Export body',
+          },
+          status: 'stopped',
+          autoIterationLimit: 3,
+          maxIterations: 10,
+          createdAt: '2026-05-01T00:00:00.000Z',
+          updatedAt: '2026-05-01T00:00:00.000Z',
+        },
+      ];
       const sessionUpdate = await app.request(
         new Request(`http://local/api/prompts/${prompt.payload.data!.id}`, {
           method: 'PUT',
           headers: authHeaders(token),
-          body: JSON.stringify({ lastAiResponse: 'Exported answer', aiTestSessions }),
+          body: JSON.stringify({
+            lastAiResponse: 'Exported answer',
+            aiTestSessions,
+            promptOptimizationSessions,
+          }),
         }),
       );
       expect(sessionUpdate.status).toBe(200);
@@ -232,6 +266,7 @@ describe('web import/export routes', () => {
           title: 'Export Prompt',
           folderId: rootFolder.payload.data!.id,
           aiTestSessions,
+          promptOptimizationSessions,
         }),
       ]);
       expect(payload.promptVersions.length).toBeGreaterThanOrEqual(1);

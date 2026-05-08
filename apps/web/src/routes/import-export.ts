@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import type { Folder, Prompt, PromptVersion, Settings, Skill, SkillVersion } from '@prompthub/shared';
 import { getAuthUser } from '../middleware/auth.js';
 import { BackupService } from '../services/backup.service.js';
+import { promptOptimizationSessionSchema } from '../utils/prompt-optimization-validation.js';
 import { error, ErrorCode, success } from '../utils/response.js';
 import { parseJsonBody } from '../utils/validation.js';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -91,6 +92,7 @@ const promptSchema = z.object({
   notes: z.string().nullable().optional(),
   lastAiResponse: z.string().nullable().optional(),
   aiTestSessions: z.array(aiTestSessionSchema).optional(),
+  promptOptimizationSessions: z.array(promptOptimizationSessionSchema).max(20).optional(),
   createdAt: z.union([z.string(), z.number().int().nonnegative()]),
   updatedAt: z.union([z.string(), z.number().int().nonnegative()]),
 });
@@ -255,6 +257,7 @@ function normalizeBackupPayload(payload: z.infer<typeof backupPayloadSchema>): {
       notes: prompt.notes,
       lastAiResponse: prompt.lastAiResponse,
       aiTestSessions: prompt.aiTestSessions ?? [],
+      promptOptimizationSessions: (prompt.promptOptimizationSessions as Prompt['promptOptimizationSessions']) ?? [],
       createdAt: typeof prompt.createdAt === 'number' ? new Date(prompt.createdAt).toISOString() : prompt.createdAt,
       updatedAt: typeof prompt.updatedAt === 'number' ? new Date(prompt.updatedAt).toISOString() : prompt.updatedAt,
     })),

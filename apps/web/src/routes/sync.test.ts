@@ -167,6 +167,36 @@ function buildRemotePayload() {
             updatedAt: '2026-04-13T12:00:01.000Z',
           },
         ],
+        promptOptimizationSessions: [
+          {
+            id: 'remote-opt-session-1',
+            promptId: 'remote-prompt-1',
+            promptSnapshot: {
+              title: 'Remote Prompt',
+              systemPrompt: null,
+              userPrompt: 'Pulled body',
+              promptVersion: 2,
+            },
+            aModel: { provider: 'openai', model: 'gpt-a' },
+            bModel: { provider: 'openai', model: 'gpt-b' },
+            optimizerTemplate: {
+              title: 'Darwin',
+              strategyPrompt: 'Check and optimize.',
+            },
+            userCheckFocus: 'Remote focus',
+            explicitRequirements: ['Pulled body'],
+            iterations: [],
+            currentCandidatePrompt: {
+              systemPrompt: null,
+              userPrompt: 'Pulled body',
+            },
+            status: 'stopped',
+            autoIterationLimit: 3,
+            maxIterations: 10,
+            createdAt: '2026-05-01T00:00:00.000Z',
+            updatedAt: '2026-05-01T00:00:00.000Z',
+          },
+        ],
         createdAt: '2026-04-10T00:00:00.000Z',
         updatedAt: '2026-04-11T00:00:00.000Z',
       },
@@ -771,7 +801,12 @@ describe('web sync routes', () => {
       expect(dataResponse.status).toBe(200);
       const dataBody = await dataResponse.json() as {
         data: {
-          prompts: Array<{ title: string; folderId?: string; aiTestSessions?: unknown[] }>;
+          prompts: Array<{
+            title: string;
+            folderId?: string;
+            aiTestSessions?: unknown[];
+            promptOptimizationSessions?: unknown[];
+          }>;
           folders: Array<{ id: string; name: string; parentId?: string }>;
           skills: Array<{ name: string }>;
           settings: {
@@ -804,6 +839,7 @@ describe('web sync routes', () => {
       expect(childFolder?.parentId).toBe(rootFolder?.id);
       expect(remotePrompt?.folderId).toBe(childFolder?.id);
       expect(remotePrompt?.aiTestSessions).toHaveLength(1);
+      expect(remotePrompt?.promptOptimizationSessions).toHaveLength(1);
 
       expect(dataBody.data.settings.theme).toBe('dark');
       expect(dataBody.data.settings.language).toBe('en');

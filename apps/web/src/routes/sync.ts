@@ -5,6 +5,7 @@ import { getAuthUser } from '../middleware/auth.js';
 import { BackupService } from '../services/backup.service.js';
 import { SettingsService } from '../services/settings.service.js';
 import { pullWebDavFile, pushWebDavFile, testWebDavConnection, mkcolWebDavDirectory } from '../services/webdav.server.js';
+import { promptOptimizationSessionSchema } from '../utils/prompt-optimization-validation.js';
 import { error, ErrorCode, success } from '../utils/response.js';
 import { parseJsonBody } from '../utils/validation.js';
 
@@ -111,6 +112,7 @@ const promptSchema = z.object({
   notes: z.string().nullable().optional(),
   lastAiResponse: z.string().nullable().optional(),
   aiTestSessions: z.array(aiTestSessionSchema).optional(),
+  promptOptimizationSessions: z.array(promptOptimizationSessionSchema).max(20).optional(),
   createdAt: z.union([z.string(), z.number().int().nonnegative()]),
   updatedAt: z.union([z.string(), z.number().int().nonnegative()]),
 });
@@ -335,6 +337,7 @@ function normalizeSyncPayload(payload: z.infer<typeof importPayloadSchema>['payl
       notes: prompt.notes,
       lastAiResponse: prompt.lastAiResponse,
       aiTestSessions: prompt.aiTestSessions ?? [],
+      promptOptimizationSessions: (prompt.promptOptimizationSessions as Prompt['promptOptimizationSessions']) ?? [],
       createdAt: typeof prompt.createdAt === 'number' ? new Date(prompt.createdAt).toISOString() : prompt.createdAt,
       updatedAt: typeof prompt.updatedAt === 'number' ? new Date(prompt.updatedAt).toISOString() : prompt.updatedAt,
     })),

@@ -17,3 +17,8 @@ declare module '@web-runtime-i18n' {
 }
 
 declare module '@web-runtime-globals-css';
+
+interface Window {
+  api?: any;
+  electron?: any;
+}

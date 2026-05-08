@@ -318,6 +318,98 @@ describe('web prompt routes', () => {
     }
   }, TEST_TIMEOUT);
 
+  it('persists prompt optimization sessions and rejects sessions beyond MVP limit', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
+
+    try {
+      const app = await createTestApp(dataDir);
+      const { payload: registerPayload } = await registerUser(app, 'optimizationlimits', 'debugpass001');
+      const token = registerPayload.data.accessToken;
+
+      const { payload: createPayload } = await createPrompt(app, token, {
+        title: 'Optimization Limits',
+        userPrompt: 'Say hello',
+      });
+      const promptId = createPayload.data!.id;
+      const optimizationSession = {
+        id: 'opt-session-1',
+        promptId,
+        promptSnapshot: {
+          title: 'Optimization Limits',
+          systemPrompt: null,
+          userPrompt: 'Say hello',
+          promptVersion: 1,
+        },
+        aModel: { provider: 'openai', model: 'gpt-a' },
+        bModel: { provider: 'openai', model: 'gpt-b' },
+        optimizerTemplate: {
+          title: 'Darwin',
+          strategyPrompt: 'Check and optimize.',
+        },
+        userCheckFocus: 'Check length.',
+        explicitRequirements: ['Say hello'],
+        iterations: [],
+        currentCandidatePrompt: {
+          systemPrompt: null,
+          userPrompt: 'Say hello',
+        },
+        status: 'stopped',
+        autoIterationLimit: 3,
+        maxIterations: 10,
+        createdAt: '2026-05-01T00:00:00.000Z',
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      };
+
+      const updateResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            promptOptimizationSessions: [optimizationSession],
+          }),
+        }),
+      );
+      expect(updateResponse.status).toBe(200);
+      const updatePayload = await updateResponse.json() as {
+        data: { promptOptimizationSessions: unknown[]; currentVersion: number };
+      };
+      expect(updatePayload.data.promptOptimizationSessions).toHaveLength(1);
+      expect(updatePayload.data.currentVersion).toBe(1);
+
+      const tooManySessionsResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            promptOptimizationSessions: Array.from({ length: 21 }, (_, index) => ({
+              ...optimizationSession,
+              id: `opt-session-${index}`,
+            })),
+          }),
+        }),
+      );
+      expect(tooManySessionsResponse.status).toBe(422);
+
+      const mismatchedPromptResponse = await app.request(
+        new Request(`http://local/api/prompts/${promptId}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            promptOptimizationSessions: [
+              {
+                ...optimizationSession,
+                promptId: 'different-prompt',
+              },
+            ],
+          }),
+        }),
+      );
+      expect(mismatchedPromptResponse.status).toBe(422);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, TEST_TIMEOUT);
+
   it('enforces shared/private visibility rules across admin and normal users', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
 

@@ -11,6 +11,7 @@ import { resolveScenarioModel } from '../../services/ai-defaults';
 const SkillManager = lazy(() => import('../skill/SkillManager').then(m => ({ default: m.SkillManager })));
 import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PlusIcon, ChevronDownIcon, ChevronRightIcon, Maximize2Icon } from 'lucide-react';
 import { EditPromptModal, VersionHistoryModal, VariableInputModal, PromptListHeader, PromptListView, PromptTableView, AiTestModal, PromptDetailModal, PromptGalleryView, PromptKanbanView } from '../prompt';
+import { PromptOptimizationWorkspace } from '../prompt/PromptOptimizationWorkspace';
 import type { OutputFormatConfig } from '../prompt/VariableInputModal';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { ImagePreviewModal } from '../ui/ImagePreviewModal';
@@ -59,6 +60,7 @@ interface PromptTestState {
 }
 
 type DetailSectionId = 'system' | 'user';
+type PromptDetailMode = 'read' | 'optimize';
 
 interface TextViewerState {
   title: string;
@@ -368,6 +370,7 @@ export function MainContent() {
     system: true,
     user: true,
   });
+  const [promptDetailMode, setPromptDetailMode] = useState<PromptDetailMode>('read');
 
   // Get current prompt test state and results
   // 获取当前 prompt 的测试状态和结果
@@ -394,6 +397,7 @@ export function MainContent() {
     setIsAiHistoryModalOpen(false);
     setCollapsedAiMessageIds({});
     setTextViewer(null);
+    setPromptDetailMode('read');
   }, [selectedPrompt?.id]);
 
   const toggleDetailSection = useCallback((section: DetailSectionId) => {
@@ -1927,8 +1931,36 @@ export function MainContent() {
                     ))}
                   </div>
 
+                  {selectedPromptIsText && (
+                    <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
+                      <button
+                        type="button"
+                        onClick={() => setPromptDetailMode('read')}
+                        className={`h-8 rounded-md px-3 text-sm font-medium transition-colors ${
+                          promptDetailMode === 'read'
+                            ? 'bg-primary text-white'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        }`}
+                      >
+                        {t('prompt.detail', '详情')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPromptDetailMode('optimize')}
+                        className={`inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors ${
+                          promptDetailMode === 'optimize'
+                            ? 'bg-primary text-white'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        }`}
+                      >
+                        <SparklesIcon className="h-3.5 w-3.5" />
+                        <span>{t('prompt.optimize', '优化')}</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Source / 来源 */}
-                  {selectedPrompt.source && (
+                  {promptDetailMode === 'read' && selectedPrompt.source && (
                     <div className="mb-4">
                       <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground mb-1.5">
                         <GlobeIcon className="w-3.5 h-3.5" />
@@ -1947,7 +1979,7 @@ export function MainContent() {
                   )}
 
                   {/* Notes / 备注 */}
-                  {selectedPrompt.notes && (
+                  {promptDetailMode === 'read' && selectedPrompt.notes && (
                     <div className="mb-4">
                       <div className="flex items-center gap-1 text-sm font-medium text-muted-foreground mb-1.5">
                         {t('prompt.notes')}
@@ -1960,7 +1992,7 @@ export function MainContent() {
 
                   {/* Language toggle button - hidden for English UI */}
                   {/* 语言切换按钮 - 英文界面时隐藏 */}
-                  {(selectedPrompt.systemPromptEn || selectedPrompt.userPromptEn) && !i18n.language.startsWith('en') && (
+                  {promptDetailMode === 'read' && (selectedPrompt.systemPromptEn || selectedPrompt.userPromptEn) && !i18n.language.startsWith('en') && (
                     <div className="flex justify-end mb-4">
                       <button
                         onClick={() => setShowEnglish(!showEnglish)}
@@ -1980,6 +2012,14 @@ export function MainContent() {
                   )}
 
                   {/* System Prompt */}
+                  {promptDetailMode === 'optimize' && selectedPromptIsText ? (
+                    <PromptOptimizationWorkspace
+                      prompt={selectedPrompt}
+                      allPrompts={prompts}
+                      updatePrompt={updatePrompt}
+                    />
+                  ) : (
+                    <>
                   {(showEnglish ? selectedPrompt.systemPromptEn : selectedPrompt.systemPrompt) && (
                     renderPromptDetailSection({
                       id: 'system',
@@ -2005,8 +2045,10 @@ export function MainContent() {
                       </button>
                     ),
                   })}
+                    </>
+                  )}
 
-                  {selectedPromptIsText && activeAiTestSession && (
+                  {promptDetailMode === 'read' && selectedPromptIsText && activeAiTestSession && (
                     <div className="mb-4 rounded-xl bg-card border border-border overflow-hidden">
                       <div className="px-4 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
                         <div className="min-w-0">
@@ -2075,7 +2117,7 @@ export function MainContent() {
 
                   {/* AI response panel */}
                   {/* AI 测试响应区域 */}
-                  {(isTestingAI || aiResponse) && (!activeAiTestSession || selectedPrompt?.promptType === 'image' || isAiResponseImage) && (
+                  {promptDetailMode === 'read' && (isTestingAI || aiResponse) && (!activeAiTestSession || selectedPrompt?.promptType === 'image' || isAiResponseImage) && (
                     <div className="mb-4 p-4 rounded-xl bg-card border border-border">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS prompts (
   notes TEXT,
   last_ai_response TEXT,
   ai_test_sessions TEXT,
+  prompt_optimization_sessions TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
