@@ -836,8 +836,12 @@ export function MainContent() {
   const renderAiSessionMessages = (
     session: AiTestSession,
     options: { includeLiveDraft?: boolean } = {},
-  ) => (
-    <div className="space-y-3">
+  ) => {
+    const liveDraftContent = isStreaming ? streamingContent : '';
+    const liveDraftThinking = isStreaming ? streamingThinking : null;
+
+    return (
+      <div className="space-y-3">
       {session.messages.map((message) => {
         const isCollapsed = !!collapsedAiMessageIds[message.id];
         const messageMetaClass =
@@ -936,12 +940,17 @@ export function MainContent() {
               <LoaderIcon className="w-3 h-3 animate-spin" />
               <span>{t('prompt.testing', '测试中...')}</span>
             </div>
-            <CollapsibleThinking content={aiThinking} isLoading={isTestingAI} />
-            {aiResponse ? (
+            <CollapsibleThinking content={liveDraftThinking} isLoading={isTestingAI} />
+            {liveDraftContent ? (
               <div className="mt-2 text-sm leading-relaxed break-words">
-                {renderAiResponseContent(aiResponse)}
+                {renderAiResponseContent(liveDraftContent)}
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <LoaderIcon className="w-3.5 h-3.5 animate-spin" />
+                <span>{t('prompt.waitingForAiResponse', '等待模型输出...')}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -958,8 +967,9 @@ export function MainContent() {
           </div>
         </div>
       )}
-    </div>
-  );
+      </div>
+    );
+  };
 
   const toggleRenderMarkdown = () => {
     const next = !renderMarkdownEnabled;
@@ -987,11 +997,11 @@ export function MainContent() {
     console.log('[MainContent] AI Test - Stream:', useStream, 'Thinking:', useThinking);
     console.log('[MainContent] chatParams:', singleChatConfig.chatParams);
 
-    if (useStream) {
-      setIsStreaming(true);
-      setStreamingContent('');
-      setStreamingThinking('');
-    }
+    setIsStreaming(useStream);
+    setStreamingContent('');
+    setStreamingThinking('');
+    setAiResponse(null);
+    setAiThinking(null);
 
     const fullContentRef = { current: '' };
     const fullThinkingRef = { current: '' };
