@@ -6,7 +6,6 @@ import { getServerDatabase } from '../database.js';
 import { config } from '../config.js';
 import { ErrorCode } from '../utils/response.js';
 
-const PASSWORD_HASH_ROUNDS = 12;
 const JWT_ALGORITHM = 'HS256';
 const { compare, hash } = bcryptjs;
 
@@ -98,7 +97,7 @@ export class AuthService {
 
     const now = Date.now();
     const userId = randomUUID();
-    const passwordHash = await hash(password, PASSWORD_HASH_ROUNDS);
+    const passwordHash = await hash(password, config.auth.passwordHashRounds);
     const role = this.getUserCount() === 0 ? 'admin' : 'user';
 
     this.db
@@ -234,7 +233,7 @@ export class AuthService {
       );
     }
 
-    const newPasswordHash = await hash(newPassword, PASSWORD_HASH_ROUNDS);
+    const newPasswordHash = await hash(newPassword, config.auth.passwordHashRounds);
     const now = Date.now();
 
     const runUpdate = this.db.transaction(() => {

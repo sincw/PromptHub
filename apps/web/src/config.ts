@@ -17,6 +17,7 @@ const envSchema = z.object({
   AUTH_REGISTER_MAX_ATTEMPTS: z.coerce.number().int().positive().default(10),
   AUTH_REFRESH_WINDOW_MS: z.coerce.number().int().positive().default(5 * 60 * 1000),
   AUTH_REFRESH_MAX_ATTEMPTS: z.coerce.number().int().positive().default(12),
+  AUTH_PASSWORD_HASH_ROUNDS: z.coerce.number().int().min(4).max(15).default(12),
   AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20 * 60 * 1000),
 
   DATA_ROOT: z.string().default('./'),
@@ -66,6 +67,9 @@ function loadConfig(): Config {
         maxAttempts: env.AUTH_REFRESH_MAX_ATTEMPTS,
       },
     },
+    auth: {
+      passwordHashRounds: env.AUTH_PASSWORD_HASH_ROUNDS,
+    },
     ai: {
       requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
     },
@@ -101,6 +105,10 @@ export interface Config {
       windowMs: number;
       maxAttempts: number;
     };
+  };
+
+  auth: {
+    passwordHashRounds: number;
   };
 
   ai: {
