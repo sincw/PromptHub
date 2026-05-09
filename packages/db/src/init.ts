@@ -523,6 +523,7 @@ export function initDatabase(
           title TEXT NOT NULL,
           description TEXT,
           content TEXT NOT NULL,
+          prompt_content TEXT,
           tags TEXT,
           folder_id TEXT,
           source TEXT,
@@ -548,6 +549,7 @@ export function initDatabase(
         { name: "is_favorite", type: "INTEGER DEFAULT 0" },
         { name: "is_sharing_enabled", type: "INTEGER DEFAULT 0" },
         { name: "source_snapshot", type: "TEXT" },
+        { name: "prompt_content", type: "TEXT" },
       ];
 
       for (const col of shareNewColumns) {

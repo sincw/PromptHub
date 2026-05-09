@@ -77,6 +77,7 @@ interface QuickShareDraft {
   title: string;
   description?: string;
   content: string;
+  promptContent?: string;
   tags: string[];
   folderId?: string | null;
   sourceSnapshot: NonNullable<CreateShareEntryDTO['sourceSnapshot']>;
@@ -769,16 +770,16 @@ export function MainContent() {
     const systemPrompt = selectedPrompt?.systemPrompt ?? session.promptSnapshot.systemPrompt ?? '';
     const userPrompt = selectedPrompt?.userPrompt ?? session.promptSnapshot.userPrompt ?? '';
     const fallbackFolderId = selectedFolderId && selectedFolderId !== 'favorites' ? selectedFolderId : undefined;
-    const sections = [
+    const promptSections = [
       systemPrompt ? `## System Prompt\n\n${systemPrompt}` : '',
       userPrompt ? `## User Prompt\n\n${userPrompt}` : '',
-      `## ${message.role.toUpperCase()} ${t('prompt.message', 'Message')}\n\n${message.content}`,
     ].filter(Boolean);
 
     setQuickShareDraft({
       title: `${promptTitle} - ${message.role}`,
       description: t('share.quickShareDescription', '从 Prompt AI 测试会话创建的分享内容'),
-      content: sections.join('\n\n'),
+      content: message.content,
+      promptContent: promptSections.join('\n\n') || undefined,
       tags: selectedPrompt?.tags ?? [],
       folderId: selectedPrompt?.folderId ?? fallbackFolderId,
       sourceSnapshot: {

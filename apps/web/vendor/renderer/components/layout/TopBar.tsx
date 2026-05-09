@@ -244,7 +244,7 @@ export function TopBar({
     if (uiViewMode !== "share" || !shareSearchQuery.trim()) return [];
     const query = shareSearchQuery.toLowerCase();
     return shares.filter((share) =>
-      [share.title, share.description ?? "", share.content, ...(share.tags ?? [])]
+      [share.title, share.description ?? "", share.content, share.promptContent ?? "", ...(share.tags ?? [])]
         .join(" ")
         .toLowerCase()
         .includes(query),

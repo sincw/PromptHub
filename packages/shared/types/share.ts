@@ -20,6 +20,7 @@ export interface ShareEntry {
   title: string;
   description?: string | null;
   content: string;
+  promptContent?: string | null;
   tags: string[];
   folderId?: string | null;
   source?: string | null;
@@ -37,6 +38,7 @@ export interface PublicShareEntry {
   title: string;
   description?: string | null;
   content: string;
+  promptContent?: string | null;
   sourceSnapshot?: ShareSourceSnapshot | null;
   updatedAt: string;
 }
@@ -52,6 +54,7 @@ export interface CreateShareEntryDTO {
   title: string;
   description?: string;
   content: string;
+  promptContent?: string | null;
   tags?: string[];
   folderId?: string | null;
   source?: string;
@@ -65,6 +68,7 @@ export interface UpdateShareEntryDTO {
   title?: string;
   description?: string;
   content?: string;
+  promptContent?: string | null;
   tags?: string[];
   folderId?: string | null;
   source?: string;

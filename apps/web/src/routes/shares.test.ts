@@ -93,6 +93,7 @@ describe('web share routes', () => {
             title: 'Launch Notes',
             description: 'Public markdown notes',
             content: '# Launch\n\nShip it.',
+            promptContent: '## System Prompt\n\nYou write release notes.\n\n## User Prompt\n\nSummarize the launch.',
             tags: ['release'],
             isSharingEnabled: true,
             sourceSnapshot: {
@@ -114,11 +115,15 @@ describe('web share routes', () => {
           id: string;
           shareId: string;
           title: string;
+          content: string;
+          promptContent?: string | null;
           isSharingEnabled: boolean;
           sourceSnapshot?: { systemPrompt?: string | null };
         };
       };
       expect(createPayload.data.title).toBe('Launch Notes');
+      expect(createPayload.data.content).not.toContain('System Prompt');
+      expect(createPayload.data.promptContent).toContain('System Prompt');
       expect(createPayload.data.isSharingEnabled).toBe(true);
       expect(createPayload.data.sourceSnapshot?.systemPrompt).toBe('You write release notes.');
 
@@ -129,12 +134,15 @@ describe('web share routes', () => {
           available: boolean;
           title?: string;
           content?: string;
+          promptContent?: string | null;
           sourceSnapshot?: { userPrompt?: string | null };
         };
       };
       expect(publicPayload.data.available).toBe(true);
       expect(publicPayload.data.title).toBe('Launch Notes');
       expect(publicPayload.data.content).toContain('Ship it.');
+      expect(publicPayload.data.content).not.toContain('System Prompt');
+      expect(publicPayload.data.promptContent).toContain('User Prompt');
       expect(publicPayload.data.sourceSnapshot?.userPrompt).toBe('Summarize the launch.');
 
       const updateResponse = await app.request(
@@ -149,7 +157,7 @@ describe('web share routes', () => {
       const disabledResponse = await app.request(`http://local/api/public/shares/${createPayload.data.shareId}`);
       expect(disabledResponse.status).toBe(200);
       const disabledPayload = await disabledResponse.json() as {
-        data: { available: boolean; title?: string; description?: string; content?: string };
+        data: { available: boolean; title?: string; description?: string; content?: string; promptContent?: string };
       };
       expect(disabledPayload.data).toEqual({ available: false });
     } finally {

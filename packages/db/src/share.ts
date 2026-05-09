@@ -17,6 +17,7 @@ interface ShareEntryRow {
   title: string;
   description: string | null;
   content: string;
+  prompt_content: string | null;
   tags: string | null;
   folder_id: string | null;
   source: string | null;
@@ -68,9 +69,9 @@ export class ShareDB {
     this.db
       .prepare(
         `INSERT INTO share_entries (
-          id, share_id, title, description, content, tags, folder_id, source, notes,
+          id, share_id, title, description, content, prompt_content, tags, folder_id, source, notes,
           is_favorite, is_sharing_enabled, source_snapshot, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -78,6 +79,7 @@ export class ShareDB {
         data.title,
         data.description ?? null,
         data.content,
+        data.promptContent ?? null,
         JSON.stringify(data.tags ?? []),
         data.folderId ?? null,
         data.source ?? null,
@@ -133,6 +135,10 @@ export class ShareDB {
       updates.push("content = ?");
       values.push(data.content);
     }
+    if (data.promptContent !== undefined) {
+      updates.push("prompt_content = ?");
+      values.push(data.promptContent);
+    }
     if (data.tags !== undefined) {
       updates.push("tags = ?");
       values.push(JSON.stringify(data.tags));
@@ -174,6 +180,7 @@ export class ShareDB {
       ...(data.title !== undefined && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.content !== undefined && { content: data.content }),
+      ...(data.promptContent !== undefined && { promptContent: data.promptContent }),
       ...(data.tags !== undefined && { tags: data.tags }),
       ...(data.folderId !== undefined && { folderId: data.folderId }),
       ...(data.source !== undefined && { source: data.source }),
@@ -193,11 +200,11 @@ export class ShareDB {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO share_entries (
-          id, owner_user_id, visibility, share_id, title, description, content, tags,
+          id, owner_user_id, visibility, share_id, title, description, content, prompt_content, tags,
           folder_id, source, notes, is_favorite, is_sharing_enabled, source_snapshot,
           created_at, updated_at
         ) VALUES (
-          @id, @owner_user_id, @visibility, @share_id, @title, @description, @content, @tags,
+          @id, @owner_user_id, @visibility, @share_id, @title, @description, @content, @prompt_content, @tags,
           @folder_id, @source, @notes, @is_favorite, @is_sharing_enabled, @source_snapshot,
           @created_at, @updated_at
         )`,
@@ -210,6 +217,7 @@ export class ShareDB {
         "@title": share.title,
         "@description": share.description ?? null,
         "@content": share.content,
+        "@prompt_content": share.promptContent ?? null,
         "@tags": JSON.stringify(share.tags ?? []),
         "@folder_id": share.folderId ?? null,
         "@source": share.source ?? null,
@@ -232,6 +240,7 @@ export class ShareDB {
           item.title,
           item.description ?? "",
           item.content,
+          item.promptContent ?? "",
           item.source ?? "",
           item.notes ?? "",
           item.sourceSnapshot?.systemPrompt ?? "",
@@ -285,6 +294,7 @@ export class ShareDB {
       title: share.title,
       description: share.description,
       content: share.content,
+      promptContent: share.promptContent,
       sourceSnapshot: share.sourceSnapshot,
       updatedAt: share.updatedAt,
     };
@@ -299,6 +309,7 @@ export class ShareDB {
       title: row.title,
       description: row.description,
       content: row.content,
+      promptContent: row.prompt_content,
       tags: parseJsonArray(row.tags),
       folderId: row.folder_id,
       source: row.source,

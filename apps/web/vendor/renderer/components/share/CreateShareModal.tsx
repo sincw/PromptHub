@@ -10,6 +10,7 @@ interface ShareFormInitialData {
   title?: string;
   description?: string | null;
   content?: string;
+  promptContent?: string | null;
   tags?: string[];
   folderId?: string | null;
   source?: string | null;
@@ -31,6 +32,7 @@ function formSignature(data: {
   title: string;
   description: string;
   content: string;
+  promptContent: string;
   tags: string[];
   folderId: string;
   source: string;
@@ -54,6 +56,7 @@ export function CreateShareModal({
   const [shareTitle, setShareTitle] = useState("");
   const [description, setDescription] = useState("");
   const [content, setContent] = useState("");
+  const [promptContent, setPromptContent] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [folderId, setFolderId] = useState<string>("");
@@ -76,6 +79,7 @@ export function CreateShareModal({
     const nextTitle = initialData?.title ?? "";
     const nextDescription = initialData?.description ?? "";
     const nextContent = initialData?.content ?? "";
+    const nextPromptContent = initialData?.promptContent ?? "";
     const nextTags = initialData?.tags ?? [];
     const nextFolderId = initialData?.folderId ?? defaultFolderId ?? "";
     const nextSource = initialData?.source ?? "";
@@ -85,6 +89,7 @@ export function CreateShareModal({
     setShareTitle(nextTitle);
     setDescription(nextDescription);
     setContent(nextContent);
+    setPromptContent(nextPromptContent);
     setTags(nextTags);
     setFolderId(nextFolderId);
     setSource(nextSource);
@@ -98,6 +103,7 @@ export function CreateShareModal({
       title: nextTitle,
       description: nextDescription,
       content: nextContent,
+      promptContent: nextPromptContent,
       tags: nextTags,
       folderId: nextFolderId,
       source: nextSource,
@@ -111,6 +117,7 @@ export function CreateShareModal({
       title: shareTitle,
       description,
       content,
+      promptContent,
       tags,
       folderId,
       source,
@@ -130,6 +137,7 @@ export function CreateShareModal({
     setShareTitle("");
     setDescription("");
     setContent("");
+    setPromptContent("");
     setTags([]);
     setFolderId("");
     setSource("");
@@ -144,6 +152,7 @@ export function CreateShareModal({
       title: shareTitle.trim(),
       description: description.trim() || undefined,
       content: content.trim(),
+      promptContent: promptContent.trim() || null,
       tags,
       folderId: folderId || undefined,
       source: source.trim() || undefined,
@@ -310,6 +319,15 @@ export function CreateShareModal({
               </div>
             </div>
           )}
+
+          <Textarea
+            label={t("share.promptContent", "提示词内容（可选）")}
+            value={promptContent}
+            onChange={(event) => setPromptContent(event.target.value)}
+            className="min-h-[160px]"
+            placeholder={t("share.promptContentPlaceholder", "System Prompt 和 User Prompt 可单独存放在这里，不会混入分享正文")}
+            enableMarkdownList
+          />
 
           <Textarea
             label={`${t("share.content", "内容")} *`}

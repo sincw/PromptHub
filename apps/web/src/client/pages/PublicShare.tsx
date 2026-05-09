@@ -7,38 +7,43 @@ import { ChevronDownIcon, ChevronRightIcon, FileTextIcon } from 'lucide-react';
 import type { PublicShareResponse, ShareSourceSnapshot } from '@prompthub/shared';
 import { getPublicShare } from '../api/shares';
 
-function SourceSnapshotBlock({ snapshot }: { snapshot?: ShareSourceSnapshot | null }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  if (!snapshot?.systemPrompt && !snapshot?.userPrompt) return null;
+function buildPromptContentFromSnapshot(snapshot?: ShareSourceSnapshot | null): string {
+  if (!snapshot?.systemPrompt && !snapshot?.userPrompt) return '';
+  return [
+    snapshot.systemPrompt ? `## System Prompt\n\n${snapshot.systemPrompt}` : '',
+    snapshot.userPrompt ? `## User Prompt\n\n${snapshot.userPrompt}` : '',
+  ].filter(Boolean).join('\n\n');
+}
 
-  const sections = [
-    { key: 'system', title: 'System Prompt', content: snapshot.systemPrompt },
-    { key: 'user', title: 'User Prompt', content: snapshot.userPrompt },
-  ].filter((section) => section.content);
+function PromptContentBlock({
+  promptContent,
+  snapshot,
+}: {
+  promptContent?: string | null;
+  snapshot?: ShareSourceSnapshot | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const content = promptContent?.trim() || buildPromptContentFromSnapshot(snapshot);
+  if (!content) return null;
 
   return (
-    <div className="mb-5 space-y-2">
-      {sections.map((section) => {
-        const isExpanded = !!expanded[section.key];
-        return (
-          <div key={section.key} className="overflow-hidden rounded-lg border border-border bg-card">
-            <button
-              type="button"
-              onClick={() => setExpanded((prev) => ({ ...prev, [section.key]: !prev[section.key] }))}
-              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium"
-              aria-expanded={isExpanded}
-            >
-              <span>{section.title}</span>
-              {isExpanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
-            </button>
-            {isExpanded && (
-              <div className="max-h-80 overflow-y-auto border-t border-border bg-muted/20 p-4 font-mono text-sm whitespace-pre-wrap break-words">
-                {section.content}
-              </div>
-            )}
-          </div>
-        );
-      })}
+    <div className="mb-5 overflow-hidden rounded-lg border border-border bg-card">
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium"
+        aria-expanded={expanded}
+      >
+        <span>提示词内容</span>
+        {expanded ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronRightIcon className="h-4 w-4" />}
+      </button>
+      {expanded && (
+        <div className="markdown-content max-h-80 overflow-y-auto border-t border-border bg-muted/20 p-4 text-sm leading-relaxed break-words">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+            {content}
+          </ReactMarkdown>
+        </div>
+      )}
     </div>
   );
 }
@@ -135,7 +140,7 @@ export function PublicSharePage() {
           )}
         </div>
 
-        <SourceSnapshotBlock snapshot={share.sourceSnapshot} />
+        <PromptContentBlock promptContent={share.promptContent} snapshot={share.sourceSnapshot} />
 
         <div className="mb-2 flex justify-end">
           <button

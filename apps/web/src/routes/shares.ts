@@ -24,6 +24,7 @@ const createShareSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(200, 'title is too long'),
   description: z.string().max(5000).optional(),
   content: z.string().min(1, 'content is required').max(200000, 'content is too long'),
+  promptContent: z.string().max(200000, 'promptContent is too long').nullable().optional(),
   tags: z.array(z.string().trim().min(1)).optional(),
   folderId: z.string().trim().min(1).nullable().optional(),
   source: z.string().max(5000).optional(),

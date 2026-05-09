@@ -50,6 +50,7 @@ export function filterVisibleShares({
         share.title,
         share.description ?? "",
         share.content,
+        share.promptContent ?? "",
         share.source ?? "",
         share.notes ?? "",
         ...(share.tags ?? []),

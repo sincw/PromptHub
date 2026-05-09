@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS share_entries (
   title TEXT NOT NULL,
   description TEXT,
   content TEXT NOT NULL,
+  prompt_content TEXT,
   tags TEXT,
   folder_id TEXT,
   source TEXT,
