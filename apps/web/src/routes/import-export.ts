@@ -37,7 +37,16 @@ const aiTestSessionMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant']),
   content: z.string(),
   thinkingContent: z.string().nullable().optional(),
+  stageId: z.string().optional(),
+  stageTitle: z.string().nullable().optional(),
   createdAt: z.string(),
+});
+
+const promptStageSchema = z.object({
+  id: z.string(),
+  title: z.string().nullable().optional(),
+  userPrompt: z.string(),
+  userPromptEn: z.string().nullable().optional(),
 });
 
 const aiTestSessionSchema = z.object({
@@ -46,6 +55,9 @@ const aiTestSessionSchema = z.object({
     title: z.string(),
     systemPrompt: z.string().nullable().optional(),
     userPrompt: z.string(),
+    executionMode: z.enum(['single', 'multi_stage']).optional(),
+    stageContextMode: z.enum(['isolated', 'inherited']).optional(),
+    stages: z.array(promptStageSchema).optional(),
     promptVersion: z.number().int().nonnegative().optional(),
   }),
   model: z.object({
@@ -54,7 +66,8 @@ const aiTestSessionSchema = z.object({
     apiUrl: z.string().optional(),
   }),
   messages: z.array(aiTestSessionMessageSchema),
-  status: z.literal('completed'),
+  status: z.enum(['running', 'completed', 'error']),
+  error: z.string().optional(),
   lastLatencyMs: z.number().int().nonnegative().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -67,6 +80,9 @@ const promptSchema = z.object({
   title: z.string(),
   description: z.string().nullable().optional(),
   promptType: z.enum(['text', 'image', 'video']).optional(),
+  executionMode: z.enum(['single', 'multi_stage']).optional(),
+  stageContextMode: z.enum(['isolated', 'inherited']).optional(),
+  stages: z.array(promptStageSchema).optional(),
   systemPrompt: z.string().nullable().optional(),
   systemPromptEn: z.string().nullable().optional(),
   userPrompt: z.string(),
@@ -105,6 +121,9 @@ const promptVersionSchema = z.object({
   systemPromptEn: z.string().nullable().optional(),
   userPrompt: z.string(),
   userPromptEn: z.string().nullable().optional(),
+  executionMode: z.enum(['single', 'multi_stage']).optional(),
+  stageContextMode: z.enum(['isolated', 'inherited']).optional(),
+  stages: z.array(promptStageSchema).optional(),
   variables: z.array(z.object({
     name: z.string(),
     type: z.enum(['text', 'textarea', 'number', 'select']),

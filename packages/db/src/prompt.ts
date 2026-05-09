@@ -7,6 +7,9 @@ import type {
   SearchQuery,
   PromptVersion,
   PromptType,
+  PromptExecutionMode,
+  PromptStageContextMode,
+  PromptStage,
 } from "@prompthub/shared/types";
 
 interface PromptRow {
@@ -16,6 +19,9 @@ interface PromptRow {
   title: string;
   description: string | null;
   prompt_type: PromptType | null;
+  execution_mode: PromptExecutionMode | null;
+  stage_context_mode: PromptStageContextMode | null;
+  stages: string | null;
   system_prompt: string | null;
   system_prompt_en: string | null;
   user_prompt: string;
@@ -46,10 +52,23 @@ interface PromptVersionRow {
   system_prompt_en: string | null;
   user_prompt: string;
   user_prompt_en: string | null;
+  execution_mode: PromptExecutionMode | null;
+  stage_context_mode: PromptStageContextMode | null;
+  stages: string | null;
   variables: string | null;
   note: string | null;
   ai_response: string | null;
   created_at: number;
+}
+
+function parseJsonArray<T>(value: string | null): T[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export class PromptDB {
@@ -65,10 +84,10 @@ export class PromptDB {
 
     const stmt = this.db.prepare(`
       INSERT INTO prompts (
-        id, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
+        id, title, description, prompt_type, execution_mode, stage_context_mode, stages, system_prompt, system_prompt_en, user_prompt,
         user_prompt_en, variables, tags, folder_id, images, videos, source, notes,
         last_ai_response, ai_test_sessions, prompt_optimization_sessions, is_favorite, current_version, usage_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -76,6 +95,9 @@ export class PromptDB {
       data.title,
       data.description || null,
       data.promptType || "text",
+      data.executionMode || "single",
+      data.stageContextMode || "isolated",
+      JSON.stringify(data.stages || []),
       data.systemPrompt || null,
       data.systemPromptEn || null,
       data.userPrompt,
@@ -152,6 +174,18 @@ export class PromptDB {
     if (data.promptType !== undefined) {
       updates.push("prompt_type = ?");
       values.push(data.promptType);
+    }
+    if (data.executionMode !== undefined) {
+      updates.push("execution_mode = ?");
+      values.push(data.executionMode);
+    }
+    if (data.stageContextMode !== undefined) {
+      updates.push("stage_context_mode = ?");
+      values.push(data.stageContextMode);
+    }
+    if (data.stages !== undefined) {
+      updates.push("stages = ?");
+      values.push(JSON.stringify(data.stages));
     }
     if (data.systemPrompt !== undefined) {
       updates.push("system_prompt = ?");
@@ -238,6 +272,9 @@ export class PromptDB {
         data.systemPromptEn !== undefined ||
         data.userPrompt !== undefined ||
         data.userPromptEn !== undefined ||
+        data.executionMode !== undefined ||
+        data.stageContextMode !== undefined ||
+        data.stages !== undefined ||
         data.variables !== undefined
       ) {
         this.createVersion(id);
@@ -254,6 +291,13 @@ export class PromptDB {
       ...(data.title !== undefined && { title: data.title }),
       ...(data.description !== undefined && { description: data.description }),
       ...(data.promptType !== undefined && { promptType: data.promptType }),
+      ...(data.executionMode !== undefined && {
+        executionMode: data.executionMode,
+      }),
+      ...(data.stageContextMode !== undefined && {
+        stageContextMode: data.stageContextMode,
+      }),
+      ...(data.stages !== undefined && { stages: data.stages }),
       ...(data.systemPrompt !== undefined && {
         systemPrompt: data.systemPrompt,
       }),
@@ -288,6 +332,9 @@ export class PromptDB {
       data.systemPromptEn !== undefined ||
       data.userPrompt !== undefined ||
       data.userPromptEn !== undefined ||
+      data.executionMode !== undefined ||
+      data.stageContextMode !== undefined ||
+      data.stages !== undefined ||
       data.variables !== undefined
     ) {
       const nextVersion = existingPrompt.currentVersion + 1;
@@ -408,8 +455,8 @@ export class PromptDB {
           `
         INSERT INTO prompt_versions (
           id, prompt_id, version, system_prompt, system_prompt_en, user_prompt,
-          user_prompt_en, variables, note, ai_response, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          user_prompt_en, execution_mode, stage_context_mode, stages, variables, note, ai_response, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
         )
         .run(
@@ -420,6 +467,9 @@ export class PromptDB {
           prompt.systemPromptEn || null,
           prompt.userPrompt,
           prompt.userPromptEn || null,
+          prompt.executionMode || "single",
+          prompt.stageContextMode || "isolated",
+          JSON.stringify(prompt.stages || []),
           JSON.stringify(prompt.variables),
           note || null,
           prompt.lastAiResponse || null,
@@ -440,6 +490,9 @@ export class PromptDB {
         systemPromptEn: prompt.systemPromptEn,
         userPrompt: prompt.userPrompt,
         userPromptEn: prompt.userPromptEn,
+        executionMode: prompt.executionMode,
+        stageContextMode: prompt.stageContextMode,
+        stages: prompt.stages,
         variables: prompt.variables,
         note,
         aiResponse: prompt.lastAiResponse,
@@ -477,10 +530,10 @@ export class PromptDB {
       .prepare(
         `INSERT OR IGNORE INTO prompt_versions (
           id, prompt_id, version, system_prompt, system_prompt_en, user_prompt,
-          user_prompt_en, variables, note, ai_response, created_at
+          user_prompt_en, execution_mode, stage_context_mode, stages, variables, note, ai_response, created_at
         ) VALUES (
           @id, @prompt_id, @version, @system_prompt, @system_prompt_en, @user_prompt,
-          @user_prompt_en, @variables, @note, @ai_response, @created_at
+          @user_prompt_en, @execution_mode, @stage_context_mode, @stages, @variables, @note, @ai_response, @created_at
         )`,
       )
       .run({
@@ -491,6 +544,9 @@ export class PromptDB {
         "@system_prompt_en": version.systemPromptEn || null,
         "@user_prompt": version.userPrompt,
         "@user_prompt_en": version.userPromptEn || null,
+        "@execution_mode": version.executionMode || "single",
+        "@stage_context_mode": version.stageContextMode || "isolated",
+        "@stages": JSON.stringify(version.stages || []),
         "@variables": JSON.stringify(version.variables),
         "@note": version.note || null,
         "@ai_response": version.aiResponse || null,
@@ -504,12 +560,12 @@ export class PromptDB {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO prompts (
-          id, title, description, prompt_type, system_prompt, system_prompt_en, user_prompt,
+          id, title, description, prompt_type, execution_mode, stage_context_mode, stages, system_prompt, system_prompt_en, user_prompt,
           user_prompt_en, variables, tags, folder_id, images, videos, is_favorite, is_pinned,
           current_version, usage_count, source, notes, last_ai_response, ai_test_sessions,
           prompt_optimization_sessions, created_at, updated_at
         ) VALUES (
-          @id, @title, @description, @prompt_type, @system_prompt, @system_prompt_en, @user_prompt,
+          @id, @title, @description, @prompt_type, @execution_mode, @stage_context_mode, @stages, @system_prompt, @system_prompt_en, @user_prompt,
           @user_prompt_en, @variables, @tags, @folder_id, @images, @videos, @is_favorite, @is_pinned,
           @current_version, @usage_count, @source, @notes, @last_ai_response, @ai_test_sessions,
           @prompt_optimization_sessions, @created_at, @updated_at
@@ -520,6 +576,9 @@ export class PromptDB {
         "@title": prompt.title,
         "@description": prompt.description ?? null,
         "@prompt_type": prompt.promptType ?? "text",
+        "@execution_mode": prompt.executionMode ?? "single",
+        "@stage_context_mode": prompt.stageContextMode ?? "isolated",
+        "@stages": JSON.stringify(prompt.stages ?? []),
         "@system_prompt": prompt.systemPrompt ?? null,
         "@system_prompt_en": prompt.systemPromptEn ?? null,
         "@user_prompt": prompt.userPrompt,
@@ -565,6 +624,9 @@ export class PromptDB {
       systemPromptEn: versionData.systemPromptEn ?? undefined,
       userPrompt: versionData.userPrompt,
       userPromptEn: versionData.userPromptEn ?? undefined,
+      executionMode: versionData.executionMode,
+      stageContextMode: versionData.stageContextMode,
+      stages: versionData.stages,
       variables: versionData.variables,
       lastAiResponse: versionData.aiResponse ?? undefined,
     });
@@ -582,6 +644,9 @@ export class PromptDB {
       title: row.title,
       description: row.description,
       promptType: row.prompt_type || "text",
+      executionMode: row.execution_mode || "single",
+      stageContextMode: row.stage_context_mode || "isolated",
+      stages: parseJsonArray<PromptStage>(row.stages),
       systemPrompt: row.system_prompt,
       systemPromptEn: row.system_prompt_en,
       userPrompt: row.user_prompt,
@@ -619,6 +684,9 @@ export class PromptDB {
       systemPromptEn: row.system_prompt_en,
       userPrompt: row.user_prompt,
       userPromptEn: row.user_prompt_en,
+      executionMode: row.execution_mode || "single",
+      stageContextMode: row.stage_context_mode || "isolated",
+      stages: parseJsonArray<PromptStage>(row.stages),
       variables: JSON.parse(row.variables || "[]"),
       note: row.note,
       aiResponse: row.ai_response,

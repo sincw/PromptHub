@@ -1,5 +1,5 @@
 import { FolderDB, PromptDB } from '@prompthub/db';
-import type { CreatePromptDTO, Prompt, PromptVersion, SearchQuery, UpdatePromptDTO } from '@prompthub/shared';
+import type { CreatePromptDTO, Prompt, PromptStage, PromptVersion, SearchQuery, UpdatePromptDTO } from '@prompthub/shared';
 import { getServerDatabase } from '../database.js';
 import { ErrorCode } from '../utils/response.js';
 import { syncPromptWorkspaceFromDatabase } from './prompt-workspace.js';
@@ -30,7 +30,7 @@ export interface PromptDiffResult {
   from: PromptVersion;
   to: PromptVersion;
   fields: Array<{
-    field: 'systemPrompt' | 'systemPromptEn' | 'userPrompt' | 'userPromptEn' | 'variables' | 'aiResponse';
+    field: 'systemPrompt' | 'systemPromptEn' | 'userPrompt' | 'userPromptEn' | 'executionMode' | 'stageContextMode' | 'stages' | 'variables' | 'aiResponse';
     from: string;
     to: string;
   }>;
@@ -44,6 +44,7 @@ export class PromptService {
   create(actor: PromptActor, data: CreatePromptDTO): Prompt {
     const visibility = data.visibility ?? 'private';
     this.assertCanCreate(actor, visibility);
+    this.assertValidExecutionShape(data);
 
     const prompt = this.promptDb.create(data);
     this.db
@@ -120,6 +121,12 @@ export class PromptService {
       throw new PromptServiceError(403, ErrorCode.FORBIDDEN, 'Only admin can change shared visibility');
     }
 
+    const existingPrompt = this.promptDb.getById(id);
+    if (!existingPrompt) {
+      throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt not found');
+    }
+    this.assertValidExecutionShape(data, existingPrompt);
+
     const prompt = this.promptDb.update(id, data);
     if (!prompt) {
       throw new PromptServiceError(404, ErrorCode.NOT_FOUND, 'Prompt not found');
@@ -153,6 +160,9 @@ export class PromptService {
       title: `${existing.title} (Copy)`,
       description: existing.description ?? undefined,
       promptType: existing.promptType,
+      executionMode: existing.executionMode,
+      stageContextMode: existing.stageContextMode,
+      stages: existing.stages,
       systemPrompt: existing.systemPrompt ?? undefined,
       systemPromptEn: existing.systemPromptEn ?? undefined,
       userPrompt: existing.userPrompt,
@@ -237,6 +247,9 @@ export class PromptService {
     this.pushDiff(fields, 'systemPromptEn', from.systemPromptEn, to.systemPromptEn);
     this.pushDiff(fields, 'userPrompt', from.userPrompt, to.userPrompt);
     this.pushDiff(fields, 'userPromptEn', from.userPromptEn, to.userPromptEn);
+    this.pushDiff(fields, 'executionMode', from.executionMode, to.executionMode);
+    this.pushDiff(fields, 'stageContextMode', from.stageContextMode, to.stageContextMode);
+    this.pushDiff(fields, 'stages', JSON.stringify(from.stages ?? []), JSON.stringify(to.stages ?? []));
     this.pushDiff(fields, 'variables', JSON.stringify(from.variables), JSON.stringify(to.variables));
     this.pushDiff(fields, 'aiResponse', from.aiResponse, to.aiResponse);
 
@@ -344,5 +357,44 @@ export class PromptService {
     if (fromValue !== toValue) {
       fields.push({ field, from: fromValue, to: toValue });
     }
+  }
+
+  private assertValidExecutionShape(data: CreatePromptDTO | UpdatePromptDTO, existing?: Prompt): void {
+    const promptType = data.promptType ?? existing?.promptType ?? 'text';
+    const executionMode = data.executionMode ?? existing?.executionMode ?? 'single';
+    const stages = data.stages ?? existing?.stages ?? [];
+
+    if (executionMode !== 'multi_stage') {
+      return;
+    }
+
+    if (promptType !== 'text') {
+      throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, 'Multi-stage prompts are only supported for text prompts');
+    }
+
+    if (stages.length < 2 || stages.length > 10) {
+      throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, 'Multi-stage prompts require 2 to 10 stages');
+    }
+
+    for (const [index, stage] of stages.entries()) {
+      if (!stage.userPrompt?.trim()) {
+        throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} userPrompt is required`);
+      }
+
+      for (const reference of this.getStageOutputReferences(stage)) {
+        const referencedIndex = Number(reference.slice('@stage'.length, -'.output'.length)) - 1;
+        if (referencedIndex < 0 || referencedIndex >= stages.length) {
+          throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} references a missing stage: ${reference}`);
+        }
+        if (referencedIndex >= index) {
+          throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} can only reference earlier stages: ${reference}`);
+        }
+      }
+    }
+  }
+
+  private getStageOutputReferences(stage: PromptStage): string[] {
+    const text = `${stage.userPrompt || ''}\n${stage.userPromptEn || ''}`;
+    return [...text.matchAll(/@stage\d+\.output/g)].map((match) => match[0]);
   }
 }

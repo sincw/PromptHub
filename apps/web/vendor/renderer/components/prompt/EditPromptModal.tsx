@@ -40,13 +40,17 @@ import { defaultSchema } from "hast-util-sanitize";
 import { renderFolderIcon } from "../layout/folderIconHelper";
 import {
   buildPromptPayload,
+  createDefaultPromptStages,
   createPromptFormData,
   getExistingPromptTags,
   getLanguageName,
   hasPromptFormChanges,
   isPureEnglish,
+  normalizePromptStages,
   promoteMainEnglishToEnglishVersion,
+  validatePromptStageReferences,
 } from "./prompt-modal-utils";
+import { MultiStagePromptEditor } from "./MultiStagePromptEditor";
 import { usePromptMediaManager } from "./usePromptMediaManager";
 import { usePromptNativeFullscreen } from "./usePromptNativeFullscreen";
 import { resolveLocalImageSrc, resolveLocalVideoSrc } from "../../utils/media-url";
@@ -78,6 +82,9 @@ export function EditPromptModal({
   const [promptType, setPromptType] = useState<"text" | "image" | "video">(
     "text",
   );
+  const [executionMode, setExecutionMode] = useState<"single" | "multi_stage">("single");
+  const [stageContextMode, setStageContextMode] = useState<"isolated" | "inherited">("isolated");
+  const [stages, setStages] = useState(createDefaultPromptStages());
   const [systemPrompt, setSystemPrompt] = useState("");
   const [systemPromptEn, setSystemPromptEn] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
@@ -199,6 +206,9 @@ export function EditPromptModal({
       title,
       description,
       promptType,
+      executionMode,
+      stageContextMode,
+      stages,
       systemPrompt,
       systemPromptEn,
       userPrompt,
@@ -214,6 +224,9 @@ export function EditPromptModal({
       title,
       description,
       promptType,
+      executionMode,
+      stageContextMode,
+      stages,
       systemPrompt,
       systemPromptEn,
       userPrompt,
@@ -347,6 +360,17 @@ export function EditPromptModal({
       ? t("prompt.noEnglishContentToTranslate", "没有英文内容可翻译")
       : "";
 
+  const normalizedStages = useMemo(() => normalizePromptStages(stages), [stages]);
+  const stageValidationErrors = useMemo(
+    () => executionMode === "multi_stage" ? validatePromptStageReferences(normalizedStages) : [],
+    [executionMode, normalizedStages],
+  );
+  const canSubmit =
+    !!title.trim() &&
+    (executionMode === "multi_stage"
+      ? normalizedStages.every((stage) => stage.userPrompt.trim()) && stageValidationErrors.length === 0
+      : !!userPrompt.trim());
+
   // 当 prompt 变化时更新表单
   useEffect(() => {
     if (isOpen) {
@@ -356,6 +380,9 @@ export function EditPromptModal({
       setTitle(form.title);
       setDescription(form.description);
       setPromptType(form.promptType);
+      setExecutionMode(form.executionMode);
+      setStageContextMode(form.stageContextMode);
+      setStages(form.stages);
       setSystemPrompt(form.systemPrompt);
       setSystemPromptEn(form.systemPromptEn);
       setUserPrompt(form.userPrompt);
@@ -364,14 +391,23 @@ export function EditPromptModal({
       setFolderId(form.folderId);
       setSource(form.source);
       setNotes(form.notes);
-      setShowEnglishVersion(!!(form.systemPromptEn || form.userPromptEn));
+      setShowEnglishVersion(!!(form.systemPromptEn || form.userPromptEn || form.stages.some((stage) => stage.userPromptEn)));
       setShowSystemPromptEditor(true);
       setShowUserPromptEditor(true);
     }
   }, [prompt, initialData, isOpen]);
 
   const handleSubmit = async () => {
-    if (!title.trim() || !userPrompt.trim()) return;
+    const normalizedStages = normalizePromptStages(stages);
+    const isMultiStage = executionMode === "multi_stage";
+    const hasMultiStageContent = normalizedStages.every((stage) => stage.userPrompt.trim());
+    const stageErrors = isMultiStage ? validatePromptStageReferences(normalizedStages) : [];
+    if (!title.trim() || (!isMultiStage && !userPrompt.trim()) || (isMultiStage && (!hasMultiStageContent || stageErrors.length > 0))) {
+      if (stageErrors.length > 0) {
+        showToast(stageErrors[0], "error");
+      }
+      return;
+    }
 
     try {
       const promptData = buildPromptPayload(formState);
@@ -819,7 +855,7 @@ export function EditPromptModal({
             variant="primary"
             size="sm"
             onClick={handleSubmit}
-            disabled={!title.trim() || !userPrompt.trim()}
+            disabled={!canSubmit}
           >
             <SaveIcon className="w-4 h-4" />
             {prompt ? t("prompt.save") : t("prompt.create")}
@@ -891,7 +927,12 @@ export function EditPromptModal({
                   {(["text", "image"] as const).map((type) => (
                     <button
                       key={type}
-                      onClick={() => setPromptType(type)}
+                      onClick={() => {
+                        setPromptType(type);
+                        if (type !== "text") {
+                          setExecutionMode("single");
+                        }
+                      }}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                         promptType === type
                           ? "bg-primary text-white shadow-sm"
@@ -920,6 +961,33 @@ export function EditPromptModal({
                     )}
                 </p>
               </div>
+
+              {promptType === "text" && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-foreground">
+                    {t("prompt.executionMode", "提示词类型")}
+                  </label>
+                  <div className="flex gap-2">
+                    {([
+                      ["single", t("prompt.singleStage", "单阶段型")],
+                      ["multi_stage", t("prompt.multiStage", "多阶段型")],
+                    ] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setExecutionMode(mode)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          executionMode === mode
+                            ? "bg-primary text-white shadow-sm"
+                            : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 参考媒体 — 仅在非 image 类型时显示在属性面板内（image 类型时提升到面板外） */}
               {promptType !== "image" && (
@@ -1341,67 +1409,71 @@ export function EditPromptModal({
             </div>
             {!i18n.language.startsWith("en") && (
               <div className="flex items-center gap-2">
-                {/* 当前语言 → 英文 (disabled when content is already English) */}
-                <button
-                  onClick={handleTranslateToEnglish}
-                  disabled={
-                    isTranslating ||
-                    !canTranslate ||
-                    (!systemPrompt && !userPrompt) ||
-                    isMainContentEnglish
-                  }
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    isTranslating ||
-                    !canTranslate ||
-                    (!systemPrompt && !userPrompt) ||
-                    isMainContentEnglish
-                      ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
-                      : "bg-primary/10 text-primary hover:bg-primary/20"
-                  }`}
-                  title={
-                    translateToEnglishDisabledReason ||
-                    t("prompt.translateToEnglish", "一键翻译生成英文版")
-                  }
-                >
-                  {isTranslating ? (
-                    <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <SparklesIcon className="w-3.5 h-3.5" />
-                  )}
-                  → EN
-                </button>
-                {/* 英文 → 当前语言 (enabled when main content is English even if En fields are empty) */}
-                <button
-                  onClick={handleTranslateFromEnglish}
-                  disabled={
-                    isTranslating ||
-                    !canTranslate ||
-                    (!systemPromptEn && !userPromptEn && !isMainContentEnglish)
-                  }
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    isTranslating ||
-                    !canTranslate ||
-                    (!systemPromptEn && !userPromptEn && !isMainContentEnglish)
-                      ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
-                      : "bg-primary/10 text-primary hover:bg-primary/20"
-                  }`}
-                  title={
-                    translateFromEnglishDisabledReason ||
-                    (isMainContentEnglish
-                      ? t(
-                          "prompt.translateDetectedEnglish",
-                          "检测到英文内容，翻译为当前语言",
-                        )
-                      : t("prompt.translateFromEnglish", "从英文翻译到当前语言"))
-                  }
-                >
-                  {isTranslating ? (
-                    <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <SparklesIcon className="w-3.5 h-3.5" />
-                  )}
-                  EN →
-                </button>
+                {executionMode !== "multi_stage" && (
+                  <>
+                    {/* 当前语言 → 英文 (disabled when content is already English) */}
+                    <button
+                      onClick={handleTranslateToEnglish}
+                      disabled={
+                        isTranslating ||
+                        !canTranslate ||
+                        (!systemPrompt && !userPrompt) ||
+                        isMainContentEnglish
+                      }
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        isTranslating ||
+                        !canTranslate ||
+                        (!systemPrompt && !userPrompt) ||
+                        isMainContentEnglish
+                          ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                      }`}
+                      title={
+                        translateToEnglishDisabledReason ||
+                        t("prompt.translateToEnglish", "一键翻译生成英文版")
+                      }
+                    >
+                      {isTranslating ? (
+                        <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <SparklesIcon className="w-3.5 h-3.5" />
+                      )}
+                      → EN
+                    </button>
+                    {/* 英文 → 当前语言 (enabled when main content is English even if En fields are empty) */}
+                    <button
+                      onClick={handleTranslateFromEnglish}
+                      disabled={
+                        isTranslating ||
+                        !canTranslate ||
+                        (!systemPromptEn && !userPromptEn && !isMainContentEnglish)
+                      }
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        isTranslating ||
+                        !canTranslate ||
+                        (!systemPromptEn && !userPromptEn && !isMainContentEnglish)
+                          ? "opacity-50 cursor-not-allowed bg-muted text-muted-foreground"
+                          : "bg-primary/10 text-primary hover:bg-primary/20"
+                      }`}
+                      title={
+                        translateFromEnglishDisabledReason ||
+                        (isMainContentEnglish
+                          ? t(
+                              "prompt.translateDetectedEnglish",
+                              "检测到英文内容，翻译为当前语言",
+                            )
+                          : t("prompt.translateFromEnglish", "从英文翻译到当前语言"))
+                      }
+                    >
+                      {isTranslating ? (
+                        <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <SparklesIcon className="w-3.5 h-3.5" />
+                      )}
+                      EN →
+                    </button>
+                  </>
+                )}
                 <button
                   onClick={handleToggleEnglishVersion}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
@@ -1480,52 +1552,71 @@ export function EditPromptModal({
         })}
 
         {/* User Prompt */}
-        {renderPromptEditorSection({
-          isExpanded: showUserPromptEditor,
-          onToggle: () => setShowUserPromptEditor((prev) => !prev),
-          title: t("prompt.userPromptLabel"),
-          required: true,
-          onFullscreen: () => enterNativeFullscreen("user"),
-          children: (
-            <>
-              <Textarea
-                placeholder={t("prompt.userPromptPlaceholder")}
-                value={userPrompt}
-                onChange={(e) => setUserPrompt(e.target.value)}
-                className="min-h-[280px]"
-                enableMarkdownList
+        {executionMode === "multi_stage" ? (
+          renderPromptEditorSection({
+            isExpanded: showUserPromptEditor,
+            onToggle: () => setShowUserPromptEditor((prev) => !prev),
+            title: t("prompt.multiStagePrompt", "多阶段 Prompt"),
+            required: true,
+            onFullscreen: () => enterNativeFullscreen("user"),
+            children: (
+              <MultiStagePromptEditor
+                stages={stages}
+                onChange={setStages}
+                stageContextMode={stageContextMode}
+                onStageContextModeChange={setStageContextMode}
+                showEnglishVersion={showEnglishVersion}
               />
-              {/* User Prompt English */}
-              {showEnglishVersion && (
-                <div className="pl-4 border-l-2 border-primary/20 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
-                        EN
-                      </span>
-                      {t("prompt.userPromptEn")}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => enterNativeFullscreen("userEn")}
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      title={t("prompt.fullscreen")}
-                    >
-                      <Maximize2Icon className="w-3 h-3" />
-                    </button>
+            ),
+          })
+        ) : (
+          renderPromptEditorSection({
+            isExpanded: showUserPromptEditor,
+            onToggle: () => setShowUserPromptEditor((prev) => !prev),
+            title: t("prompt.userPromptLabel"),
+            required: true,
+            onFullscreen: () => enterNativeFullscreen("user"),
+            children: (
+              <>
+                <Textarea
+                  placeholder={t("prompt.userPromptPlaceholder")}
+                  value={userPrompt}
+                  onChange={(e) => setUserPrompt(e.target.value)}
+                  className="min-h-[280px]"
+                  enableMarkdownList
+                />
+                {/* User Prompt English */}
+                {showEnglishVersion && (
+                  <div className="pl-4 border-l-2 border-primary/20 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        <span className="bg-primary/10 text-primary px-1 rounded text-[10px]">
+                          EN
+                        </span>
+                        {t("prompt.userPromptEn")}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => enterNativeFullscreen("userEn")}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title={t("prompt.fullscreen")}
+                      >
+                        <Maximize2Icon className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <Textarea
+                      placeholder="Enter English User Prompt..."
+                      value={userPromptEn}
+                      onChange={(e) => setUserPromptEn(e.target.value)}
+                      className="min-h-[120px]"
+                      enableMarkdownList
+                    />
                   </div>
-                  <Textarea
-                    placeholder="Enter English User Prompt..."
-                    value={userPromptEn}
-                    onChange={(e) => setUserPromptEn(e.target.value)}
-                    className="min-h-[120px]"
-                    enableMarkdownList
-                  />
-                </div>
-              )}
-            </>
-          ),
-        })}
+                )}
+              </>
+            ),
+          })
+        )}
       </div>
 
       {/* 未保存更改提示弹窗 */}

@@ -5,6 +5,8 @@
 
 // Prompt 类型：文本对话 / 图片生成 / 视频生成
 export type PromptType = "text" | "image" | "video";
+export type PromptExecutionMode = "single" | "multi_stage";
+export type PromptStageContextMode = "isolated" | "inherited";
 export type ResourceVisibility = 'private' | 'shared';
 
 export interface AiTestSessionMessage {
@@ -12,13 +14,25 @@ export interface AiTestSessionMessage {
   role: "system" | "user" | "assistant";
   content: string;
   thinkingContent?: string | null;
+  stageId?: string;
+  stageTitle?: string | null;
   createdAt: string;
+}
+
+export interface PromptStage {
+  id: string;
+  title?: string | null;
+  userPrompt: string;
+  userPromptEn?: string | null;
 }
 
 export interface AiTestPromptSnapshot {
   title: string;
   systemPrompt?: string | null;
   userPrompt: string;
+  executionMode?: PromptExecutionMode;
+  stageContextMode?: PromptStageContextMode;
+  stages?: PromptStage[];
   promptVersion?: number;
 }
 
@@ -31,7 +45,8 @@ export interface AiTestSession {
     apiUrl?: string;
   };
   messages: AiTestSessionMessage[];
-  status: "completed";
+  status: "running" | "completed" | "error";
+  error?: string;
   lastLatencyMs?: number;
   createdAt: string;
   updatedAt: string;
@@ -156,6 +171,9 @@ export interface Prompt {
   title: string;
   description?: string | null;
   promptType?: PromptType; // Prompt 类型，默认 text
+  executionMode?: PromptExecutionMode; // Prompt execution mode, default single
+  stageContextMode?: PromptStageContextMode; // Multi-stage context behavior
+  stages?: PromptStage[]; // Structured multi-stage prompt content
   systemPrompt?: string | null;
   systemPromptEn?: string | null; // English System Prompt / 英文版 System Prompt
   userPrompt: string;
@@ -198,6 +216,9 @@ export interface PromptVersion {
   systemPromptEn?: string | null;
   userPrompt: string;
   userPromptEn?: string | null;
+  executionMode?: PromptExecutionMode;
+  stageContextMode?: PromptStageContextMode;
+  stages?: PromptStage[];
   variables: Variable[];
   note?: string | null;
   aiResponse?: string | null; // AI test response for this version / 该版本的 AI 测试响应
@@ -210,6 +231,9 @@ export interface CreatePromptDTO {
   title: string;
   description?: string;
   promptType?: PromptType;
+  executionMode?: PromptExecutionMode;
+  stageContextMode?: PromptStageContextMode;
+  stages?: PromptStage[];
   systemPrompt?: string;
   systemPromptEn?: string;
   userPrompt: string;
@@ -228,6 +252,9 @@ export interface UpdatePromptDTO {
   title?: string;
   description?: string;
   promptType?: PromptType;
+  executionMode?: PromptExecutionMode;
+  stageContextMode?: PromptStageContextMode;
+  stages?: PromptStage[];
   systemPrompt?: string;
   systemPromptEn?: string;
   userPrompt?: string;

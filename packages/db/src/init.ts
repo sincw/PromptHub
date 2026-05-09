@@ -164,6 +164,29 @@ export function initDatabase(
         .run();
     }
 
+    if (!promptCols.includes("execution_mode")) {
+      console.log("Migrating: Adding execution_mode column to prompts table");
+      db!
+        .prepare(
+          "ALTER TABLE prompts ADD COLUMN execution_mode TEXT DEFAULT 'single'",
+        )
+        .run();
+    }
+
+    if (!promptCols.includes("stage_context_mode")) {
+      console.log("Migrating: Adding stage_context_mode column to prompts table");
+      db!
+        .prepare(
+          "ALTER TABLE prompts ADD COLUMN stage_context_mode TEXT DEFAULT 'isolated'",
+        )
+        .run();
+    }
+
+    if (!promptCols.includes("stages")) {
+      console.log("Migrating: Adding stages column to prompts table");
+      db!.prepare("ALTER TABLE prompts ADD COLUMN stages TEXT").run();
+    }
+
     if (!promptCols.includes("system_prompt_en")) {
       console.log("Migrating: Adding system_prompt_en column to prompts table");
       db!.prepare("ALTER TABLE prompts ADD COLUMN system_prompt_en TEXT").run();
@@ -485,6 +508,21 @@ export function initDatabase(
     if (!promptVersionCols.includes("user_prompt_en")) {
       console.log("Migrating: Adding user_prompt_en column to prompt_versions table");
       db!.prepare("ALTER TABLE prompt_versions ADD COLUMN user_prompt_en TEXT").run();
+    }
+
+    if (!promptVersionCols.includes("execution_mode")) {
+      console.log("Migrating: Adding execution_mode column to prompt_versions table");
+      db!.prepare("ALTER TABLE prompt_versions ADD COLUMN execution_mode TEXT DEFAULT 'single'").run();
+    }
+
+    if (!promptVersionCols.includes("stage_context_mode")) {
+      console.log("Migrating: Adding stage_context_mode column to prompt_versions table");
+      db!.prepare("ALTER TABLE prompt_versions ADD COLUMN stage_context_mode TEXT DEFAULT 'isolated'").run();
+    }
+
+    if (!promptVersionCols.includes("stages")) {
+      console.log("Migrating: Adding stages column to prompt_versions table");
+      db!.prepare("ALTER TABLE prompt_versions ADD COLUMN stages TEXT").run();
     }
 
     if (!promptVersionCols.includes("ai_response")) {

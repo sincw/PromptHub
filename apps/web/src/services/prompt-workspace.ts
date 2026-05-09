@@ -163,6 +163,9 @@ function promptFrontmatter(prompt: Prompt): Record<string, unknown> {
     title: prompt.title,
     description: prompt.description ?? null,
     promptType: prompt.promptType ?? 'text',
+    executionMode: prompt.executionMode ?? 'single',
+    stageContextMode: prompt.stageContextMode ?? 'isolated',
+    stages: prompt.stages ?? [],
     systemPromptEn: prompt.systemPromptEn ?? null,
     userPromptEn: prompt.userPromptEn ?? null,
     variables: prompt.variables ?? [],
@@ -191,6 +194,9 @@ function versionFrontmatter(version: PromptVersion): Record<string, unknown> {
     version: version.version,
     systemPromptEn: version.systemPromptEn ?? null,
     userPromptEn: version.userPromptEn ?? null,
+    executionMode: version.executionMode ?? 'single',
+    stageContextMode: version.stageContextMode ?? 'isolated',
+    stages: version.stages ?? [],
     variables: version.variables ?? [],
     note: version.note ?? null,
     aiResponse: version.aiResponse ?? null,
@@ -400,6 +406,11 @@ function parsePromptFile(filePath: string): Prompt {
       metadata.promptType === 'image' || metadata.promptType === 'video'
         ? metadata.promptType
         : 'text',
+    executionMode: metadata.executionMode === 'multi_stage' ? 'multi_stage' : 'single',
+    stageContextMode: metadata.stageContextMode === 'inherited' ? 'inherited' : 'isolated',
+    stages: Array.isArray(metadata.stages)
+      ? (metadata.stages as Prompt['stages'])
+      : [],
     systemPrompt: parsedBody.systemPrompt,
     systemPromptEn:
       typeof metadata.systemPromptEn === 'string'

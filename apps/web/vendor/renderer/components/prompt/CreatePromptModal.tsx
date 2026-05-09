@@ -24,12 +24,17 @@ import { useToast } from "../ui/Toast";
 import { renderFolderIcon } from "../layout/folderIconHelper";
 import {
   buildPromptPayload,
+  createDefaultPromptStages,
   getExistingPromptTags,
   hasPromptFormChanges,
+  normalizePromptStages,
+  validatePromptStageReferences,
 } from "./prompt-modal-utils";
+import { MultiStagePromptEditor } from "./MultiStagePromptEditor";
 import { usePromptMediaManager } from "./usePromptMediaManager";
 import { usePromptNativeFullscreen } from "./usePromptNativeFullscreen";
 import { resolveLocalImageSrc, resolveLocalVideoSrc } from "../../utils/media-url";
+import type { PromptStage } from "@prompthub/shared/types";
 
 interface CreatePromptModalProps {
   isOpen: boolean;
@@ -38,6 +43,9 @@ interface CreatePromptModalProps {
     title: string;
     description?: string;
     promptType?: "text" | "image";
+    executionMode?: "single" | "multi_stage";
+    stageContextMode?: "isolated" | "inherited";
+    stages?: PromptStage[];
     systemPrompt?: string;
     systemPromptEn?: string;
     userPrompt: string;
@@ -67,6 +75,9 @@ export function CreatePromptModal({
   const [promptType, setPromptType] = useState<"text" | "image">(
     defaultPromptType || "text",
   );
+  const [executionMode, setExecutionMode] = useState<"single" | "multi_stage">("single");
+  const [stageContextMode, setStageContextMode] = useState<"isolated" | "inherited">("isolated");
+  const [stages, setStages] = useState(createDefaultPromptStages());
   const [systemPrompt, setSystemPrompt] = useState("");
   const [systemPromptEn, setSystemPromptEn] = useState("");
   const [userPrompt, setUserPrompt] = useState("");
@@ -168,6 +179,9 @@ export function CreatePromptModal({
       title,
       description,
       promptType,
+      executionMode,
+      stageContextMode,
+      stages,
       systemPrompt,
       systemPromptEn,
       userPrompt,
@@ -183,6 +197,9 @@ export function CreatePromptModal({
       title,
       description,
       promptType,
+      executionMode,
+      stageContextMode,
+      stages,
       systemPrompt,
       systemPromptEn,
       userPrompt,
@@ -215,6 +232,17 @@ export function CreatePromptModal({
     return hasPromptFormChanges(formState);
   }, [formState]);
 
+  const normalizedStages = useMemo(() => normalizePromptStages(stages), [stages]);
+  const stageValidationErrors = useMemo(
+    () => executionMode === "multi_stage" ? validatePromptStageReferences(normalizedStages) : [],
+    [executionMode, normalizedStages],
+  );
+  const canSubmit =
+    !!title.trim() &&
+    (executionMode === "multi_stage"
+      ? normalizedStages.every((stage) => stage.userPrompt.trim()) && stageValidationErrors.length === 0
+      : !!userPrompt.trim());
+
   // 处理关闭请求
   const handleCloseRequest = useCallback(() => {
     if (hasUnsavedChanges()) {
@@ -225,7 +253,16 @@ export function CreatePromptModal({
   }, [hasUnsavedChanges, onClose]);
 
   const handleSubmit = useCallback(() => {
-    if (!title.trim() || !userPrompt.trim()) return;
+    const normalizedStages = normalizePromptStages(stages);
+    const isMultiStage = executionMode === "multi_stage";
+    const hasMultiStageContent = normalizedStages.every((stage) => stage.userPrompt.trim());
+    const stageErrors = isMultiStage ? validatePromptStageReferences(normalizedStages) : [];
+    if (!title.trim() || (!isMultiStage && !userPrompt.trim()) || (isMultiStage && (!hasMultiStageContent || stageErrors.length > 0))) {
+      if (stageErrors.length > 0) {
+        showToast(stageErrors[0], "error");
+      }
+      return;
+    }
 
     onCreate(buildPromptPayload(formState) as Parameters<typeof onCreate>[0]);
 
@@ -238,6 +275,9 @@ export function CreatePromptModal({
     setTitle("");
     setDescription("");
     setPromptType("text");
+    setExecutionMode("single");
+    setStageContextMode("isolated");
+    setStages(createDefaultPromptStages());
     setSystemPrompt("");
     setSystemPromptEn("");
     setUserPrompt("");
@@ -250,7 +290,7 @@ export function CreatePromptModal({
     setNotes("");
     setShowEnglishVersion(false);
     onClose();
-  }, [formState, onCreate, addSourceHistory, onClose, setImages, setVideos]);
+  }, [executionMode, formState, onCreate, addSourceHistory, onClose, setImages, setVideos, showToast, stages, title, userPrompt]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim();
@@ -363,7 +403,7 @@ export function CreatePromptModal({
               variant="primary"
               size="sm"
               onClick={handleSubmit}
-              disabled={!title.trim() || !userPrompt.trim()}
+              disabled={!canSubmit}
             >
               <SaveIcon className="w-4 h-4" />
               {t("prompt.create")}
@@ -435,7 +475,12 @@ export function CreatePromptModal({
                     {(["text", "image"] as const).map((type) => (
                       <button
                         key={type}
-                        onClick={() => setPromptType(type)}
+                        onClick={() => {
+                          setPromptType(type);
+                          if (type !== "text") {
+                            setExecutionMode("single");
+                          }
+                        }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                           promptType === type
                             ? "bg-primary text-white shadow-sm"
@@ -464,6 +509,33 @@ export function CreatePromptModal({
                       )}
                   </p>
                 </div>
+
+                {promptType === "text" && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-foreground">
+                      {t("prompt.executionMode", "提示词类型")}
+                    </label>
+                    <div className="flex gap-2">
+                      {([
+                        ["single", t("prompt.singleStage", "单阶段型")],
+                        ["multi_stage", t("prompt.multiStage", "多阶段型")],
+                      ] as const).map(([mode, label]) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setExecutionMode(mode)}
+                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                            executionMode === mode
+                              ? "bg-primary text-white shadow-sm"
+                              : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 参考媒体 — 仅在非 image 类型时显示在属性面板内（image 类型时提升到面板外） */}
                 {promptType !== "image" && (
@@ -989,6 +1061,21 @@ export function CreatePromptModal({
           </div>
 
           {/* User Prompt */}
+          {executionMode === "multi_stage" ? (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-foreground">
+                {t("prompt.multiStagePrompt", "多阶段 Prompt")}
+                <span className="ml-2 text-xs text-destructive">*</span>
+              </label>
+              <MultiStagePromptEditor
+                stages={stages}
+                onChange={setStages}
+                stageContextMode={stageContextMode}
+                onStageContextModeChange={setStageContextMode}
+                showEnglishVersion={showEnglishVersion}
+              />
+            </div>
+          ) : (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-foreground">
@@ -1069,6 +1156,7 @@ export function CreatePromptModal({
               </div>
             )}
           </div>
+          )}
 
           {/* 变量提示 */}
           <div className="p-4 rounded-xl bg-accent/50 text-sm">

@@ -318,6 +318,62 @@ describe('web prompt routes', () => {
     }
   }, TEST_TIMEOUT);
 
+  it('persists multi-stage prompt fields and rejects invalid stage references', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
+
+    try {
+      const app = await createTestApp(dataDir);
+      const { payload: registerPayload } = await registerUser(app, 'multistageowner', 'debugpass001');
+      const token = registerPayload.data.accessToken;
+
+      const { response: createResponse, payload: createPayload } = await createPrompt(app, token, {
+        title: 'Multi Stage',
+        promptType: 'text',
+        executionMode: 'multi_stage',
+        stageContextMode: 'inherited',
+        userPrompt: '[Stage 1]\nFind date\n\n[Stage 2]\nUse @stage1.output',
+        stages: [
+          { id: 'stage1', title: 'Date', userPrompt: 'Find date' },
+          { id: 'stage2', title: 'Weather', userPrompt: 'Use @stage1.output' },
+        ],
+      });
+
+      expect(createResponse.status).toBe(201);
+      const created = createPayload.data as typeof createPayload.data & {
+        executionMode?: string;
+        stageContextMode?: string;
+        stages?: Array<{ id: string; title?: string; userPrompt: string }>;
+      };
+      expect(created?.executionMode).toBe('multi_stage');
+      expect(created?.stageContextMode).toBe('inherited');
+      expect(created?.stages).toEqual([
+        { id: 'stage1', title: 'Date', userPrompt: 'Find date' },
+        { id: 'stage2', title: 'Weather', userPrompt: 'Use @stage1.output' },
+      ]);
+
+      const invalidResponse = await app.request(
+        new Request('http://local/api/prompts', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            title: 'Invalid Multi Stage',
+            promptType: 'text',
+            executionMode: 'multi_stage',
+            userPrompt: 'Invalid',
+            stages: [
+              { id: 'stage1', userPrompt: 'Self reference @stage1.output' },
+              { id: 'stage2', userPrompt: 'Done' },
+            ],
+          }),
+        }),
+      );
+
+      expect(invalidResponse.status).toBe(422);
+    } finally {
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
+  }, TEST_TIMEOUT);
+
   it('persists prompt optimization sessions and rejects sessions beyond MVP limit', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-prompt-test-'));
 

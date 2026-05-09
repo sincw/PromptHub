@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Modal, Button } from '../ui';
 import { useTranslation } from 'react-i18next';
 import { CopyIcon, CheckIcon, BracesIcon, HistoryIcon, CalendarIcon, ClockIcon, PlayIcon, Loader2Icon } from 'lucide-react';
+import type { PromptStage } from '@prompthub/shared/types';
+import { formatMultiStagePromptTemplate } from './prompt-modal-utils';
 
 type ModalMode = 'copy' | 'aiTest';
 
@@ -23,9 +25,11 @@ interface VariableInputModalProps {
   promptId: string;
   systemPrompt?: string;
   userPrompt: string;
+  stages?: PromptStage[];
   mode?: ModalMode;
   onCopy?: (filledPrompt: string) => void;
   onAiTest?: (filledSystemPrompt: string | undefined, filledUserPrompt: string, outputFormat?: OutputFormatConfig) => void;
+  onAiTestStages?: (filledSystemPrompt: string | undefined, filledStages: PromptStage[], outputFormat?: OutputFormatConfig) => void;
   isAiTesting?: boolean;
 }
 
@@ -80,9 +84,11 @@ export function VariableInputModal({
   promptId,
   systemPrompt,
   userPrompt,
+  stages,
   mode = 'copy',
   onCopy,
   onAiTest,
+  onAiTestStages,
   isAiTesting = false,
 }: VariableInputModalProps) {
   const { t } = useTranslation();
@@ -97,7 +103,8 @@ export function VariableInputModal({
   // Parse all variables (including default values)
   // 解析所有变量（包括默认值）
   const parsedVariables = useMemo(() => {
-    const combined = `${systemPrompt || ''}\n${userPrompt}`;
+    const stageText = stages?.map((stage) => `${stage.userPrompt}\n${stage.userPromptEn || ''}`).join('\n') || '';
+    const combined = `${systemPrompt || ''}\n${userPrompt}\n${stageText}`;
     const matches = combined.matchAll(VARIABLE_REGEX);
     const vars: ParsedVariable[] = [];
     const seen = new Set<string>();
@@ -114,7 +121,7 @@ export function VariableInputModal({
       }
     }
     return vars;
-  }, [systemPrompt, userPrompt]);
+  }, [systemPrompt, userPrompt, stages]);
 
   // Initialize variable values (priority: history > default > empty)
   // 初始化变量值（优先级：历史值 > 默认值 > 空）
@@ -135,9 +142,10 @@ export function VariableInputModal({
   // Replace variables to generate final text
   // 替换变量生成最终文本
   const filledPrompt = useMemo(() => {
-    let result = userPrompt;
+    const promptText = stages ? formatMultiStagePromptTemplate(stages, 'main') : userPrompt;
+    let result = promptText;
     if (systemPrompt) {
-      result = `[System]\n${systemPrompt}\n\n[User]\n${userPrompt}`;
+      result = `[System]\n${systemPrompt}\n\n[User]\n${promptText}`;
     }
 
     Object.entries(variables).forEach(([name, value]) => {
@@ -146,7 +154,7 @@ export function VariableInputModal({
     });
 
     return result;
-  }, [systemPrompt, userPrompt, variables]);
+  }, [systemPrompt, userPrompt, stages, variables]);
 
   // Check if all variables are filled
   // 检查是否所有变量都已填写
@@ -184,7 +192,8 @@ export function VariableInputModal({
 
     // Replace variables (include both systemPrompt and userPrompt)
     // 替换变量（包含 systemPrompt 和 userPrompt）
-    const filledUserPrompt = replaceVariables(userPrompt);
+    const templatePrompt = stages ? formatMultiStagePromptTemplate(stages, 'main') : userPrompt;
+    const filledUserPrompt = replaceVariables(templatePrompt);
     let result = filledUserPrompt;
     if (systemPrompt) {
       const filledSystemPrompt = replaceVariables(systemPrompt);
@@ -206,6 +215,11 @@ export function VariableInputModal({
     // 替换变量
     const filledUserPrompt = replaceVariables(userPrompt);
     const filledSystemPrompt = systemPrompt ? replaceVariables(systemPrompt) : undefined;
+    const filledStages = stages?.map((stage) => ({
+      ...stage,
+      userPrompt: replaceVariables(stage.userPrompt),
+      userPromptEn: stage.userPromptEn ? replaceVariables(stage.userPromptEn) : stage.userPromptEn,
+    }));
 
     // Build output format config
     // 构建输出格式配置
@@ -225,7 +239,11 @@ export function VariableInputModal({
       }
     }
 
-    onAiTest?.(filledSystemPrompt, filledUserPrompt, formatConfig);
+    if (filledStages && onAiTestStages) {
+      onAiTestStages(filledSystemPrompt, filledStages, formatConfig);
+    } else {
+      onAiTest?.(filledSystemPrompt, filledUserPrompt, formatConfig);
+    }
   };
 
   // If no variables, copy original text directly

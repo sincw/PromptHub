@@ -19,11 +19,20 @@ const variableSchema = z.object({
   required: z.boolean(),
 });
 
+const promptStageSchema = z.object({
+  id: z.string().trim().min(1).max(50),
+  title: z.string().max(200).nullable().optional(),
+  userPrompt: z.string().min(1).max(100000),
+  userPromptEn: z.string().max(100000).nullable().optional(),
+});
+
 const aiTestSessionMessageSchema = z.object({
   id: z.string().trim().min(1),
   role: z.enum(['system', 'user', 'assistant']),
   content: z.string().max(100000),
   thinkingContent: z.string().max(100000).nullable().optional(),
+  stageId: z.string().max(50).optional(),
+  stageTitle: z.string().max(200).nullable().optional(),
   createdAt: z.string().trim().min(1),
 });
 
@@ -33,6 +42,9 @@ const aiTestSessionSchema = z.object({
     title: z.string().max(200),
     systemPrompt: z.string().max(100000).nullable().optional(),
     userPrompt: z.string().max(100000),
+    executionMode: z.enum(['single', 'multi_stage']).optional(),
+    stageContextMode: z.enum(['isolated', 'inherited']).optional(),
+    stages: z.array(promptStageSchema).max(10).optional(),
     promptVersion: z.number().int().nonnegative().optional(),
   }),
   model: z.object({
@@ -41,7 +53,8 @@ const aiTestSessionSchema = z.object({
     apiUrl: z.string().max(5000).optional(),
   }),
   messages: z.array(aiTestSessionMessageSchema).max(200),
-  status: z.literal('completed'),
+  status: z.enum(['running', 'completed', 'error']),
+  error: z.string().max(100000).optional(),
   lastLatencyMs: z.number().int().nonnegative().optional(),
   createdAt: z.string().trim().min(1),
   updatedAt: z.string().trim().min(1),
@@ -52,6 +65,9 @@ const createPromptSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(200, 'title is too long'),
   description: z.string().max(5000).optional(),
   promptType: z.enum(['text', 'image', 'video']).optional(),
+  executionMode: z.enum(['single', 'multi_stage']).optional(),
+  stageContextMode: z.enum(['isolated', 'inherited']).optional(),
+  stages: z.array(promptStageSchema).min(2).max(10).optional(),
   systemPrompt: z.string().max(100000).optional(),
   systemPromptEn: z.string().max(100000).optional(),
   userPrompt: z.string().min(1, 'userPrompt is required').max(100000, 'userPrompt is too long'),

@@ -26,9 +26,9 @@ import { CollapsibleThinking } from '../ui/CollapsibleThinking';
 import { useToast } from '../ui/Toast';
 import { chatCompletion, generateImage, buildMessagesFromPrompt, multiModelCompare, AITestResult, StreamCallbacks } from '../../services/ai';
 import { useTranslation } from 'react-i18next';
-import type { AiTestSession, AiTestSessionMessage, Prompt, PromptVersion } from '@prompthub/shared/types';
+import type { AiTestSession, AiTestSessionMessage, Prompt, PromptStage, PromptVersion } from '@prompthub/shared/types';
 import type { CreateShareEntryDTO } from '@prompthub/shared/types';
-import type { ChatMessage, ChatCompletionResult } from '../../services/ai';
+import type { AIConfig, ChatMessage, ChatCompletionResult } from '../../services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -39,6 +39,11 @@ import {
   hasUserDefinedPromptVariables,
   resolvePromptContentByLanguage,
 } from '../prompt/prompt-copy-utils';
+import {
+  formatMultiStagePromptTemplate,
+  isMultiStagePrompt,
+  normalizePromptStages,
+} from '../prompt/prompt-modal-utils';
 import {
   filterVisiblePrompts,
   sortVisiblePrompts,
@@ -117,6 +122,39 @@ function upsertAiTestSession(
   const existingSessions = sessions ?? [];
   const withoutCurrent = existingSessions.filter((session) => session.id !== nextSession.id);
   return [nextSession, ...withoutCurrent].slice(0, MAX_AI_TEST_SESSIONS);
+}
+
+function resolveStagesByLanguage(prompt: Prompt, showEnglish: boolean): PromptStage[] {
+  return normalizePromptStages(prompt.stages).map((stage) => ({
+    ...stage,
+    userPrompt: showEnglish && stage.userPromptEn ? stage.userPromptEn : stage.userPrompt,
+  }));
+}
+
+function replaceStageOutputReferences(
+  text: string,
+  stageOutputs: Record<string, string>,
+): string {
+  return text.replace(/@stage(\d+)\.output/g, (token, index) => {
+    return stageOutputs[`stage${index}`] ?? token;
+  });
+}
+
+function createStagePromptSnapshot(
+  prompt: Prompt | undefined,
+  fallbackTitle: string,
+  systemPrompt: string | undefined,
+  stages: PromptStage[],
+): AiTestSession['promptSnapshot'] {
+  return {
+    title: prompt?.title ?? fallbackTitle,
+    systemPrompt: systemPrompt ?? null,
+    userPrompt: formatMultiStagePromptTemplate(stages, 'main'),
+    executionMode: 'multi_stage',
+    stageContextMode: prompt?.stageContextMode ?? 'isolated',
+    stages,
+    promptVersion: prompt?.currentVersion ?? prompt?.version,
+  };
 }
 
 function escapeRegExp(str: string) {
@@ -403,6 +441,7 @@ export function MainContent() {
     : (selectedPrompt?.aiTestSessions?.[0] ?? null);
   const selectedPromptAiTestHistory = selectedPrompt?.aiTestSessions ?? [];
   const selectedPromptIsText = !selectedPrompt?.promptType || selectedPrompt.promptType === 'text';
+  const selectedPromptIsMultiStage = isMultiStagePrompt(selectedPrompt);
 
   useEffect(() => {
     setDetailSectionsExpanded({
@@ -827,7 +866,9 @@ export function MainContent() {
               }`}
             >
               <div className={`flex items-center justify-between gap-2 text-[10px] uppercase ${messageMetaClass} ${isCollapsed ? '' : 'mb-1'}`}>
-                <span className="min-w-0 truncate">{message.role}</span>
+                <span className="min-w-0 truncate">
+                  {message.stageId ? `${message.stageId}${message.stageTitle ? ` · ${message.stageTitle}` : ''} · ${message.role}` : message.role}
+                </span>
                 <div className="flex shrink-0 items-center gap-0.5">
                   <button
                     type="button"
@@ -1035,22 +1076,177 @@ export function MainContent() {
   const persistAiTestSession = async (
     prompt: Prompt,
     session: AiTestSession,
-    response: string,
+    response?: string,
   ) => {
     await updatePrompt(prompt.id, {
-      lastAiResponse: response,
+      ...(response !== undefined && { lastAiResponse: response }),
       aiTestSessions: upsertAiTestSession(prompt.aiTestSessions, session),
     });
     updatePromptState(prompt.id, {
       activeAiTestSession: session,
-      aiResponse: response,
+      aiResponse: response ?? null,
       aiThinking: session.messages.at(-1)?.thinkingContent ?? null,
-      aiError: null,
+      aiError: session.status === 'error' ? session.error ?? null : null,
       isAiResponseImage: false,
     });
   };
 
-  const runAiTest = async (systemPrompt: string | undefined, userPrompt: string, promptId?: string, outputFormat?: OutputFormatConfig) => {
+  const runMultiStageAiTest = async (
+    prompt: Prompt,
+    systemPrompt: string | undefined,
+    stages: PromptStage[],
+    outputFormat?: OutputFormatConfig,
+  ) => {
+    const targetId = prompt.id;
+    const createdAt = new Date().toISOString();
+    const contextMode = prompt.stageContextMode ?? 'isolated';
+    const messages: AiTestSessionMessage[] = [];
+    const conversationMessages: ChatMessage[] = [];
+    const stageOutputs: Record<string, string> = {};
+    let totalLatencyMs = 0;
+
+    if (systemPrompt) {
+      messages.push({
+        id: createAiTestId('aiturn'),
+        role: 'system',
+        content: systemPrompt,
+        createdAt,
+      });
+    }
+
+    let session: AiTestSession = {
+      id: createAiTestId('aitest'),
+      promptSnapshot: createStagePromptSnapshot(prompt, t('prompt.untitled', 'Untitled Prompt'), systemPrompt, stages),
+      model: {
+        provider: singleChatConfig.provider,
+        model: singleChatConfig.model,
+        apiUrl: singleChatConfig.apiUrl,
+      },
+      messages,
+      status: 'running',
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    updatePromptState(targetId, {
+      activeAiTestSession: session,
+      aiResponse: null,
+      aiThinking: null,
+      aiError: null,
+      isAiResponseImage: false,
+    });
+
+    try {
+      for (const [index, stage] of stages.entries()) {
+        const stageId = `stage${index + 1}`;
+        const resolvedPrompt = replaceStageOutputReferences(stage.userPrompt, stageOutputs);
+        const stageCreatedAt = new Date().toISOString();
+        const userMessage: AiTestSessionMessage = {
+          id: createAiTestId('aiturn'),
+          role: 'user',
+          content: resolvedPrompt,
+          stageId,
+          stageTitle: stage.title ?? null,
+          createdAt: stageCreatedAt,
+        };
+        messages.push(userMessage);
+
+        const requestMessages =
+          contextMode === 'inherited'
+            ? [
+                ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+                ...conversationMessages,
+                { role: 'user' as const, content: resolvedPrompt },
+              ]
+            : buildMessagesFromPrompt(systemPrompt, resolvedPrompt);
+
+        session = {
+          ...session,
+          messages: [...messages],
+          updatedAt: stageCreatedAt,
+        };
+        updatePromptState(targetId, { activeAiTestSession: session });
+
+        try {
+          const { result, latencyMs } = await executeAiChat(requestMessages, outputFormat);
+          totalLatencyMs += latencyMs;
+          const stageCompletedAt = new Date().toISOString();
+          const assistantMessage: AiTestSessionMessage = {
+            id: createAiTestId('aiturn'),
+            role: 'assistant',
+            content: result.content,
+            thinkingContent: result.thinkingContent ?? null,
+            stageId,
+            stageTitle: stage.title ?? null,
+            createdAt: stageCompletedAt,
+          };
+          messages.push(assistantMessage);
+          conversationMessages.push(
+            { role: 'user', content: resolvedPrompt },
+            { role: 'assistant', content: result.content },
+          );
+          stageOutputs[stageId] = result.content;
+          session = {
+            ...session,
+            messages: [...messages],
+            updatedAt: stageCompletedAt,
+            lastLatencyMs: totalLatencyMs,
+          };
+          updatePromptState(targetId, {
+            activeAiTestSession: session,
+            aiResponse: result.content,
+            aiThinking: result.thinkingContent ?? null,
+          });
+        } catch (stageError) {
+          const message = `${t('common.error')}: ${stageError instanceof Error ? stageError.message : t('common.error')}`;
+          const failedAt = new Date().toISOString();
+          messages.push({
+            id: createAiTestId('aiturn'),
+            role: 'assistant',
+            content: message,
+            stageId,
+            stageTitle: stage.title ?? null,
+            createdAt: failedAt,
+          });
+          const failedSession: AiTestSession = {
+            ...session,
+            messages: [...messages],
+            status: 'error',
+            error: message,
+            lastLatencyMs: totalLatencyMs,
+            updatedAt: failedAt,
+          };
+          await persistAiTestSession(prompt, failedSession);
+          throw stageError;
+        }
+      }
+
+      const completedAt = new Date().toISOString();
+      const finalOutput = stageOutputs[`stage${stages.length}`] ?? '';
+      const completedSession: AiTestSession = {
+        ...session,
+        messages: [...messages],
+        status: 'completed',
+        lastLatencyMs: totalLatencyMs,
+        updatedAt: completedAt,
+      };
+      await persistAiTestSession(prompt, completedSession, finalOutput);
+    } catch (error) {
+      const message = `${t('common.error')}: ${error instanceof Error ? error.message : t('common.error')}`;
+      setIsStreaming(false);
+      setAiResponse(message);
+      setAiError(message);
+      showToast(t('toast.aiFailed'), 'error');
+    }
+  };
+
+  const runAiTest = async (
+    systemPrompt: string | undefined,
+    userPrompt: string,
+    promptId?: string,
+    outputFormat?: OutputFormatConfig,
+    stageOverride?: PromptStage[],
+  ) => {
     // Do not use modal in card view; render results inline
     // 卡片视图不使用弹窗，直接在页面内显示结果
     setIsTestingAI(true);
@@ -1154,6 +1350,12 @@ export function MainContent() {
              throw new Error(t('prompt.mismatchText'));
         }
         throw new Error(t('toast.configAI'));
+      }
+
+      if (currentPrompt && isMultiStagePrompt(currentPrompt)) {
+        const stages = stageOverride ?? resolveStagesByLanguage(currentPrompt, showEnglish);
+        await runMultiStageAiTest(currentPrompt, systemPrompt, stages, outputFormat);
+        return;
       }
 
       const messages = buildMessagesFromPrompt(systemPrompt, userPrompt);
@@ -1315,7 +1517,11 @@ export function MainContent() {
 
   // Multi-model comparison (supports variable substitution)
   // 多模型对比函数（支持变量替换后的 prompt）
-  const runModelCompare = async (systemPrompt: string | undefined, userPrompt: string) => {
+  const runModelCompare = async (
+    systemPrompt: string | undefined,
+    userPrompt: string,
+    stageOverride?: PromptStage[],
+  ) => {
     setIsCompareVariableModalOpen(false);
     const selectedConfigs = compareModels
       .filter((m) => selectedModelIds.includes(m.id))
@@ -1330,6 +1536,10 @@ export function MainContent() {
       }));
 
     const messages = buildMessagesFromPrompt(systemPrompt, userPrompt);
+    const stages = selectedPrompt && isMultiStagePrompt(selectedPrompt)
+      ? (stageOverride ?? resolveStagesByLanguage(selectedPrompt, showEnglish))
+      : undefined;
+    const contextMode = selectedPrompt?.stageContextMode ?? 'isolated';
 
     setIsComparingModels(true);
     setCompareError(null);
@@ -1343,8 +1553,6 @@ export function MainContent() {
         ])
       );
 
-      // Streaming support: render placeholder results early so users can see streaming progress
-      // 支持流式：提前渲染占位结果，让用户能看到"正在流式输出"的差异
       setCompareResults(
         selectedConfigs.map((c) => ({
           id: c.id,
@@ -1357,6 +1565,74 @@ export function MainContent() {
         }))
       );
 
+      if (stages && stages.length > 0) {
+        const stagedResults = await Promise.all(
+          (selectedConfigs as AIConfig[]).map(async (config) => {
+            const startedAt = Date.now();
+            const stageOutputs: Record<string, string> = {};
+            const conversationMessages: ChatMessage[] = [];
+            const stageSections: string[] = [];
+            let lastThinkingContent: string | undefined;
+
+            try {
+              for (const [index, stage] of stages.entries()) {
+                const stageId = `stage${index + 1}`;
+                const resolvedPrompt = replaceStageOutputReferences(stage.userPrompt, stageOutputs);
+                const requestMessages =
+                  contextMode === 'inherited'
+                    ? [
+                        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+                        ...conversationMessages,
+                        { role: 'user' as const, content: resolvedPrompt },
+                      ]
+                    : buildMessagesFromPrompt(systemPrompt, resolvedPrompt);
+
+                const result = await chatCompletion(config, requestMessages, {
+                  stream: config.chatParams?.stream ?? false,
+                  enableThinking: config.chatParams?.enableThinking ?? false,
+                });
+
+                stageOutputs[stageId] = result.content;
+                lastThinkingContent = result.thinkingContent;
+                conversationMessages.push(
+                  { role: 'user', content: resolvedPrompt },
+                  { role: 'assistant', content: result.content },
+                );
+
+                const stageTitle = stage.title ? `${stageId} - ${stage.title}` : stageId;
+                stageSections.push(
+                  `## ${stageTitle}\n\n### Input\n${resolvedPrompt}\n\n### Output\n${result.content}`,
+                );
+              }
+
+              const finalOutput = stageOutputs[`stage${stages.length}`] ?? '';
+              return {
+                id: config.id,
+                success: true,
+                response: `## Final Output\n\n${finalOutput}\n\n---\n\n${stageSections.join('\n\n')}`,
+                thinkingContent: lastThinkingContent,
+                latency: Date.now() - startedAt,
+                model: config.model,
+                provider: config.provider,
+              } as AITestResult;
+            } catch (error) {
+              return {
+                id: config.id,
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                latency: Date.now() - startedAt,
+                model: config.model,
+                provider: config.provider,
+              } as AITestResult;
+            }
+          }),
+        );
+        setCompareResults(stagedResults);
+        return;
+      }
+
+      // Streaming support: render placeholder results early so users can see streaming progress
+      // 支持流式：提前渲染占位结果，让用户能看到"正在流式输出"的差异
       // Create stream callbacks map for streaming-enabled models
       // 为启用流式的模型创建流式回调 Map
       const streamCallbacksMap = new Map<string, StreamCallbacks>();
@@ -1484,13 +1760,17 @@ export function MainContent() {
       setShowEnglish((prev) => (prev ? false : prev));
       return;
     }
-    const hasEnglish = !!(selectedPrompt.systemPromptEn || selectedPrompt.userPromptEn);
+    const hasEnglish = !!(
+      selectedPrompt.systemPromptEn ||
+      selectedPrompt.userPromptEn ||
+      selectedPrompt.stages?.some((stage) => stage.userPromptEn)
+    );
     if (!hasEnglish) {
       setShowEnglish((prev) => (prev ? false : prev));
       return;
     }
     setShowEnglish((prev) => (prev === preferEnglish ? prev : preferEnglish));
-  }, [selectedPrompt?.id, selectedPrompt?.systemPromptEn, selectedPrompt?.userPromptEn, preferEnglish]);
+  }, [selectedPrompt?.id, selectedPrompt?.systemPromptEn, selectedPrompt?.userPromptEn, selectedPrompt?.stages, preferEnglish]);
 
   // Editing prompt for table view
   // 用于表格视图的编辑 prompt
@@ -1513,6 +1793,7 @@ export function MainContent() {
       hasUserDefinedPromptVariables(
         resolvedPrompt.systemPrompt,
         resolvedPrompt.userPrompt,
+        resolvedPrompt.stages,
       )
     ) {
       // 有变量，打开弹窗让用户填写
@@ -1543,11 +1824,27 @@ export function MainContent() {
     setDeleteConfirm({ isOpen: false, prompt: null });
   }, [deleteConfirm.prompt, deletePrompt, showToast, t]);
 
-  // Handle AI test (table view - modal)
-  // 处理 AI 测试（表格视图用 - 弹窗模式）
+  // Handle AI test (table/list/gallery view)
+  // 处理 AI 测试（表格/列表/画廊视图）
   const handleAiTestFromTable = (prompt: Prompt) => {
     if (!canRunSingleAiTest) {
       showToast(t('toast.configAI'), 'error');
+      return;
+    }
+    if (isMultiStagePrompt(prompt)) {
+      selectPrompt(prompt.id);
+      const resolvedPrompt = resolvePromptContentByLanguage(prompt, showEnglish);
+      if (hasUserDefinedPromptVariables(resolvedPrompt.systemPrompt, resolvedPrompt.userPrompt, resolvedPrompt.stages)) {
+        setIsAiTestVariableModalOpen(true);
+        return;
+      }
+      runAiTest(
+        resolvedPrompt.systemPrompt,
+        resolvedPrompt.userPrompt,
+        prompt.id,
+        undefined,
+        resolvedPrompt.stages,
+      );
       return;
     }
     setAiTestPrompt(prompt);
@@ -1989,7 +2286,7 @@ export function MainContent() {
                     ))}
                   </div>
 
-                  {selectedPromptIsText && (
+                  {selectedPromptIsText && !selectedPromptIsMultiStage && (
                     <div className="mb-4 inline-flex rounded-lg border border-border bg-card p-1">
                       <button
                         type="button"
@@ -2070,7 +2367,7 @@ export function MainContent() {
                   )}
 
                   {/* System Prompt */}
-                  {promptDetailMode === 'optimize' && selectedPromptIsText ? (
+                  {promptDetailMode === 'optimize' && selectedPromptIsText && !selectedPromptIsMultiStage ? (
                     <PromptOptimizationWorkspace
                       prompt={selectedPrompt}
                       allPrompts={prompts}
@@ -2090,8 +2387,12 @@ export function MainContent() {
                   {/* User Prompt */}
                   {renderPromptDetailSection({
                     id: 'user',
-                    title: t('prompt.userPromptLabel', 'User Prompt'),
-                    content: showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt,
+                    title: selectedPromptIsMultiStage
+                      ? t('prompt.multiStagePrompt', '多阶段 Prompt')
+                      : t('prompt.userPromptLabel', 'User Prompt'),
+                    content: selectedPromptIsMultiStage
+                      ? formatMultiStagePromptTemplate(resolveStagesByLanguage(selectedPrompt, showEnglish), 'main')
+                      : (showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt),
                     showEnglishBadge: showEnglish,
                     headerActions: (
                       <button
@@ -2147,6 +2448,7 @@ export function MainContent() {
                         {renderAiSessionMessages(activeAiTestSession, { includeLiveDraft: true })}
                       </div>
 
+                      {activeAiTestSession.status === 'completed' && (
                       <div className="px-4 py-3 border-t border-border bg-muted/10">
                         <div className="flex items-end gap-2">
                           <textarea
@@ -2170,6 +2472,7 @@ export function MainContent() {
                           </button>
                         </div>
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -2290,19 +2593,20 @@ export function MainContent() {
                     onClick={async () => {
                       // Select content based on language mode
                       // 根据语言模式选择内容
-                      const currentUserPrompt = showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt;
-                      const currentSystemPrompt = showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt;
+                      const resolvedPrompt = resolvePromptContentByLanguage(selectedPrompt, showEnglish);
 
                       // Check variables (create a new regex per string to avoid global flag state)
                       // 检查是否有变量（为每个字符串创建新的正则实例，避免全局标志导致的状态问题）
-                      const hasVariables =
-                        /\{\{([^}]+)\}\}/.test(currentUserPrompt) ||
-                        (currentSystemPrompt && /\{\{([^}]+)\}\}/.test(currentSystemPrompt));
+                      const hasVariables = hasUserDefinedPromptVariables(
+                        resolvedPrompt.systemPrompt,
+                        resolvedPrompt.userPrompt,
+                        resolvedPrompt.stages,
+                      );
 
                       if (hasVariables) {
                         setIsVariableModalOpen(true);
                       } else {
-                        await navigator.clipboard.writeText(currentUserPrompt);
+                        await navigator.clipboard.writeText(buildPromptCopyText(resolvedPrompt));
                         await incrementUsageCount(selectedPrompt.id);
                         setCopied(true);
                         showToast(t('toast.copied'), 'success', showCopyNotification);
@@ -2322,19 +2626,26 @@ export function MainContent() {
                       }
                       // Select content based on language mode
                       // 根据语言模式选择内容
-                      const currentUserPrompt = showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt;
-                      const currentSystemPrompt = showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt;
+                      const resolvedPrompt = resolvePromptContentByLanguage(selectedPrompt, showEnglish);
 
                       // Check variables (create a new regex per string to avoid global flag state)
                       // 检查是否有变量（为每个字符串创建新的正则实例，避免全局标志导致的状态问题）
-                      const hasVariables =
-                        /\{\{([^}]+)\}\}/.test(currentUserPrompt) ||
-                        (currentSystemPrompt && /\{\{([^}]+)\}\}/.test(currentSystemPrompt));
+                      const hasVariables = hasUserDefinedPromptVariables(
+                        resolvedPrompt.systemPrompt,
+                        resolvedPrompt.userPrompt,
+                        resolvedPrompt.stages,
+                      );
 
                       if (hasVariables) {
                         setIsAiTestVariableModalOpen(true);
                       } else {
-                        runAiTest(currentSystemPrompt, currentUserPrompt);
+                        runAiTest(
+                          resolvedPrompt.systemPrompt,
+                          resolvedPrompt.userPrompt,
+                          undefined,
+                          undefined,
+                          resolvedPrompt.stages,
+                        );
                       }
                     }}
                     disabled={isTestingAI}
@@ -2479,16 +2790,21 @@ export function MainContent() {
                           return;
                         }
 
-                        const currentUserPrompt = showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt;
-                        const currentSystemPrompt = showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt;
-                        const hasVariables =
-                          /\{\{([^}]+)\}\}/.test(currentUserPrompt) ||
-                          (currentSystemPrompt && /\{\{([^}]+)\}\}/.test(currentSystemPrompt));
+                        const resolvedPrompt = resolvePromptContentByLanguage(selectedPrompt, showEnglish);
+                        const hasVariables = hasUserDefinedPromptVariables(
+                          resolvedPrompt.systemPrompt,
+                          resolvedPrompt.userPrompt,
+                          resolvedPrompt.stages,
+                        );
 
                         if (hasVariables) {
                           setIsCompareVariableModalOpen(true);
                         } else {
-                          runModelCompare(currentSystemPrompt, currentUserPrompt);
+                          runModelCompare(
+                            resolvedPrompt.systemPrompt,
+                            resolvedPrompt.userPrompt,
+                            resolvedPrompt.stages,
+                          );
                         }
                       }}
                       disabled={isComparingModels || selectedModelIds.length < 2}
@@ -2659,8 +2975,9 @@ export function MainContent() {
           isOpen={isVariableModalOpen}
           onClose={() => setIsVariableModalOpen(false)}
           promptId={selectedPrompt.id}
-          systemPrompt={showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt}
-          userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
+          systemPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).systemPrompt}
+          userPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).userPrompt}
+          stages={resolvePromptContentByLanguage(selectedPrompt, showEnglish).stages}
           mode="copy"
           onCopy={async (text) => {
             await navigator.clipboard.writeText(text);
@@ -2680,11 +2997,15 @@ export function MainContent() {
           isOpen={isAiTestVariableModalOpen}
           onClose={() => setIsAiTestVariableModalOpen(false)}
           promptId={selectedPrompt.id}
-          systemPrompt={showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt}
-          userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
+          systemPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).systemPrompt}
+          userPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).userPrompt}
+          stages={resolvePromptContentByLanguage(selectedPrompt, showEnglish).stages}
           mode="aiTest"
           onAiTest={(filledSystemPrompt, filledUserPrompt, outputFormat) => {
             runAiTest(filledSystemPrompt, filledUserPrompt, undefined, outputFormat);
+          }}
+          onAiTestStages={(filledSystemPrompt, filledStages, outputFormat) => {
+            runAiTest(filledSystemPrompt, formatMultiStagePromptTemplate(filledStages, 'main'), undefined, outputFormat, filledStages);
           }}
           isAiTesting={isTestingAI}
         />
@@ -2697,11 +3018,15 @@ export function MainContent() {
           isOpen={isCompareVariableModalOpen}
           onClose={() => setIsCompareVariableModalOpen(false)}
           promptId={selectedPrompt.id}
-          systemPrompt={showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt}
-          userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
+          systemPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).systemPrompt}
+          userPrompt={resolvePromptContentByLanguage(selectedPrompt, showEnglish).userPrompt}
+          stages={resolvePromptContentByLanguage(selectedPrompt, showEnglish).stages}
           mode="aiTest"
           onAiTest={(filledSystemPrompt, filledUserPrompt) => {
             runModelCompare(filledSystemPrompt, filledUserPrompt);
+          }}
+          onAiTestStages={(filledSystemPrompt, filledStages) => {
+            runModelCompare(filledSystemPrompt, formatMultiStagePromptTemplate(filledStages, 'main'), filledStages);
           }}
           isAiTesting={isComparingModels}
         />
@@ -2719,6 +3044,7 @@ export function MainContent() {
           promptId={copyPrompt.id}
           systemPrompt={resolvePromptContentByLanguage(copyPrompt, showEnglish).systemPrompt}
           userPrompt={resolvePromptContentByLanguage(copyPrompt, showEnglish).userPrompt}
+          stages={resolvePromptContentByLanguage(copyPrompt, showEnglish).stages}
           mode="copy"
           onCopy={async (text) => {
             await navigator.clipboard.writeText(text);
