@@ -19,6 +19,7 @@ import { usePromptStore } from "../../stores/prompt.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useFolderStore } from "../../stores/folder.store";
 import { useSkillStore } from "../../stores/skill.store";
+import { useShareStore } from "../../stores/share.store";
 import {
   useState,
   useEffect,
@@ -55,6 +56,11 @@ const CreateSkillModal = lazy(() =>
     default: module.CreateSkillModal,
   })),
 );
+const CreateShareModal = lazy(() =>
+  import("../share/CreateShareModal").then((module) => ({
+    default: module.CreateShareModal,
+  })),
+);
 
 interface TopBarProps {
   onOpenSettings: () => void;
@@ -74,6 +80,11 @@ export function TopBar({
   const prompts = usePromptStore((state) => state.prompts);
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const createPrompt = usePromptStore((state) => state.createPrompt);
+  const shareSearchQuery = useShareStore((state) => state.searchQuery);
+  const setShareSearchQuery = useShareStore((state) => state.setSearchQuery);
+  const shares = useShareStore((state) => state.shares);
+  const selectShare = useShareStore((state) => state.selectShare);
+  const createShare = useShareStore((state) => state.createShare);
 
   // Skill store
   const skillSearchQuery = useSkillStore((state) => state.searchQuery);
@@ -97,9 +108,12 @@ export function TopBar({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuickAddModalOpen, setIsQuickAddModalOpen] = useState(false);
   const [isCreateSkillModalOpen, setIsCreateSkillModalOpen] = useState(false);
+  const [isCreateShareModalOpen, setIsCreateShareModalOpen] = useState(false);
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
+  const defaultFolderId =
+    selectedFolderId && selectedFolderId !== "favorites" ? selectedFolderId : undefined;
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [webContext, setWebContext] = useState<PromptHubWebContext | undefined>(
     () => getWebContext(),
@@ -109,10 +123,18 @@ export function TopBar({
 
   // Unified search query based on mode
   const searchQuery =
-    uiViewMode === "skill" ? skillSearchQuery : promptSearchQuery;
+    uiViewMode === "skill"
+      ? skillSearchQuery
+      : uiViewMode === "share"
+        ? shareSearchQuery
+        : promptSearchQuery;
   const deferredSkillSearchQuery = useDeferredValue(skillSearchQuery);
   const setSearchQuery =
-    uiViewMode === "skill" ? setSkillSearchQuery : setPromptSearchQuery;
+    uiViewMode === "skill"
+      ? setSkillSearchQuery
+      : uiViewMode === "share"
+        ? setShareSearchQuery
+        : setPromptSearchQuery;
 
   // Check if AI is configured
   const hasAiConfig =
@@ -218,9 +240,24 @@ export function TopBar({
     uiViewMode,
   ]);
 
+  const shareSearchResults = useMemo(() => {
+    if (uiViewMode !== "share" || !shareSearchQuery.trim()) return [];
+    const query = shareSearchQuery.toLowerCase();
+    return shares.filter((share) =>
+      [share.title, share.description ?? "", share.content, ...(share.tags ?? [])]
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [shareSearchQuery, shares, uiViewMode]);
+
   // 根据模式选择搜索结果
   const searchResults =
-    uiViewMode === "skill" ? skillSearchResults : promptSearchResults;
+    uiViewMode === "skill"
+      ? skillSearchResults
+      : uiViewMode === "share"
+        ? shareSearchResults
+        : promptSearchResults;
   const searchResultCount = searchResults.length;
 
   // 导航到上一个/下一个结果
@@ -242,6 +279,11 @@ export function TopBar({
         if (skillResults[newIndex]) {
           selectSkill(skillResults[newIndex].id);
         }
+      } else if (uiViewMode === "share") {
+        const shareResults = shareSearchResults;
+        if (shareResults[newIndex]) {
+          selectShare(shareResults[newIndex].id);
+        }
       } else {
         const promptResults = promptSearchResults;
         if (promptResults[newIndex]) {
@@ -254,8 +296,10 @@ export function TopBar({
       currentResultIndex,
       selectPrompt,
       selectSkill,
+      selectShare,
       uiViewMode,
       skillSearchResults,
+      shareSearchResults,
       promptSearchResults,
     ],
   );
@@ -266,6 +310,10 @@ export function TopBar({
     if (uiViewMode === "skill") {
       if (skillSearchResults.length > 0) {
         selectSkill(skillSearchResults[0].id);
+      }
+    } else if (uiViewMode === "share") {
+      if (shareSearchResults.length > 0) {
+        selectShare(shareSearchResults[0].id);
       }
     } else {
       if (promptSearchResults.length > 0) {
@@ -287,6 +335,10 @@ export function TopBar({
       if (uiViewMode === "skill") {
         if (skillSearchResults[currentResultIndex]) {
           selectSkill(skillSearchResults[currentResultIndex].id);
+        }
+      } else if (uiViewMode === "share") {
+        if (shareSearchResults[currentResultIndex]) {
+          selectShare(shareSearchResults[currentResultIndex].id);
         }
       } else {
         if (promptSearchResults[currentResultIndex]) {
@@ -394,6 +446,17 @@ export function TopBar({
     }
   };
 
+  const handleCreateShare = async (data: Parameters<typeof createShare>[0]) => {
+    try {
+      const share = await createShare(data);
+      setIsCreateShareModalOpen(false);
+      return share;
+    } catch (error) {
+      console.error("Failed to create share:", error);
+      return null;
+    }
+  };
+
   const toggleTheme = () => {
     setDarkMode(!isDarkMode);
   };
@@ -432,6 +495,8 @@ export function TopBar({
               placeholder={
                 uiViewMode === "skill"
                   ? t("header.searchSkill", "Search Skill...")
+                  : uiViewMode === "share"
+                    ? t("share.search", "搜索分享...")
                   : t("header.search")
               }
               value={searchQuery}
@@ -519,6 +584,8 @@ export function TopBar({
                 if (uiViewMode === "skill") {
                   // Open Skill creation modal
                   setIsCreateSkillModalOpen(true);
+                } else if (uiViewMode === "share") {
+                  setIsCreateShareModalOpen(true);
                 } else {
                   // Create Prompt
                   const mode = useSettingsStore.getState().creationMode;
@@ -528,7 +595,7 @@ export function TopBar({
               }}
               className="flex items-center gap-1.5 h-full pl-3 pr-2 text-sm font-medium border-r border-primary-foreground/20 active:scale-95 transition-transform"
             >
-              {uiViewMode === "skill" ? (
+              {uiViewMode === "skill" || uiViewMode === "share" ? (
                 <PlusIcon className="w-4 h-4" />
               ) : creationMode === "manual" ? (
                 <PlusIcon className="w-4 h-4" />
@@ -538,6 +605,8 @@ export function TopBar({
               <span>
                 {uiViewMode === "skill"
                   ? t("header.new")
+                  : uiViewMode === "share"
+                    ? t("header.new")
                   : creationMode === "manual"
                     ? t("header.new")
                     : t("quickAdd.title")}
@@ -656,6 +725,13 @@ export function TopBar({
         <CreateSkillModal
           isOpen={isCreateSkillModalOpen}
           onClose={() => setIsCreateSkillModalOpen(false)}
+        />
+
+        <CreateShareModal
+          isOpen={isCreateShareModalOpen}
+          onClose={() => setIsCreateShareModalOpen(false)}
+          onSubmit={handleCreateShare}
+          defaultFolderId={defaultFolderId}
         />
       </Suspense>
     </>

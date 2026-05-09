@@ -7,15 +7,20 @@ import type {
   Folder,
   Prompt,
   PromptVersion,
+  PublicShareResponse,
   SearchQuery,
   Settings,
+  ShareEntry,
+  ShareSearchQuery,
   Skill,
   SkillLocalFileEntry,
   SkillSafetyReport,
   SkillVersion,
   UpdateFolderDTO,
   UpdatePromptDTO,
+  UpdateShareEntryDTO,
   UpdateSkillParams,
+  CreateShareEntryDTO,
 } from '@prompthub/shared/types';
 import { fetchWithAuthRetry } from '../api/auth-session';
 import i18n from '../i18n';
@@ -277,6 +282,32 @@ export function installRuntimeBridge(): void {
       reorder: (ids: string[]) =>
         apiOk('/api/folders/reorder', 'PUT', { ids }),
       insertDirect: async (_folder: Folder) => {},
+    },
+    share: {
+      create: (data: CreateShareEntryDTO) =>
+        apiJsonBody<ShareEntry>('/api/shares', 'POST', data),
+      get: (id: string) => apiJson<ShareEntry>(`/api/shares/${id}`),
+      getAll: () => apiJson<ShareEntry[]>('/api/shares?scope=all'),
+      update: (id: string, data: UpdateShareEntryDTO) =>
+        apiJsonBody<ShareEntry>(`/api/shares/${id}`, 'PUT', data),
+      delete: (id: string) => apiOk(`/api/shares/${id}`, 'DELETE'),
+      search: (query: ShareSearchQuery) => {
+        const params = new URLSearchParams();
+        params.set('scope', query.scope ?? 'all');
+        if (query.keyword) params.set('keyword', query.keyword);
+        if (query.tags?.length) params.set('tags', query.tags.join(','));
+        if (query.folderId) params.set('folderId', query.folderId);
+        if (typeof query.isFavorite === 'boolean') {
+          params.set('isFavorite', String(query.isFavorite));
+        }
+        if (query.sortBy) params.set('sortBy', query.sortBy);
+        if (query.sortOrder) params.set('sortOrder', query.sortOrder);
+        if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+        if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+        return apiJson<ShareEntry[]>(`/api/shares?${params.toString()}`);
+      },
+      getPublic: (shareId: string) =>
+        apiJson<PublicShareResponse>(`/api/public/shares/${encodeURIComponent(shareId)}`),
     },
     skill: {
       getAll: () => apiJson<Skill[]>('/api/skills?scope=all'),

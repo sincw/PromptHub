@@ -505,6 +505,58 @@ export function initDatabase(
       ).run();
       markMigration("fix_prompt_current_version_v1");
     }
+
+    const shareEntriesExists = db!
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='share_entries'",
+      )
+      .get();
+
+    if (!shareEntriesExists) {
+      console.log("Migrating: Creating share_entries table");
+      db!.exec(`
+        CREATE TABLE IF NOT EXISTS share_entries (
+          id TEXT PRIMARY KEY,
+          owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+          visibility TEXT NOT NULL DEFAULT 'private' CHECK(visibility IN ('private', 'shared')),
+          share_id TEXT NOT NULL UNIQUE,
+          title TEXT NOT NULL,
+          description TEXT,
+          content TEXT NOT NULL,
+          tags TEXT,
+          folder_id TEXT,
+          source TEXT,
+          notes TEXT,
+          is_favorite INTEGER DEFAULT 0,
+          is_sharing_enabled INTEGER DEFAULT 0,
+          source_snapshot TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+        )
+      `);
+    } else {
+      const shareCols = (
+        db!.pragma("table_info(share_entries)") as PragmaColumnInfo[]
+      ).map((c) => c.name);
+
+      const shareNewColumns: { name: string; type: string }[] = [
+        { name: "owner_user_id", type: "TEXT REFERENCES users(id) ON DELETE SET NULL" },
+        { name: "visibility", type: "TEXT NOT NULL DEFAULT 'private'" },
+        { name: "source", type: "TEXT" },
+        { name: "notes", type: "TEXT" },
+        { name: "is_favorite", type: "INTEGER DEFAULT 0" },
+        { name: "is_sharing_enabled", type: "INTEGER DEFAULT 0" },
+        { name: "source_snapshot", type: "TEXT" },
+      ];
+
+      for (const col of shareNewColumns) {
+        if (!shareCols.includes(col.name)) {
+          console.log(`Migrating: Adding ${col.name} column to share_entries table`);
+          db!.prepare(`ALTER TABLE share_entries ADD COLUMN ${col.name} ${col.type}`).run();
+        }
+      }
+    }
   });
 
   try {

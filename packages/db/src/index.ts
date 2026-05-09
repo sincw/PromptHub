@@ -19,3 +19,4 @@ export type { InitDatabaseHooks } from "./init";
 export { PromptDB } from "./prompt";
 export { FolderDB } from "./folder";
 export { SkillDB } from "./skill";
+export { ShareDB } from "./share";

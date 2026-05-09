@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Folder, Prompt, PromptVersion, Settings, Skill, SkillVersion, SyncSettings } from '@prompthub/shared';
+import type { Folder, Prompt, PromptVersion, Settings, ShareEntry, Skill, SkillVersion, SyncSettings } from '@prompthub/shared';
 import { getAuthUser } from '../middleware/auth.js';
 import { BackupService } from '../services/backup.service.js';
 import { SettingsService } from '../services/settings.service.js';
@@ -28,6 +28,7 @@ interface NormalizedSyncPayload {
   folders: Folder[];
   skills: Skill[];
   skillVersions: SkillVersion[];
+  shares: ShareEntry[];
   settings: Settings;
   settingsUpdatedAt?: string;
 }
@@ -151,6 +152,35 @@ const folderSchema = z.object({
   updatedAt: z.union([z.string(), z.number().int().nonnegative()]),
 });
 
+const shareSourceSnapshotSchema = z.object({
+  promptId: z.string().nullable().optional(),
+  promptTitle: z.string().nullable().optional(),
+  systemPrompt: z.string().nullable().optional(),
+  userPrompt: z.string().nullable().optional(),
+  messageRole: z.enum(['system', 'user', 'assistant']).nullable().optional(),
+  messageContent: z.string().nullable().optional(),
+  messageCreatedAt: z.string().nullable().optional(),
+});
+
+const shareSchema = z.object({
+  id: z.string(),
+  ownerUserId: z.string().nullable().optional(),
+  visibility: z.enum(['private', 'shared']).optional(),
+  shareId: z.string(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  content: z.string(),
+  tags: z.array(z.string()),
+  folderId: z.string().nullable().optional(),
+  source: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  isFavorite: z.boolean(),
+  isSharingEnabled: z.boolean(),
+  sourceSnapshot: shareSourceSnapshotSchema.nullable().optional(),
+  createdAt: z.union([z.string(), z.number().int().nonnegative()]),
+  updatedAt: z.union([z.string(), z.number().int().nonnegative()]),
+});
+
 const skillSchema = z.object({
   id: z.string(),
   ownerUserId: z.string().nullable().optional(),
@@ -211,6 +241,7 @@ const importPayloadSchema = z.object({
     folders: z.array(folderSchema),
     skills: z.array(skillSchema),
     skillVersions: z.array(skillVersionSchema).default([]),
+    shares: z.array(shareSchema).default([]),
     settings: z.object({
       theme: z.enum(['light', 'dark', 'system']),
       language: z.enum(['en', 'zh', 'zh-TW', 'ja', 'fr', 'de', 'es']),
@@ -262,7 +293,7 @@ function assertWebDavConfig(settings: SyncSettings): asserts settings is SyncSet
   }
 }
 
-function buildSyncStatus(userId: string, payload: { exportedAt: string; prompts: unknown[]; folders: unknown[]; skills: unknown[] }): {
+function buildSyncStatus(userId: string, payload: { exportedAt: string; prompts: unknown[]; folders: unknown[]; skills: unknown[]; shares?: unknown[] }): {
   enabled: boolean;
   provider: 'manual' | 'webdav';
   lastSyncAt: string;
@@ -270,6 +301,7 @@ function buildSyncStatus(userId: string, payload: { exportedAt: string; prompts:
     prompts: number;
     folders: number;
     skills: number;
+    shares: number;
   };
   message: string;
   config: SyncSettings;
@@ -295,6 +327,7 @@ function buildSyncStatus(userId: string, payload: { exportedAt: string; prompts:
       prompts: payload.prompts.length,
       folders: payload.folders.length,
       skills: payload.skills.length,
+      shares: payload.shares?.length ?? 0,
     },
     message: providerMessage,
     config: syncSettings,
@@ -389,6 +422,24 @@ function normalizeSyncPayload(payload: z.infer<typeof importPayloadSchema>['payl
       note: version.note,
       createdAt: typeof version.createdAt === 'number' ? new Date(version.createdAt).toISOString() : version.createdAt,
     })),
+    shares: payload.shares.map((share): ShareEntry => ({
+      id: share.id,
+      ownerUserId: share.ownerUserId,
+      visibility: share.visibility,
+      shareId: share.shareId,
+      title: share.title,
+      description: share.description,
+      content: share.content,
+      tags: share.tags,
+      folderId: share.folderId,
+      source: share.source,
+      notes: share.notes,
+      isFavorite: share.isFavorite,
+      isSharingEnabled: share.isSharingEnabled,
+      sourceSnapshot: share.sourceSnapshot,
+      createdAt: typeof share.createdAt === 'number' ? new Date(share.createdAt).toISOString() : share.createdAt,
+      updatedAt: typeof share.updatedAt === 'number' ? new Date(share.updatedAt).toISOString() : share.updatedAt,
+    })),
     settings: payload.settings ?? { theme: 'system', language: 'en', autoSave: true },
     settingsUpdatedAt: payload.settingsUpdatedAt,
   };
@@ -405,6 +456,7 @@ sync.get('/manifest', async (c) => {
       prompts: payload.prompts.length,
       folders: payload.folders.length,
       skills: payload.skills.length,
+      shares: payload.shares.length,
     },
     settingsUpdatedAt: payload.settingsUpdatedAt,
     actor: {

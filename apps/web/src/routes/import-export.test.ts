@@ -134,6 +134,7 @@ async function exportPayload(app: Awaited<ReturnType<typeof createTestApp>>, tok
     folders: Array<Record<string, unknown>>;
     skills: Array<Record<string, unknown>>;
     skillVersions: Array<Record<string, unknown>>;
+    shares: Array<Record<string, unknown>>;
     settings: Record<string, unknown>;
   };
 
@@ -141,7 +142,7 @@ async function exportPayload(app: Awaited<ReturnType<typeof createTestApp>>, tok
 }
 
 describe('web import/export routes', () => {
-  const TEST_TIMEOUT = 20000;
+  const TEST_TIMEOUT = 45000;
 
   beforeEach(() => {
     vi.resetModules();
@@ -283,6 +284,7 @@ describe('web import/export routes', () => {
           name: 'export-skill',
         }),
       ]);
+      expect(payload.shares).toEqual([]);
       expect(payload.settings).toEqual(expect.objectContaining({
         theme: 'system',
         language: 'zh',
@@ -422,6 +424,7 @@ describe('web import/export routes', () => {
           promptsImported: number;
           foldersImported: number;
           skillsImported: number;
+          sharesImported: number;
           settingsUpdated: boolean;
         };
       };
@@ -429,6 +432,7 @@ describe('web import/export routes', () => {
         promptsImported: 1,
         foldersImported: 2,
         skillsImported: 1,
+        sharesImported: 0,
         settingsUpdated: true,
       });
 

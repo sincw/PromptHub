@@ -55,6 +55,27 @@ CREATE TABLE IF NOT EXISTS prompt_versions (
   UNIQUE(prompt_id, version)
 );
 
+-- 分享内容表
+CREATE TABLE IF NOT EXISTS share_entries (
+  id TEXT PRIMARY KEY,
+  owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  visibility TEXT NOT NULL DEFAULT 'private' CHECK(visibility IN ('private', 'shared')),
+  share_id TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT,
+  content TEXT NOT NULL,
+  tags TEXT,
+  folder_id TEXT,
+  source TEXT,
+  notes TEXT,
+  is_favorite INTEGER DEFAULT 0,
+  is_sharing_enabled INTEGER DEFAULT 0,
+  source_snapshot TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+);
+
 -- 文件夹表
 CREATE TABLE IF NOT EXISTS folders (
   id TEXT PRIMARY KEY,
@@ -149,6 +170,12 @@ CREATE INDEX IF NOT EXISTS idx_prompts_visibility ON prompts(visibility);
 CREATE INDEX IF NOT EXISTS idx_prompts_updated ON prompts(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_prompts_favorite ON prompts(is_favorite);
 CREATE INDEX IF NOT EXISTS idx_versions_prompt ON prompt_versions(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_share_entries_owner ON share_entries(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_share_entries_visibility ON share_entries(visibility);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_share_entries_share_id ON share_entries(share_id);
+CREATE INDEX IF NOT EXISTS idx_share_entries_folder ON share_entries(folder_id);
+CREATE INDEX IF NOT EXISTS idx_share_entries_updated ON share_entries(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_share_entries_favorite ON share_entries(is_favorite);
 CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_id);
 CREATE INDEX IF NOT EXISTS idx_folders_owner ON folders(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_folders_visibility ON folders(visibility);

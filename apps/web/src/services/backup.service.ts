@@ -1,9 +1,10 @@
-import { FolderDB, PromptDB, SkillDB } from '@prompthub/db';
+import { FolderDB, PromptDB, ShareDB, SkillDB } from '@prompthub/db';
 import type {
   Folder,
   Prompt,
   PromptVersion,
   Settings,
+  ShareEntry,
   Skill,
   SkillSafetyReport,
   SkillVersion,
@@ -27,6 +28,7 @@ export interface WebBackupPayload {
   folders: Folder[];
   skills: Skill[];
   skillVersions: SkillVersion[];
+  shares: ShareEntry[];
   settings: Settings;
   settingsUpdatedAt?: string;
 }
@@ -35,6 +37,7 @@ export interface BackupImportResult {
   promptsImported: number;
   foldersImported: number;
   skillsImported: number;
+  sharesImported: number;
   settingsUpdated: boolean;
 }
 
@@ -56,11 +59,18 @@ interface SkillRecordRow {
   visibility: 'private' | 'shared';
 }
 
+interface ShareRecordRow {
+  id: string;
+  owner_user_id: string | null;
+  visibility: 'private' | 'shared';
+}
+
 export class BackupService {
   private readonly db = getServerDatabase();
   private readonly promptDb = new PromptDB(this.db);
   private readonly folderDb = new FolderDB(this.db);
   private readonly skillDb = new SkillDB(this.db);
+  private readonly shareDb = new ShareDB(this.db);
   private readonly settingsService = new SettingsService();
 
   export(actor: BackupActor): WebBackupPayload {
@@ -75,6 +85,7 @@ export class BackupService {
       ...version,
       createdAt: this.normalizeIsoTimestamp(version.createdAt),
     }));
+    const shares = this.listVisibleShares(actor);
     const settings = this.settingsService.get(actor.userId);
 
     return {
@@ -86,6 +97,7 @@ export class BackupService {
       folders,
       skills,
       skillVersions,
+      shares,
       settings,
       settingsUpdatedAt: this.settingsService.getUpdatedAt(actor.userId),
     };
@@ -95,6 +107,7 @@ export class BackupService {
     let promptsImported = 0;
     let foldersImported = 0;
     let skillsImported = 0;
+    let sharesImported = 0;
 
     const folders = [...payload.folders].sort((left, right) => {
       const leftDepth = this.getFolderDepth(left, payload.folders);
@@ -124,6 +137,12 @@ export class BackupService {
 
     this.mergeSkillVersions(payload);
 
+    for (const share of payload.shares ?? []) {
+      if (this.mergeShare(actor, share)) {
+        sharesImported += 1;
+      }
+    }
+
     const settingsUpdated = this.mergeSettings(actor, payload);
 
     syncPromptWorkspaceFromDatabase(this.db, this.promptDb, this.folderDb);
@@ -133,6 +152,7 @@ export class BackupService {
       promptsImported,
       foldersImported,
       skillsImported,
+      sharesImported,
       settingsUpdated,
     };
   }
@@ -217,6 +237,34 @@ export class BackupService {
     }
 
     return skills;
+  }
+
+  private listVisibleShares(actor: BackupActor): ShareEntry[] {
+    const includeShared = actor.role === 'admin';
+    const rows = this.db
+      .prepare(
+        'SELECT id, owner_user_id, visibility FROM share_entries WHERE (owner_user_id = ? AND visibility = ?) OR (? = 1 AND visibility = ?) ORDER BY updated_at DESC',
+      )
+      .all(actor.userId, 'private', includeShared ? 1 : 0, 'shared') as ShareRecordRow[];
+
+    const shares: ShareEntry[] = [];
+
+    for (const row of rows) {
+      const share = this.shareDb.getById(row.id);
+      if (!share) {
+        continue;
+      }
+
+      shares.push({
+        ...share,
+        ownerUserId: row.owner_user_id ?? undefined,
+        visibility: row.visibility,
+        createdAt: this.normalizeIsoTimestamp(share.createdAt),
+        updatedAt: this.normalizeIsoTimestamp(share.updatedAt),
+      });
+    }
+
+    return shares;
   }
 
   private getFolderDepth(folder: Folder, allFolders: Folder[]): number {
@@ -396,6 +444,28 @@ export class BackupService {
         skillId: resolvedSkillId,
       });
     }
+  }
+
+  private mergeShare(actor: BackupActor, share: ShareEntry): boolean {
+    const existing = this.shareDb.getById(share.id);
+    if (existing && !this.shouldReplaceByTimestamp(existing.updatedAt, share.updatedAt)) {
+      return false;
+    }
+
+    const visibility = this.resolveVisibility(actor, share.visibility);
+    const folderId =
+      share.folderId && this.folderDb.getById(share.folderId) ? share.folderId : null;
+
+    this.shareDb.insertShareDirect({
+      ...share,
+      ownerUserId: actor.userId,
+      visibility,
+      folderId,
+    });
+    this.db
+      .prepare('UPDATE share_entries SET owner_user_id = ?, visibility = ? WHERE id = ?')
+      .run(actor.userId, visibility, share.id);
+    return true;
   }
 
   private mergeSettings(actor: BackupActor, payload: WebBackupPayload): boolean {

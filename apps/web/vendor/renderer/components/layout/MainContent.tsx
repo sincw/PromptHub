@@ -4,11 +4,14 @@ import { usePromptStore, ViewMode } from '../../stores/prompt.store';
 import { useFolderStore } from '../../stores/folder.store';
 import { useSettingsStore } from '../../stores/settings.store';
 import { useUIStore } from '../../stores/ui.store';
+import { useShareStore } from '../../stores/share.store';
 import { resolveScenarioModel } from '../../services/ai-defaults';
 
 // Lazy load SkillManager for better initial load performance
 // 懒加载 SkillManager 以提升初始加载性能
 const SkillManager = lazy(() => import('../skill/SkillManager').then(m => ({ default: m.SkillManager })));
+const ShareWorkspace = lazy(() => import('../share/ShareWorkspace').then(m => ({ default: m.ShareWorkspace })));
+const CreateShareModal = lazy(() => import('../share/CreateShareModal').then(m => ({ default: m.CreateShareModal })));
 import { StarIcon, CopyIcon, HistoryIcon, HashIcon, SparklesIcon, EditIcon, TrashIcon, CheckIcon, PlayIcon, LoaderIcon, XIcon, GitCompareIcon, ClockIcon, GlobeIcon, PinIcon, MessageSquareTextIcon, ImageIcon, DownloadIcon, SaveIcon, ZoomInIcon, Share2Icon, PlusIcon, ChevronDownIcon, ChevronRightIcon, Maximize2Icon } from 'lucide-react';
 import { EditPromptModal, VersionHistoryModal, VariableInputModal, PromptListHeader, PromptListView, PromptTableView, AiTestModal, PromptDetailModal, PromptGalleryView, PromptKanbanView } from '../prompt';
 import { PromptOptimizationWorkspace } from '../prompt/PromptOptimizationWorkspace';
@@ -24,6 +27,7 @@ import { useToast } from '../ui/Toast';
 import { chatCompletion, generateImage, buildMessagesFromPrompt, multiModelCompare, AITestResult, StreamCallbacks } from '../../services/ai';
 import { useTranslation } from 'react-i18next';
 import type { AiTestSession, AiTestSessionMessage, Prompt, PromptVersion } from '@prompthub/shared/types';
+import type { CreateShareEntryDTO } from '@prompthub/shared/types';
 import type { ChatMessage, ChatCompletionResult } from '../../services/ai';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -67,6 +71,15 @@ interface TextViewerState {
   subtitle?: string;
   content: string;
   initialMode?: FullscreenTextViewerMode;
+}
+
+interface QuickShareDraft {
+  title: string;
+  description?: string;
+  content: string;
+  tags: string[];
+  folderId?: string | null;
+  sourceSnapshot: NonNullable<CreateShareEntryDTO['sourceSnapshot']>;
 }
 
 function createAiTestId(prefix: string): string {
@@ -248,6 +261,7 @@ export function MainContent() {
   const sortOrder = usePromptStore((state) => state.sortOrder);
   const viewMode = usePromptStore((state) => state.viewMode);
   const incrementUsageCount = usePromptStore((state) => state.incrementUsageCount);
+  const createShare = useShareStore((state) => state.createShare);
   const selectedFolderId = useFolderStore((state) => state.selectedFolderId);
   const unlockedFolderIds = useFolderStore((state) => state.unlockedFolderIds);
   const folders = useFolderStore((state) => state.folders);
@@ -268,6 +282,7 @@ export function MainContent() {
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [isAiHistoryModalOpen, setIsAiHistoryModalOpen] = useState(false);
   const [textViewer, setTextViewer] = useState<TextViewerState | null>(null);
+  const [quickShareDraft, setQuickShareDraft] = useState<QuickShareDraft | null>(null);
   // 用于列表/画廊视图复制时的变量弹窗
   const [isCopyVariableModalOpen, setIsCopyVariableModalOpen] = useState(false);
   const [copyPrompt, setCopyPrompt] = useState<Prompt | null>(null);
@@ -749,6 +764,35 @@ export function MainContent() {
     );
   };
 
+  const openQuickShareFromMessage = useCallback((session: AiTestSession, message: AiTestSessionMessage) => {
+    const promptTitle = selectedPrompt?.title || session.promptSnapshot.title || t('prompt.aiTestConversation', 'AI 测试会话');
+    const systemPrompt = selectedPrompt?.systemPrompt ?? session.promptSnapshot.systemPrompt ?? '';
+    const userPrompt = selectedPrompt?.userPrompt ?? session.promptSnapshot.userPrompt ?? '';
+    const fallbackFolderId = selectedFolderId && selectedFolderId !== 'favorites' ? selectedFolderId : undefined;
+    const sections = [
+      systemPrompt ? `## System Prompt\n\n${systemPrompt}` : '',
+      userPrompt ? `## User Prompt\n\n${userPrompt}` : '',
+      `## ${message.role.toUpperCase()} ${t('prompt.message', 'Message')}\n\n${message.content}`,
+    ].filter(Boolean);
+
+    setQuickShareDraft({
+      title: `${promptTitle} - ${message.role}`,
+      description: t('share.quickShareDescription', '从 Prompt AI 测试会话创建的分享内容'),
+      content: sections.join('\n\n'),
+      tags: selectedPrompt?.tags ?? [],
+      folderId: selectedPrompt?.folderId ?? fallbackFolderId,
+      sourceSnapshot: {
+        promptId: selectedPrompt?.id ?? null,
+        promptTitle,
+        systemPrompt: systemPrompt || null,
+        userPrompt: userPrompt || null,
+        messageRole: message.role,
+        messageContent: message.content,
+        messageCreatedAt: message.createdAt,
+      },
+    });
+  }, [selectedFolderId, selectedPrompt, t]);
+
   const renderAiSessionMessages = (
     session: AiTestSession,
     options: { includeLiveDraft?: boolean } = {},
@@ -784,6 +828,15 @@ export function MainContent() {
               <div className={`flex items-center justify-between gap-2 text-[10px] uppercase ${messageMetaClass} ${isCollapsed ? '' : 'mb-1'}`}>
                 <span className="min-w-0 truncate">{message.role}</span>
                 <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => openQuickShareFromMessage(session, message)}
+                    className={`inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 ${messageActionClass}`}
+                    title={t('share.quickShare', '快捷分享')}
+                    aria-label={t('share.quickShare', '快捷分享')}
+                  >
+                    <Share2Icon className="w-3 h-3" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => openTextViewer({
@@ -1705,6 +1758,10 @@ export function MainContent() {
         <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
           <SkillManager />
         </Suspense>
+      ) : uiViewMode === 'share' ? (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+          <ShareWorkspace />
+        </Suspense>
       ) : (
       <>
       {/* List view mode */}
@@ -2559,6 +2616,30 @@ export function MainContent() {
             </div>
           )}
         </Modal>
+      )}
+
+      {quickShareDraft && (
+        <Suspense fallback={null}>
+          <CreateShareModal
+            isOpen={!!quickShareDraft}
+            onClose={() => setQuickShareDraft(null)}
+            initialData={quickShareDraft}
+            defaultFolderId={quickShareDraft.folderId}
+            title={t('share.createShare', '新建分享')}
+            onSubmit={async (data) => {
+              try {
+                const share = await createShare(data);
+                showToast(t('share.created', '分享内容已创建'), 'success');
+                setQuickShareDraft(null);
+                return share;
+              } catch (error) {
+                console.error('Failed to create share:', error);
+                showToast(t('share.createFailed', '创建分享失败'), 'error');
+                return null;
+              }
+            }}
+          />
+        </Suspense>
       )}
 
       <FullscreenTextViewerModal

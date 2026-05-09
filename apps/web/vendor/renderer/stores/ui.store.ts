@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-type ViewMode = "prompt" | "skill";
+type ViewMode = "prompt" | "skill" | "share";
 
 interface UIState {
   viewMode: ViewMode;

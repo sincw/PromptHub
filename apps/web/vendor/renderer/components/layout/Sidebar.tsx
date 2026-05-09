@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { StarIcon, HashIcon, PlusIcon, LayoutGridIcon, LinkIcon, SettingsIcon, ChevronLeftIcon, ChevronRightIcon, XIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, MessageSquareTextIcon, CommandIcon, CuboidIcon, StoreIcon, GlobeIcon, Clock3Icon } from 'lucide-react';
+import { StarIcon, HashIcon, PlusIcon, LayoutGridIcon, LinkIcon, SettingsIcon, ChevronLeftIcon, ChevronRightIcon, XIcon, ChevronDownIcon, ChevronUpIcon, ImageIcon, MessageSquareTextIcon, CommandIcon, CuboidIcon, StoreIcon, GlobeIcon, Clock3Icon, FileTextIcon } from 'lucide-react';
 import { useFolderStore } from '../../stores/folder.store';
 import { usePromptStore } from '../../stores/prompt.store';
 import { useSettingsStore } from '../../stores/settings.store';
 import { useUIStore } from '../../stores/ui.store';
 import { useSkillStore } from '../../stores/skill.store';
+import { useShareStore } from '../../stores/share.store';
 import { ResourcesModal } from '../resources/ResourcesModal';
 import { FolderModal, PrivateFolderUnlockModal } from '../folder';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +15,7 @@ import { SortableTree } from './tree/SortableTree';
 import type { FlattenedItem } from './tree/utilities';
 import { buildPromptStats } from '../../services/prompt-filter';
 import { buildSkillStats } from '../../services/skill-stats';
+import { buildShareStats } from '../../services/share-filter';
 import { getRuntimeCapabilities, isWebRuntime } from '../../runtime';
 
 type PageType = 'home' | 'settings';
@@ -132,6 +134,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
     [remoteStoreEntries],
   );
   const [showAllSkillTags, setShowAllSkillTags] = useState(false);
+  const shares = useShareStore((state) => state.shares);
+  const shareFilterTags = useShareStore((state) => state.filterTags);
+  const toggleShareFilterTag = useShareStore((state) => state.toggleFilterTag);
+  const clearShareFilterTags = useShareStore((state) => state.clearFilterTags);
+  const [showAllShareTags, setShowAllShareTags] = useState(false);
   const promptStats = useMemo(() => buildPromptStats(prompts), [prompts]);
   const skillStats = useMemo(
     () => buildSkillStats(skills, deployedSkillNames),
@@ -140,9 +147,11 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
   const favoriteCount = promptStats.favoriteCount;
   const uniqueTags = promptStats.uniqueTags;
   const uniqueSkillTags = skillStats.uniqueUserTags;
+  const shareStats = useMemo(() => buildShareStats(shares), [shares]);
+  const uniqueShareTags = shareStats.uniqueTags;
   const runtimeCapabilities = getRuntimeCapabilities();
   const webRuntime = isWebRuntime();
-  const showModeLabels = !isCollapsed;
+  const showModeLabels = false;
 
   const confirmLeaveDirtySkillEditor = useCallback(() => {
     const hasUnsaved = (
@@ -406,6 +415,25 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
           >
             <CuboidIcon className="w-5 h-5" />
             {showModeLabels && <span className="truncate">{t('common.skills')}</span>}
+          </button>
+
+          <button
+            onClick={() => {
+              setViewMode('share');
+              closeTagPopover();
+              if (currentPage !== 'home') onNavigate('home');
+            }}
+            title={t('share.titlePlural', '内容分享')}
+            className={`
+              relative flex items-center justify-center transition-all duration-300 z-10
+              ${isCollapsed
+                ? `w-10 h-10 rounded-xl ${viewMode === 'share' ? 'bg-primary text-white shadow-lg' : 'text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`
+                : `flex-1 py-1.5 gap-2 text-xs font-semibold rounded-lg ${viewMode === 'share' ? 'bg-background text-foreground shadow-sm' : 'text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-white/5'}`
+              }
+            `}
+          >
+            <FileTextIcon className="w-5 h-5" />
+            {showModeLabels && <span className="truncate">{t('share.nav', 'Share')}</span>}
           </button>
         </div>
       </div>
@@ -733,6 +761,165 @@ export function Sidebar({ currentPage, onNavigate }: SidebarProps) {
       )}
 
       </>
+      ) : viewMode === 'share' ? (
+        <>
+        <div className="flex-shrink-0 flex flex-col px-3 py-2">
+          <div className="space-y-1 shrink-0">
+            <NavItem
+              icon={<FileTextIcon className="w-5 h-5" />}
+              label={t('share.allShares', '全部分享')}
+              count={shareStats.totalCount}
+              active={selectedFolderId === null && currentPage === 'home'}
+              collapsed={isCollapsed}
+              onClick={() => {
+                selectFolder(null);
+                if (currentPage !== 'home') onNavigate('home');
+              }}
+            />
+            <NavItem
+              icon={<StarIcon className="w-5 h-5" />}
+              label={t('nav.favorites')}
+              count={shareStats.favoriteCount}
+              active={selectedFolderId === 'favorites' && currentPage === 'home'}
+              collapsed={isCollapsed}
+              onClick={() => {
+                selectFolder('favorites');
+                if (currentPage !== 'home') onNavigate('home');
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden mt-2">
+            {!isCollapsed && (
+              <div className="flex items-center justify-between px-6 mb-2 shrink-0">
+                <span className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider truncate">
+                  {t('nav.folders')}
+                </span>
+                <button
+                  onClick={() => {
+                    setEditingFolder(null);
+                    setIsFolderModalOpen(true);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-primary transition-colors"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {isCollapsed && (
+              <div className="h-px bg-sidebar-border/50 my-2 mx-4 shrink-0" />
+            )}
+
+            <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide px-3 pb-4">
+              <SortableTree
+                folders={folders}
+                selectedFolderId={selectedFolderId}
+                expandedIds={expandedIds}
+                unlockedFolderIds={unlockedFolderIds}
+                isCollapsed={isCollapsed}
+                currentPage={currentPage}
+                onSelectFolder={(folder) => {
+                  if (folder.isPrivate && !unlockedFolderIds.has(folder.id)) {
+                    setPasswordFolder(folder);
+                    setIsPasswordModalOpen(true);
+                  } else {
+                    selectFolder(folder.id);
+                    if (currentPage !== 'home') onNavigate('home');
+                  }
+                }}
+                onEditFolder={(folder) => {
+                  setEditingFolder(folder);
+                  setIsFolderModalOpen(true);
+                }}
+                onToggleExpand={toggleExpand}
+                onReorderFolders={handleReorderFolders}
+              />
+              {folders.length === 0 && !isCollapsed && (
+                <p className="px-3 py-4 text-sm text-sidebar-foreground/50 text-center">
+                  {t('folder.empty')}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {uniqueShareTags.length > 0 && (
+            <div className={`shrink-0 flex flex-col overflow-hidden bg-sidebar ${isCollapsed ? 'items-center' : ''}`}>
+              {!isCollapsed && (
+                <div className="flex items-center justify-between px-6 py-2 border-t border-sidebar-border/50 shrink-0">
+                  <span className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+                    {t('nav.tags')}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {shareFilterTags.length > 0 && (
+                      <button
+                        onClick={() => clearShareFilterTags()}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {t('common.clear', '清空')}
+                      </button>
+                    )}
+                    {uniqueShareTags.length > 8 && (
+                      <button
+                        onClick={() => setShowAllShareTags(!showAllShareTags)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        {showAllShareTags ? t('common.collapse') : `${t('common.showAll')} ${uniqueShareTags.length}`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!isCollapsed ? (
+                <div className="max-h-48 overflow-y-auto px-6 pb-4 scrollbar-hide">
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {(showAllShareTags ? uniqueShareTags : uniqueShareTags.slice(0, 8)).map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => {
+                          toggleShareFilterTag(tag);
+                          if (currentPage !== 'home') onNavigate('home');
+                        }}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                          shareFilterTags.includes(tag) && currentPage === 'home'
+                            ? 'bg-primary text-white'
+                            : 'bg-sidebar-accent text-sidebar-foreground/70 hover:bg-primary hover:text-white'
+                        }`}
+                      >
+                        <HashIcon className="w-3 h-3" />
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-2 border-t border-sidebar-border/50 flex flex-col items-center gap-2 pb-2">
+                  <button
+                    onClick={() => {
+                      if (shareFilterTags.length > 0) {
+                        clearShareFilterTags();
+                      }
+                    }}
+                    title={t('nav.tags')}
+                    className={`w-10 h-10 flex flex-col items-center justify-center rounded-lg transition-colors duration-200 ${
+                      shareFilterTags.length > 0 && currentPage === 'home'
+                        ? 'bg-primary text-white'
+                        : 'bg-sidebar-accent text-sidebar-foreground/70 hover:bg-primary hover:text-white'
+                    }`}
+                  >
+                    <HashIcon className="w-4 h-4" />
+                    <span className="text-[10px] leading-none mt-0.5">
+                      {shareFilterTags.length > 0 ? shareFilterTags.length : t('nav.tags').slice(0, 2)}
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        </>
       ) : (
         <>
         {/* Skill Navigation */}

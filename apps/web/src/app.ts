@@ -15,6 +15,8 @@ import mediaRoutes from './routes/media.js';
 import syncRoutes from './routes/sync.js';
 import importExportRoutes from './routes/import-export.js';
 import devicesRoutes from './routes/devices.js';
+import shareRoutes from './routes/shares.js';
+import publicShareRoutes from './routes/public-shares.js';
 import { bootstrapPromptWorkspace } from './services/prompt-workspace.js';
 import { bootstrapSkillWorkspace } from './services/skill-workspace.js';
 
@@ -30,12 +32,14 @@ export function createApp(): Hono {
   app.onError(errorHandler);
 
   app.route('/api/auth', authRoutes);
+  app.route('/api/public/shares', publicShareRoutes);
 
   const protectedApi = new Hono();
   protectedApi.use('*', authMiddleware());
   protectedApi.route('/prompts', promptRoutes);
   protectedApi.route('/folders', folderRoutes);
   protectedApi.route('/skills', skillRoutes);
+  protectedApi.route('/shares', shareRoutes);
   protectedApi.route('/settings', settingsRoutes);
   protectedApi.route('/ai', aiRoutes);
   protectedApi.route('/media', mediaRoutes);

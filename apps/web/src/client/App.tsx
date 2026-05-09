@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { LoginPage } from './pages/Login';
 import { SetupPage } from './pages/Setup';
 import { WorkspacePage } from './pages/Workspace';
+import { PublicSharePage } from './pages/PublicShare';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ export function App() {
         <Routes>
           <Route path="/setup" element={<SetupRoute><SetupPage /></SetupRoute>} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/share/:shareId" element={<PublicSharePage />} />
           <Route path="/" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
           <Route path="*" element={<ProtectedRoute><WorkspacePage /></ProtectedRoute>} />
         </Routes>

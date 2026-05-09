@@ -4,6 +4,7 @@ import { Sidebar, TopBar, MainContent, TitleBar } from "./components/layout";
 import { usePromptStore } from "./stores/prompt.store";
 import { useFolderStore } from "./stores/folder.store";
 import { useSettingsStore } from "./stores/settings.store";
+import { useShareStore } from "./stores/share.store";
 import { initDatabase, migrateLegacyIndexedDbToMainProcess } from "./services/database";
 import { ImportedPromptData } from "./components/prompt/ImportPromptModal";
 import { autoSync } from "./services/webdav";
@@ -48,6 +49,7 @@ type PageType = "home" | "settings";
 function App() {
   const fetchPrompts = usePromptStore((state) => state.fetchPrompts);
   const fetchFolders = useFolderStore((state) => state.fetchFolders);
+  const fetchShares = useShareStore((state) => state.fetchShares);
   const folders = useFolderStore((state) => state.folders);
   const updatePrompt = usePromptStore((state) => state.updatePrompt);
   const movePrompts = usePromptStore((state) => state.movePrompts);
@@ -579,7 +581,7 @@ function App() {
 
         console.log(`✅ ${reason} sync completed:`, result.message);
         if (result.localChanged) {
-          await Promise.all([fetchPrompts(), fetchFolders()]);
+          await Promise.all([fetchPrompts(), fetchFolders(), fetchShares()]);
         }
       } catch (syncError) {
         console.error(`⚠️ ${reason} sync error:`, syncError);
@@ -655,7 +657,7 @@ function App() {
           `✅ self-hosted ${reason === "interval" ? "push" : "pull"} sync completed: ${summary.prompts} prompts, ${summary.folders} folders, ${summary.skills} skills`,
         );
         if (reason !== "interval") {
-          await Promise.all([fetchPrompts(), fetchFolders()]);
+          await Promise.all([fetchPrompts(), fetchFolders(), fetchShares()]);
         }
       } catch (syncError) {
         console.error(`⚠️ self-hosted ${reason} sync error:`, syncError);
@@ -684,6 +686,7 @@ function App() {
         }
         await fetchPrompts();
         await fetchFolders();
+        await fetchShares();
         console.log("✅ App initialized");
 
         // IMPORTANT: We MUST NOT auto-execute performRecovery here. Historically
@@ -829,7 +832,7 @@ function App() {
       window.removeEventListener("focus", handleBackgroundTaskResume);
       window.removeEventListener("online", handleBackgroundTaskResume);
     };
-  }, [applyTheme, inferUpdateChannel]);
+  }, [applyTheme, fetchShares, inferUpdateChannel]);
 
   if (isLoading) {
     return (
