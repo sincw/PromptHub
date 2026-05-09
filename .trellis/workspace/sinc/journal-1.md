@@ -19,7 +19,9 @@ Extended AI proxy timeout for long prompt tests and added persistent multi-turn 
 
 ### Main Changes
 
-(Add details)
+- Added `promptContent` as the dedicated Markdown field for prompt-origin System/User Prompt text across share DTOs, SQLite storage, API validation, import/export, sync, and UI.
+- Updated quick-share so the selected AI message remains the reader-facing `content`, while prompt context is stored separately and rendered collapsed by default.
+- Updated the content-sharing spec and route regression coverage to prevent prompt text from being injected into share body content.
 
 ### Git Commits
 
@@ -195,6 +197,45 @@ Implemented share entries, public share links, share workspace UI, prompt messag
 ### Testing
 
 - [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 7: Separate prompt content from share body
+
+**Date**: 2026-05-09
+**Task**: Separate prompt content from share body
+**Branch**: `main`
+
+### Summary
+
+Moved prompt-origin System/User Prompt text into the dedicated share promptContent field so public share content remains reader-facing only; verified disabled public shares expose only availability.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `396f759` | Keep prompt text separate from share body |
+
+### Testing
+
+- [OK] `pnpm --filter @prompthub/web typecheck`
+- [OK] `pnpm --filter @prompthub/web lint`
+- [OK] `pnpm --filter @prompthub/web test -- src/routes/shares.test.ts`
+- [OK] `pnpm --filter @prompthub/web test -- src/routes/import-export.test.ts src/routes/sync.test.ts --pool forks --poolOptions.forks.singleFork true`
+- [OK] `pnpm --filter @prompthub/web build:server`
+- [OK] `pnpm --filter @prompthub/web build:client`
+- [OK] `git diff --check`
 
 ### Status
 
