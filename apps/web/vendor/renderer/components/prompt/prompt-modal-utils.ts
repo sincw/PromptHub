@@ -133,16 +133,23 @@ export function createPromptFormData(
   source?: Partial<Prompt> | Partial<CreatePromptDTO> | null,
   defaults?: Partial<PromptFormData>,
 ): PromptFormData {
+  const sourceStages = source?.stages || defaults?.stages;
+  const inferredExecutionMode =
+    source?.executionMode ||
+    defaults?.executionMode ||
+    (sourceStages && sourceStages.length >= MULTI_STAGE_MIN_STAGE_COUNT
+      ? "multi_stage"
+      : "single");
+
   return {
     title: source?.title || defaults?.title || "",
     description: source?.description || defaults?.description || "",
     promptType:
       source?.promptType || defaults?.promptType || ("text" as PromptType),
-    executionMode:
-      source?.executionMode || defaults?.executionMode || ("single" as PromptExecutionMode),
+    executionMode: inferredExecutionMode as PromptExecutionMode,
     stageContextMode:
       source?.stageContextMode || defaults?.stageContextMode || ("isolated" as PromptStageContextMode),
-    stages: normalizePromptStages(source?.stages || defaults?.stages),
+    stages: normalizePromptStages(sourceStages),
     systemPrompt: source?.systemPrompt || defaults?.systemPrompt || "",
     systemPromptEn: source?.systemPromptEn || defaults?.systemPromptEn || "",
     userPrompt: source?.userPrompt || defaults?.userPrompt || "",
@@ -168,13 +175,12 @@ export function buildPromptPayload(
     ? formatMultiStagePromptTemplate(stages, "en").trim() || undefined
     : form.userPromptEn.trim() || undefined;
 
-  return {
+  const payload: CreatePromptDTO | UpdatePromptDTO = {
     title: form.title.trim(),
     description: form.description.trim() || undefined,
     promptType: form.promptType,
     executionMode: isMultiStage ? "multi_stage" : "single",
     stageContextMode: form.stageContextMode,
-    stages,
     systemPrompt: form.systemPrompt.trim() || undefined,
     systemPromptEn: form.systemPromptEn.trim() || undefined,
     userPrompt,
@@ -186,6 +192,12 @@ export function buildPromptPayload(
     source: form.source.trim() || undefined,
     notes: form.notes.trim() || undefined,
   };
+
+  if (isMultiStage) {
+    payload.stages = stages;
+  }
+
+  return payload;
 }
 
 export function hasPromptFormChanges(

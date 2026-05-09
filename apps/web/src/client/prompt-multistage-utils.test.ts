@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Prompt } from '@prompthub/shared';
 import {
   buildPromptPayload,
+  createPromptFormData,
   formatMultiStagePromptTemplate,
   validatePromptStageReferences,
 } from '../../vendor/renderer/components/prompt/prompt-modal-utils';
@@ -81,5 +82,39 @@ describe('multi-stage prompt utilities', () => {
     expect(payload.stageContextMode).toBe('inherited');
     expect(payload.stages).toHaveLength(2);
     expect(payload.userPrompt).toBe(formatMultiStagePromptTemplate(payload.stages, 'main'));
+  });
+
+  it('infers multi-stage edit mode from stored stages and omits empty stages for single-stage payloads', () => {
+    const form = createPromptFormData({
+      title: 'Legacy Multi Stage',
+      userPrompt: 'compatibility',
+      stages: [
+        { id: 'stage1', userPrompt: 'A' },
+        { id: 'stage2', userPrompt: '@stage1.output B' },
+      ],
+    });
+
+    expect(form.executionMode).toBe('multi_stage');
+
+    const payload = buildPromptPayload({
+      title: 'Single Stage',
+      description: '',
+      promptType: 'text',
+      executionMode: 'single',
+      stageContextMode: 'isolated',
+      stages: [],
+      systemPrompt: '',
+      systemPromptEn: '',
+      userPrompt: 'Hello',
+      userPromptEn: '',
+      tags: [],
+      images: [],
+      videos: [],
+      source: '',
+      notes: '',
+    });
+
+    expect(payload.executionMode).toBe('single');
+    expect(payload).not.toHaveProperty('stages');
   });
 });
