@@ -73,7 +73,10 @@ export function normalizePromptStages(
 }
 
 export function isMultiStagePrompt(prompt?: Partial<Prompt> | null): boolean {
-  return prompt?.executionMode === "multi_stage";
+  return (
+    prompt?.executionMode === "multi_stage" ||
+    ((prompt?.stages?.length ?? 0) >= MULTI_STAGE_MIN_STAGE_COUNT)
+  );
 }
 
 export function getStageDisplayName(stage: PromptStage, index: number): string {
@@ -134,12 +137,12 @@ export function createPromptFormData(
   defaults?: Partial<PromptFormData>,
 ): PromptFormData {
   const sourceStages = source?.stages || defaults?.stages;
+  const hasStructuredStages =
+    (sourceStages?.length ?? 0) >= MULTI_STAGE_MIN_STAGE_COUNT;
   const inferredExecutionMode =
-    source?.executionMode ||
-    defaults?.executionMode ||
-    (sourceStages && sourceStages.length >= MULTI_STAGE_MIN_STAGE_COUNT
+    hasStructuredStages
       ? "multi_stage"
-      : "single");
+      : source?.executionMode || defaults?.executionMode || "single";
 
   return {
     title: source?.title || defaults?.title || "",

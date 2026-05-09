@@ -4,6 +4,7 @@ import {
   buildPromptPayload,
   createPromptFormData,
   formatMultiStagePromptTemplate,
+  isMultiStagePrompt,
   validatePromptStageReferences,
 } from '../../vendor/renderer/components/prompt/prompt-modal-utils';
 import {
@@ -87,6 +88,7 @@ describe('multi-stage prompt utilities', () => {
   it('infers multi-stage edit mode from stored stages and omits empty stages for single-stage payloads', () => {
     const form = createPromptFormData({
       title: 'Legacy Multi Stage',
+      executionMode: 'single',
       userPrompt: 'compatibility',
       stages: [
         { id: 'stage1', userPrompt: 'A' },
@@ -95,6 +97,7 @@ describe('multi-stage prompt utilities', () => {
     });
 
     expect(form.executionMode).toBe('multi_stage');
+    expect(isMultiStagePrompt({ executionMode: 'single', stages: form.stages })).toBe(true);
 
     const payload = buildPromptPayload({
       title: 'Single Stage',

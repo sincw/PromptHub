@@ -32,6 +32,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useUIStore } from "../../stores/ui.store";
+import type { CreatePromptDTO } from "@prompthub/shared/types";
 import { collectPrivateFolderScopeIds } from "../../services/prompt-filter";
 import { filterVisibleSkills } from "../../services/skill-filter";
 import {
@@ -410,33 +411,12 @@ export function TopBar({
     };
   }, [webRuntime]);
 
-  const handleCreatePrompt = async (data: {
-    title: string;
-    description?: string;
-    promptType?: "text" | "image";
-    systemPrompt?: string;
-    systemPromptEn?: string;
-    userPrompt: string;
-    userPromptEn?: string;
-    tags?: string[];
-    images?: string[];
-    folderId?: string;
-    source?: string;
-  }) => {
+  const handleCreatePrompt = async (data: CreatePromptDTO) => {
     try {
       const prompt = await createPrompt({
-        title: data.title,
-        description: data.description,
-        promptType: data.promptType,
-        systemPrompt: data.systemPrompt,
-        systemPromptEn: data.systemPromptEn,
-        userPrompt: data.userPrompt,
-        userPromptEn: data.userPromptEn,
+        ...data,
         tags: data.tags || [],
-        variables: [],
-        images: data.images,
-        folderId: data.folderId,
-        source: data.source,
+        variables: data.variables || [],
       });
       setIsCreateModalOpen(false);
       return prompt;
