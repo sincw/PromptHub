@@ -244,3 +244,40 @@ Moved prompt-origin System/User Prompt text into the dedicated share promptConte
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Multi-stage prompt execution and test stability
+
+**Date**: 2026-05-09
+**Task**: Multi-stage prompt execution and test stability
+**Branch**: `main`
+
+### Summary
+
+Implemented multi-stage prompt authoring and execution, fixed edit-mode preservation, corrected AI test live draft rendering, and stabilized the web test suite by caching migrated test databases and lowering test-only password hash rounds.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9dedef1` | (see git log) |
+| `53678d6` | (see git log) |
+| `931cc3f` | (see git log) |
+| `ec9f82e` | (see git log) |
+| `8bb9c2b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
