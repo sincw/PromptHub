@@ -245,16 +245,16 @@ description: "Use when building or iterating on a web game (HTML/JS) and needs a
   {
     slug: 'screenshot',
     name: 'Screenshot Capture',
-    description: 'Capture desktop or system screenshots — full screen, specific app/window, or a pixel region.',
+    description: 'Capture screen or system screenshots — full screen, specific app/window, or a pixel region.',
     category: 'dev',
     author: 'OpenAI',
     source_url: 'https://github.com/openai/skills/tree/main/skills/.curated/screenshot',
     content_url: 'https://raw.githubusercontent.com/openai/skills/main/skills/.curated/screenshot/SKILL.md',
-    tags: ['screenshot', 'capture', 'desktop'],
+    tags: ['screenshot', 'capture', 'screen'],
     version: '1.0.0',
     content: `---
 name: screenshot
-description: "Use when the user explicitly asks for a desktop or system screenshot (full screen, specific app or window, or a pixel region)."
+description: "Use when the user explicitly asks for a screen or system screenshot (full screen, specific app or window, or a pixel region)."
 ---`,
     compatibility: [...DEFAULT_SKILL_COMPATIBILITY],
   },

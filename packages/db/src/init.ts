@@ -17,9 +17,9 @@ interface PragmaColumnInfo {
  * Hook functions that allow the host application to inject environment-specific
  * behaviour into the database initialization process.
  *
- * For example, the `resolveSkillRepoPath` hook lets the Electron desktop app
+ * For example, the `resolveSkillRepoPath` hook lets the host application
  * supply its skills directory for the `backfill_local_repo_path_v1` migration
- * without the database package needing to know about Electron APIs.
+ * without the database package needing to know about runtime-specific APIs.
  */
 export interface InitDatabaseHooks {
   /**

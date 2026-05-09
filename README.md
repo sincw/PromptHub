@@ -43,8 +43,8 @@
 <br/>
 
 <div align="center">
-  <a href="https://github.com/legeling/PromptHub/releases">
-    <img src="https://img.shields.io/badge/📥_立即下载-Releases-blue?style=for-the-badge&logo=github" alt="Download"/>
+  <a href="#self-hosted-web">
+    <img src="https://img.shields.io/badge/自部署_Web-开始使用-blue?style=for-the-badge" alt="Self-hosted Web"/>
   </a>
 </div>
 
@@ -62,7 +62,6 @@
 - [截图](#screenshots)
 - [安装与部署](#install-and-deploy)
   - [自部署网页版](#self-hosted-web)
-  - [命令行 CLI](#cli)
 - [快速开始](#quick-start)
 - [技术栈](#tech-stack)
 - [项目结构](#project-structure)
@@ -126,10 +125,9 @@
 
 ### 💾 数据与同步
 
-- 所有数据存储在本地，隐私安全有保障
+- 数据存储在自部署实例的数据目录中，隐私安全有保障
 - 全量备份与恢复（`.phub.gz` 压缩格式）
 - WebDAV 云同步（坚果云、Nextcloud 等）
-- 支持自部署 PromptHub Web 作为桌面版备份源 / 恢复源
 - 支持启动同步 + 定时同步
 
 </td>
@@ -143,7 +141,7 @@
 - 深色/浅色/跟随系统，多种主题色
 - 7 种语言支持
 - Markdown 渲染与代码高亮
-- 跨平台：macOS / Windows / Linux
+- 浏览器访问，Docker 自托管部署
 
 </td>
 <td width="50%">
@@ -207,16 +205,15 @@
 
 ## 自部署网页版
 
-除了桌面版，PromptHub 现在也提供轻量级的自部署网页版，适合作为个人浏览器工作区，或作为桌面版的备份源 / 恢复源。
+PromptHub Web 是轻量级的自部署网页版，适合作为个人浏览器工作区。
 
-它不是 SaaS 云服务，而是一个适合个人或小规模自托管的浏览器版工作区。核心能力包括 Prompt、文件夹、Skill、导入导出、媒体文件、设置，以及作为桌面版的数据同步目标。
+它不是 SaaS 云服务，而是一个适合个人或小规模自托管的浏览器版工作区。核心能力包括 Prompt、文件夹、Skill、导入导出、媒体文件、设置与同步。
 
 更完整的部署、升级、备份、Docker 与开发说明见 [docs/web-self-hosted.md](./docs/web-self-hosted.md)。
 
 ### 适合什么场景
 
 - 想在浏览器里访问自己的 PromptHub 数据
-- 想把自部署网页版当成桌面版的备份源 / 恢复源
 - 不想折腾 WebDAV，希望有一个更直观的单机自托管界面
 
 ### 首次初始化
@@ -261,22 +258,6 @@ docker run -d \
   ghcr.io/legeling/prompthub-web:latest
 ```
 
-### 桌面版如何接入自部署网页版
-
-桌面版进入 `设置 -> 数据` 后，可以直接配置：
-
-- 自部署 PromptHub URL
-- 用户名
-- 密码
-
-配置完成后，桌面版可以执行：
-
-- 测试连接
-- 上传当前本地工作区到自部署网页版
-- 从自部署网页版下载并恢复
-- 启动时自动拉取
-- 定时后台推送
-
 ### 数据存放与备份
 
 请备份整个数据根目录，而不只是 SQLite 文件。默认 Compose 示例里建议至少备份：
@@ -299,70 +280,6 @@ apps/web/logs
 
 如果你只是想快速部署，上面的内容已经够用了；更细的工程说明、Compose 变体和开发命令请看 [docs/web-self-hosted.md](./docs/web-self-hosted.md)。
 
-### 下载
-
-从 [Releases](https://github.com/legeling/PromptHub/releases) 下载最新版本 v0.5.5：
-
-| 平台    | 下载                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows | [![Windows x64](https://img.shields.io/badge/Windows_x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.5-x64.exe) [![Windows arm64](https://img.shields.io/badge/Windows_arm64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-Setup-0.5.5-arm64.exe)      |
-| macOS   | [![macOS Apple Silicon](https://img.shields.io/badge/macOS_Apple_Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.5-arm64.dmg) [![macOS Intel](https://img.shields.io/badge/macOS_Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.5-x64.dmg)          |
-| Linux   | [![Linux AppImage](https://img.shields.io/badge/Linux_AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/PromptHub-0.5.5-x64.AppImage) [![Linux deb](https://img.shields.io/badge/Linux_deb-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/legeling/PromptHub/releases/latest/download/prompthub_0.5.5_amd64.deb)                   |
-| 预览版  | [![Preview Prereleases](https://img.shields.io/badge/Preview_Prereleases-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases?q=prerelease%3Atrue) [![0.5.5-beta.1](https://img.shields.io/badge/Historical_Beta-v0.5.5--beta.1-8B5CF6?style=for-the-badge&logo=github&logoColor=white)](https://github.com/legeling/PromptHub/releases/tag/v0.5.5-beta.1) |
-
-> 💡 **架构选择建议**
->
-> - **macOS**：Apple Silicon（M1/M2/M3/M4）下载 `arm64`，Intel Mac 下载 `x64`
-> - **Windows**：绝大多数电脑下载 `x64`；只有 Windows on ARM 设备才下载 `arm64`
-> - **预览版**：如果你想提前测试即将发布的修复，可前往 GitHub `Prereleases` 页面下载，或在应用内设置里显式加入预览更新通道
-> - **`0.5.5-beta.1`**：这是为了补齐历史 `0.5.5` 预览构建机器可判定标识而重新发布的历史 beta 版本。它在 semver 上低于 `0.5.5` stable，应视为手动下载安装的测试版，而不是稳定版用户的默认升级目标
-
-### macOS 通过 Homebrew 安装
-
-```bash
-brew tap legeling/tap   # 首次安装只需执行一次
-brew install --cask prompthub
-```
-
-### Homebrew 用户升级
-
-如果你是通过 Homebrew 安装的，后续升级建议优先使用 Homebrew，不要和应用内更新混用：
-
-```bash
-brew update
-brew upgrade --cask prompthub
-```
-
-如果 Homebrew 已同步到新版本，但本地安装状态异常，可以重新安装当前版本：
-
-```bash
-brew reinstall --cask prompthub
-```
-
-> 💡 **说明**
->
-> - **通过 DMG/EXE 手动安装的用户**：优先使用应用内「检查更新」或前往 Releases 手动下载
-> - **通过 Homebrew 安装的用户**：优先使用 `brew upgrade --cask prompthub`
-> - 混用两种升级方式可能导致 Homebrew 记录的版本与实际安装状态不一致
-
-### macOS 首次启动
-
-由于应用未经过 Apple 公证签名，首次打开时可能会提示 **"PromptHub 已损坏，无法打开"** 或 **"无法验证开发者"**。
-
-**解决方法（推荐）**：打开终端，执行以下命令绕过公证检查：
-
-```bash
-sudo xattr -rd com.apple.quarantine /Applications/PromptHub.app
-```
-
-> 💡 **提示**：如果应用安装在其他位置，请将路径替换为实际安装路径。
-
-**或者**：打开「系统设置」→「隐私与安全性」→ 向下滚动找到安全性部分 → 点击「仍要打开」。
-
-<div align="center">
-  <img src="./docs/imgs/install.png" width="60%" alt="macOS 安装提示"/>
-</div>
-
 ### 从源码构建
 
 ```bash
@@ -374,92 +291,11 @@ cd PromptHub
 pnpm install
 
 # 开发模式
-pnpm dev
+pnpm dev:web
 
-# 构建应用
-pnpm build
+# 构建 Web 应用
+pnpm build:web
 ```
-
-<div id="cli"></div>
-
-## 命令行 CLI
-
-PromptHub 现在同时提供 GUI 和 CLI。
-
-> ⚠️ **当前行为**
->
-> - **桌面版安装后并首次启动一次应用**：PromptHub 会自动安装 `prompthub` 命令
-> - **重新打开一个终端窗口后**：就可以直接使用 `prompthub --参数`
-> - **源码运行 / 构建后的 CLI bundle**：仍然保留，适合开发和调试
-
-### 桌面版用户直接使用
-
-```bash
-prompthub --help
-prompthub prompt list
-prompthub skill list
-prompthub --output table prompt search SEO --favorite
-```
-
-> 💡 **提示**
->
-> - 如果你刚安装完桌面版，请先启动一次 PromptHub
-> - 如果当前终端还识别不到 `prompthub`，请关闭并重新打开终端
-
-### 从源码运行 CLI
-
-```bash
-pnpm install
-
-# 查看帮助
-pnpm cli:dev -- --help
-
-# Prompt 命令
-pnpm cli:dev -- prompt list
-pnpm cli:dev -- prompt get <id>
-pnpm cli:dev -- prompt create --title "Landing Hero" --user-prompt "Write a landing page hero"
-
-# Skill 命令
-pnpm cli:dev -- skill list
-pnpm cli:dev -- skill get <id-or-name>
-pnpm cli:dev -- skill scan
-pnpm cli:dev -- skill install ~/.claude/skills/my-skill
-```
-
-### 使用构建后的 CLI bundle
-
-```bash
-pnpm build
-
-node out/cli/prompthub.cjs --help
-node out/cli/prompthub.cjs prompt list
-node out/cli/prompthub.cjs skill list
-```
-
-### 常用全局参数
-
-```bash
-prompthub --help
-prompthub --output table prompt list
-prompthub --data-dir /path/to/user-data prompt list
-prompthub --app-data-dir /path/to/app-data skill list
-```
-
-- `--output json|table`：切换 JSON 或表格输出
-- `--data-dir`：显式指定 PromptHub 的 `userData` 目录
-- `--app-data-dir`：显式指定应用数据根目录
-
-### 支持的资源命令
-
-- `prompt list|get|create|update|delete|search`
-- `skill list|get|install|scan|delete|remove`
-
-### 说明
-
-- CLI 直接读写 PromptHub 的本地数据库和 skill 仓库
-- CLI 适合脚本化管理、批量导入导出、自动化扫描
-- 桌面版会在首次启动时自动安装 shell 命令包装器
-- 如果你移动了应用安装位置，再次启动 PromptHub 会自动刷新命令包装器路径
 
 <div id="quick-start"></div>
 
@@ -523,7 +359,7 @@ prompthub --app-data-dir /path/to/app-data skill list
 PromptHub/
 ├── apps/
 │   └── web/                 # 自部署 Web 应用
-│       ├── src/             # Hono 服务端与 React 客户端
+│       ├── src/             # Hono 服务端与 React 前端
 │       ├── vendor/          # Web 自有运行时 UI 资源
 │       └── Dockerfile       # Web 镜像构建
 ├── packages/
@@ -600,8 +436,8 @@ PromptHub 现在采用 `docs/` 与 `spec/` 双层文档职责：`docs/` 负责�
 - [x] **Skill 商店更新检测**：商店下载的 Skill 记录安装内容哈希，可检测远端 `SKILL.md` 是否更新
 - [x] **稳定 / 预览更新通道**：默认只更新稳定版，加入预览版本后才会接收 GitHub prerelease 测试版
 - [x] **Skill 更新冲突保护**：本地改动和远端改动同时存在时提示冲突，需显式覆盖才会更新
-- [x] **网页版媒体修复**：Docker/Web 环境支持图片、视频上传，并能显示桌面同步来的本地媒体链接
-- [x] **同步与密码修复**：修复网页端同步后普通文件夹误上锁，新增网页端登录密码修改入口，桌面取消私密需先解锁
+- [x] **网页版媒体修复**：Docker/Web 环境支持图片、视频上传，并能显示导入数据里的本地媒体链接
+- [x] **同步与密码修复**：修复网页端同步后普通文件夹误上锁，新增网页端登录密码修改入口
 
 ### v0.4.9
 
@@ -671,13 +507,12 @@ PromptHub 现在采用 `docs/` 与 `spec/` 双层文档职责：`docs/` 负责�
 
 **网页版 / Web**
 
-- 🌐 **媒体上传与显示修复**：Web/Docker 环境支持图片、视频选择上传，并能显示桌面同步来的 `local-image://` / `local-video://` 媒体
-- 🔐 **同步私密状态修复**：桌面数据同步到网页端时，不再把缺失 `visibility` 的普通文件夹误判为私密
+- 🌐 **媒体上传与显示修复**：Web/Docker 环境支持图片、视频选择上传，并能显示导入数据里的 `local-image://` / `local-video://` 媒体
+- 🔐 **同步私密状态修复**：Web 端导入/同步数据时，不再把缺失 `visibility` 的普通文件夹误判为私密
 - 🔑 **登录密码修改入口**：自托管 Web 设置页新增密码修改表单
 
-**桌面与文档 / Desktop & Docs**
+**文档 / Docs**
 
-- 🔒 **私密文件夹保护**：桌面端取消文件夹私密状态前必须先通过主密码解锁
 - 🌍 **多语言与发版文档同步**：补齐 Skill 更新文案，并同步 README、多语言 README 与官网发布元数据到 `v0.5.5`
 
 > [查看完整更新日志](./CHANGELOG.md)

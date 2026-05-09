@@ -17,9 +17,7 @@ body:
       label: Area
       description: Which area would this improve?
       options:
-        - Desktop app
         - Self-hosted web
-        - CLI
         - Sync / backup / restore
         - Skill Store / Skills
         - Settings / updates

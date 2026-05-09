@@ -208,10 +208,10 @@ interface SettingsState {
 
   // WebDAV sync settings
   // SECURITY NOTE: webdavPassword is stored in localStorage (plaintext).
-  // In Electron, localStorage is sandboxed to the app data directory and not
-  // accessible to other apps, but it is readable on disk. Consider migrating
+  // In packaged runtimes, localStorage may be sandboxed to an app data directory
+  // and not accessible to other apps, but it is readable on disk. Consider migrating
   // sensitive fields (webdavPassword, webdavEncryptionPassword, aiApiKey) to
-  // the main process using Electron's safeStorage API for at-rest encryption.
+  // a server-side secret store for at-rest encryption.
   webdavEnabled: boolean;
   webdavUrl: string;
   webdavUsername: string;

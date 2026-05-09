@@ -75,7 +75,7 @@ describe('web devices routes', () => {
     }
   });
 
-  it('registers desktop heartbeats and lists connected devices', async () => {
+  it('registers browser heartbeats and lists connected devices', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-devices-test-'));
 
     try {
@@ -87,13 +87,13 @@ describe('web devices routes', () => {
           method: 'POST',
           headers: authHeaders(token),
           body: JSON.stringify({
-            id: 'desktop-001',
-            type: 'desktop',
-            name: 'PromptHub Desktop',
-            platform: 'macOS',
+            id: 'browser-001',
+            type: 'browser',
+            name: 'PromptHub Web',
+            platform: 'Chrome',
             appVersion: '0.5.2',
             clientVersion: '0.5.2',
-            userAgent: 'PromptHubDesktop/0.5.2',
+            userAgent: 'PromptHubWeb/0.5.2',
           }),
         }),
       );
@@ -113,10 +113,10 @@ describe('web devices routes', () => {
 
       expect(heartbeatPayload.data).toEqual(
         expect.objectContaining({
-          id: 'desktop-001',
-          type: 'desktop',
-          name: 'PromptHub Desktop',
-          platform: 'macOS',
+          id: 'browser-001',
+          type: 'browser',
+          name: 'PromptHub Web',
+          platform: 'Chrome',
           appVersion: '0.5.2',
         }),
       );
@@ -142,10 +142,10 @@ describe('web devices routes', () => {
 
       expect(listPayload.data).toEqual([
         expect.objectContaining({
-          id: 'desktop-001',
-          type: 'desktop',
-          name: 'PromptHub Desktop',
-          platform: 'macOS',
+            id: 'browser-001',
+            type: 'browser',
+            name: 'PromptHub Web',
+            platform: 'Chrome',
           appVersion: '0.5.2',
         }),
       ]);

@@ -11,7 +11,7 @@ It is not the hosted commercial PromptHub Cloud stack. Keep the boundary clear:
 
 ## Product Scope
 
-This app should stay focused on desktop-equivalent core capabilities:
+This app should stay focused on core self-hosted web workspace capabilities:
 
 - prompt management
 - folders
@@ -28,24 +28,6 @@ It should not grow cloud-only features such as:
 - multi-tenant organization management
 - hosted object storage orchestration
 - cloud admin operations
-
-## Desktop Backup Source
-
-PromptHub Desktop can use this self-hosted web workspace as a personal backup and restore target.
-
-In desktop `Settings -> Data`, configure:
-
-- self-hosted PromptHub URL
-- username
-- password
-
-Then desktop can:
-
-- test the connection
-- upload its current local workspace to PromptHub Web
-- download and restore from PromptHub Web
-- automatically pull once on startup
-- periodically push updates in the background
 
 ## First-Run Bootstrap
 

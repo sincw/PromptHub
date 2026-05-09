@@ -485,7 +485,7 @@ describe('web sync routes', () => {
     }
   }, TEST_TIMEOUT);
 
-  it('keeps newer remote items while merging incoming desktop payload additions', async () => {
+  it('keeps newer remote items while merging incoming backup payload additions', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prompthub-web-sync-merge-'));
 
     try {
@@ -518,15 +518,15 @@ describe('web sync routes', () => {
           headers: authHeaders(token),
           body: JSON.stringify({
             payload: {
-              version: 'desktop-backup-v1',
+              version: 'web-backup-v2',
               exportedAt: '2026-04-16T02:00:00.000Z',
               prompts: [
                 {
                   id: promptBody.data.id,
                   title: 'Remote Older Prompt',
-                  userPrompt: 'desktop older',
+                  userPrompt: 'incoming older',
                   variables: [],
-                  tags: ['desktop'],
+                  tags: ['incoming'],
                   folderId: remoteFolderId,
                   isFavorite: false,
                   isPinned: false,
@@ -537,11 +537,11 @@ describe('web sync routes', () => {
                   updatedAt: '2026-04-16T01:00:00.000Z',
                 },
                 {
-                  id: 'desktop-added-prompt',
-                  title: 'Desktop Added Prompt',
-                  userPrompt: 'desktop new',
+                  id: 'incoming-added-prompt',
+                  title: 'Incoming Added Prompt',
+                  userPrompt: 'incoming new',
                   variables: [],
-                  tags: ['desktop'],
+                  tags: ['incoming'],
                   folderId: remoteFolderId,
                   isFavorite: false,
                   isPinned: false,
@@ -566,18 +566,18 @@ describe('web sync routes', () => {
                 {
                   id: skillBody.data.id,
                   name: 'remote-newer-skill',
-                  content: 'echo desktop older',
-                  instructions: 'echo desktop older',
+                  content: 'echo incoming older',
+                  instructions: 'echo incoming older',
                   protocol_type: 'skill',
                   is_favorite: false,
                   created_at: 1,
                   updated_at: 1,
                 },
                 {
-                  id: 'desktop-added-skill',
-                  name: 'desktop-added-skill',
-                  content: 'echo desktop new',
-                  instructions: 'echo desktop new',
+                  id: 'incoming-added-skill',
+                  name: 'incoming-added-skill',
+                  content: 'echo incoming new',
+                  instructions: 'echo incoming new',
                   protocol_type: 'skill',
                   is_favorite: false,
                   created_at: 2,
@@ -625,8 +625,8 @@ describe('web sync routes', () => {
             userPrompt: 'remote newer',
           }),
           expect.objectContaining({
-            id: 'desktop-added-prompt',
-            title: 'Desktop Added Prompt',
+            id: 'incoming-added-prompt',
+            title: 'Incoming Added Prompt',
           }),
         ]),
       );
@@ -646,8 +646,8 @@ describe('web sync routes', () => {
             content: 'echo remote newer',
           }),
           expect.objectContaining({
-            id: 'desktop-added-skill',
-            name: 'desktop-added-skill',
+            id: 'incoming-added-skill',
+            name: 'incoming-added-skill',
           }),
         ]),
       );

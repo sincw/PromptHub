@@ -255,7 +255,7 @@ export function WebDeviceSettings() {
                           <div>
                             {t("settings.deviceType")}:{" "}
                             {device.type === "desktop"
-                              ? t("settings.deviceTypeDesktop")
+                              ? t("settings.deviceTypeNative")
                               : t("settings.deviceTypeBrowser")}
                           </div>
                           <div>

@@ -82,7 +82,7 @@ export class DeviceService {
       type: input.type,
       name: normalizeString(
         input.name,
-        input.type === 'desktop' ? 'PromptHub Desktop' : 'PromptHub Web',
+        'PromptHub Web',
       ),
       platform: normalizeString(input.platform, 'Unknown'),
       appVersion: normalizeString(input.appVersion) || undefined,

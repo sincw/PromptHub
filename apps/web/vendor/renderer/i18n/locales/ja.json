@@ -754,7 +754,7 @@
     "aiWorkbenchConnectionNetworkError": "プロバイダーが応答する前にリクエストが失敗しました。API URL、ネットワーク、プロキシ、または CORS 制限を確認してください。",
     "aiWorkbenchConnectionAuthError": "このリクエストはプロバイダーに拒否されました。API Key、アカウント権限、エンドポイントパスを確認してください。",
     "aiWorkbenchCorsBlocked": "ブラウザが {{target}} へのクロスオリジン要求（CORS）をブロックしました。プロバイダー側で CORS を許可するか、アプリ側プロキシを使用してください。",
-    "aiWorkbenchCorsBlockedDev": "ブラウザがクロスオリジン要求（CORS）をブロックしました。現在のページ {{origin}} から {{target}} へは直接アクセスできません。プロバイダー側で CORS を許可するか、Electron メインプロセス経由にしてください。",
+    "aiWorkbenchCorsBlockedDev": "ブラウザがクロスオリジン要求（CORS）をブロックしました。現在のページ {{origin}} から {{target}} へは直接アクセスできません。プロバイダー側で CORS を許可するか、サーバー側プロキシ経由にしてください。",
     "aiWorkbenchInvalidCustomParams": "カスタムパラメータは、文字列・数値・真偽値のみを持つ JSON オブジェクトである必要があります",
     "aiWorkbenchModelDeleted": "モデルを削除しました",
     "aiWorkbenchIncompleteModel": "このモデル設定は不完全なためテストできません",
@@ -883,7 +883,6 @@
     "deviceSyncCadence": "クライアント同期間隔",
     "deviceSyncCadenceDesc": "デスクトップとブラウザのクライアントがこのセルフホスト PromptHub ワークスペースと同期する頻度を設定します。",
     "deviceType": "デバイスタイプ",
-    "deviceTypeDesktop": "デスクトップクライアント",
     "deviceTypeBrowser": "ブラウザクライアント",
     "devicePlatform": "プラットフォーム",
     "deviceVersion": "バージョン",
@@ -925,7 +924,8 @@
     "previewChannelConfirmConsent": "この変更を明示的に確認するまでは、PromptHub は安定版チャンネルのままです。",
     "previewChannelConfirmCancel": "安定版のままにする",
     "previewChannelConfirmEnable": "プレビュー更新を有効にする",
-    "previewChannelActiveDesc": "バージョン: {{version}} ・ 現在はプレビューチャンネルです"
+    "previewChannelActiveDesc": "バージョン: {{version}} ・ 現在はプレビューチャンネルです",
+    "deviceTypeNative": "デスクトップクライアント"
   },
   "import": {
     "clipboardTitle": "クリップボードから Prompt をインポート",

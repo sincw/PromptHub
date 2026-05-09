@@ -13,7 +13,7 @@ const sync = new Hono();
 const backupService = new BackupService();
 const settingsService = new SettingsService();
 
-// Unified path shared with desktop. Legacy path kept for pull fallback (migration).
+// Unified path. Legacy path kept for pull fallback during migration.
 const REMOTE_BACKUP_DIR = 'prompthub-backup';
 const REMOTE_BACKUP_DATA_FILE = 'prompthub-backup/data.json';
 const REMOTE_MANIFEST_FILE = 'prompthub-backup/manifest.json';
@@ -542,7 +542,7 @@ sync.post('/push', async (c) => {
       return error(c, 422, ErrorCode.VALIDATION_ERROR, `WebDAV upload failed with HTTP ${pushed.status}`);
     }
 
-    // Write a minimal manifest.json so the desktop client can locate data.json
+    // Write a minimal manifest.json so older sync tooling can locate data.json.
     const manifest = {
       version: '1',
       createdAt: exported.exportedAt,

@@ -1,7 +1,7 @@
 export interface PromptHubRuntimeCapabilities {
   appUpdate: boolean;
   dataRecovery: boolean;
-  desktopWindowControls: boolean;
+  nativeWindowControls: boolean;
   skillDistribution: boolean;
   skillFileEditing: boolean;
   skillLocalScan: boolean;
@@ -20,7 +20,7 @@ export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
     return {
       appUpdate: false,
       dataRecovery: false,
-      desktopWindowControls: false,
+      nativeWindowControls: false,
       skillDistribution: false,
       skillFileEditing: false,
       skillLocalScan: false,
@@ -32,7 +32,7 @@ export function getRuntimeCapabilities(): PromptHubRuntimeCapabilities {
   return {
     appUpdate: true,
     dataRecovery: true,
-    desktopWindowControls: true,
+    nativeWindowControls: true,
     skillDistribution: true,
     skillFileEditing: true,
     skillLocalScan: true,

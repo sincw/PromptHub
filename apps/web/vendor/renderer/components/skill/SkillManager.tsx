@@ -515,7 +515,7 @@ export function SkillManager() {
   const emptyStateHint = webSkillLibraryMode
     ? t(
         "skill.webLibraryHint",
-        "Create or import your own skills here. Platform distribution and skill marketplaces are desktop-only.",
+        "Create or import your own skills here. Platform distribution is unavailable in this web workspace.",
       )
     : isDistributionView
     ? t(

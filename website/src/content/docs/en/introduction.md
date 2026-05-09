@@ -42,19 +42,19 @@ Export to JSON, YAML, or CSV. Easily integrate into your workflow or codebase.
 
 ## Tech Stack
 
-- **Runtime**: Electron 33
-- **Frontend**: React 18 + TypeScript
+- **Server**: Hono + Node.js
+- **Frontend**: React 18 + TypeScript + Vite
 - **Styling**: Tailwind CSS
 - **Database**: SQLite (WASM)
 - **State Management**: Zustand
 
 ## System Requirements
 
-| Platform | Minimum Version          |
-| -------- | ------------------------ |
-| macOS    | 10.15 Catalina           |
-| Windows  | Windows 10               |
-| Linux    | Ubuntu 18.04 / Debian 10 |
+| Item | Requirement |
+| ---- | ----------- |
+| Node.js | 20+ |
+| pnpm | 9+ |
+| Deployment | Docker or a host that can run the Node.js service |
 
 ## License
 

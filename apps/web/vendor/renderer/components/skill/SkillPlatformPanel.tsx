@@ -60,7 +60,7 @@ export function SkillPlatformPanel({
   const runtimeCapabilities = getRuntimeCapabilities();
   const showPlatformIntegration = runtimeCapabilities.skillPlatformIntegration;
   const showLocalSourceShortcut =
-    runtimeCapabilities.desktopWindowControls && sourceMeta?.kind === "local";
+    runtimeCapabilities.nativeWindowControls && sourceMeta?.kind === "local";
 
   return (
     <div className="flex h-full min-h-0 flex-col">

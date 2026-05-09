@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a reproducible bug in PromptHub desktop, web, CLI, or sync flows.
+description: Report a reproducible bug in PromptHub Web or sync flows.
 title: "[Bug]: "
 labels:
   - bug
@@ -17,9 +17,7 @@ body:
       label: Area
       description: Which part of PromptHub is affected?
       options:
-        - Desktop app
         - Self-hosted web
-        - CLI
         - Sync / backup / restore
         - Skill Store / Skills
         - Settings / updates

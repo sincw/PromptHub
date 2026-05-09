@@ -22,11 +22,11 @@ import { getPromptsDir } from '../runtime-paths.js';
  *       0002.md
  * ```
  *
- * 与桌面端的关键差异（本文件独有）：
+ * 与历史工作区实现的关键差异（本文件独有）：
  * 1. `ownerUserId` / `visibility` 写入 prompt frontmatter 和 `_folder.json`
  *    以保留多租户归属。
  * 2. `usageCount` / `lastAiResponse` / `aiTestSessions` / `promptOptimizationSessions`
- *    写入 prompt frontmatter（桌面端不持久化）。
+ *    写入 prompt frontmatter。
  * 3. 同步采用推土机式 `rmSync(promptsDir) + 重写`——Web 服务进程独占数据目录，
  *    不需要 `.trash/`、同名冲突裁决、restore marker、四象限 bootstrap 等保护。
  */
@@ -574,7 +574,7 @@ function updatePromptOwnership(db: Database.Database, prompt: Prompt): void {
 /**
  * 推土机式同步：清空 `<promptsDir>` 后按 DB 重写整棵文件树。
  *
- * 安全性：Web 服务进程独占数据卷、用户不会手动改文件，因此无需桌面端的
+ * 安全性：Web 服务进程独占数据卷、用户不会手动改文件，因此无需旧工作区的
  * `.trash/` 软删除保护。数据安全由上层的 `.phub.gz` 备份机制兜底。
  */
 export function syncPromptWorkspaceFromDatabase(

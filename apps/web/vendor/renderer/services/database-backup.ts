@@ -779,7 +779,7 @@ export async function downloadSelectiveExport(
   };
   const exportJson = JSON.stringify(exportFile, null, 2);
 
-  // In Electron, delegate to main process which creates a proper ZIP with readable files
+  // In packaged runtimes, delegate to the bridge which creates a proper ZIP with readable files.
   if (typeof window !== "undefined" && window.electron?.exportZip) {
     let aiConfigJson: string | undefined;
     let settingsJson: string | undefined;
@@ -812,7 +812,7 @@ export async function downloadSelectiveExport(
     return;
   }
 
-  // Fallback for web / non-Electron: download as PromptHub JSON format
+  // Fallback for browser runtime: download as PromptHub JSON format.
   const blob = new Blob([exportJson], { type: "application/json" });
   triggerBlobDownload(
     blob,

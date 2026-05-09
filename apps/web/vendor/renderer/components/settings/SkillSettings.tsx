@@ -95,7 +95,7 @@ export function SkillSettings({ onNavigate }: SkillSettingsProps) {
             <p className="text-xs text-muted-foreground">
               {t(
                 "settings.webSkillSettingsDesc",
-                "The self-hosted web workspace keeps Skill content in the same backup dataset, but does not manage local platform directories, symlinks, or desktop-only distribution flows.",
+                "The self-hosted web workspace keeps Skill content in the same backup dataset, but does not manage local platform directories, symlinks, or native distribution flows.",
               )}
             </p>
           </div>

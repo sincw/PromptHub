@@ -42,19 +42,19 @@ title: 项目概览
 
 ## 技术栈
 
-- **运行时**: Electron 33
-- **前端**: React 18 + TypeScript
+- **服务端**: Hono + Node.js
+- **前端**: React 18 + TypeScript + Vite
 - **样式**: Tailwind CSS
 - **数据库**: SQLite (WASM)
 - **状态管理**: Zustand
 
 ## 系统要求
 
-| 平台    | 最低版本                 |
-| ------- | ------------------------ |
-| macOS   | 10.15 Catalina           |
-| Windows | Windows 10               |
-| Linux   | Ubuntu 18.04 / Debian 10 |
+| 项目 | 要求 |
+| ---- | ---- |
+| Node.js | 20+ |
+| pnpm | 9+ |
+| 部署 | Docker 或可运行 Node.js 服务的主机 |
 
 ## 开源协议
 

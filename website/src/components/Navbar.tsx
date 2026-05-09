@@ -91,7 +91,7 @@ export const Navbar = ({ lang, dict, currentPath = '' }: NavbarProps) => {
           </a>
         </div>
 
-        {/* Center: Desktop Nav (Absolute Centered) */}
+        {/* Center: Wide Nav (Absolute Centered) */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <nav className="hidden md:flex items-center gap-8 text-sm text-zinc-400 font-medium bg-surface/50 px-6 py-2 rounded-full border border-white/5 backdrop-blur-sm">
             <a href={`${homeLink}#features`} className="hover:text-white transition-colors">{dict.features}</a>

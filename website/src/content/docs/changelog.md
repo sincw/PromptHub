@@ -13,14 +13,14 @@
 
 ### 修复 / Fixed
 
-- 🌐 **网页版媒体上传与显示修复**：Web/Docker 环境中的图片、视频选择现在会通过媒体 API 上传，桌面同步来的 `local-image://` / `local-video://` 地址会自动解析为网页端可访问的 `/api/media/...` 地址
-  - **Web Media Upload and Display Fixed**: Image/video selection in the Web/Docker build now uploads through the media API, and desktop-synced `local-image://` / `local-video://` URLs resolve to browser-accessible `/api/media/...` URLs
-- 🔐 **网页同步私密状态修复**：Web 端导入/同步文件夹时不再把缺失 `visibility` 的桌面数据误判为私密，避免普通文件夹同步后全部上锁
-  - **Web Sync Privacy State Fixed**: Web import/sync no longer treats desktop folders without `visibility` as private, preventing normal folders from becoming locked after sync
+- 🌐 **网页版媒体上传与显示修复**：Web/Docker 环境中的图片、视频选择现在会通过媒体 API 上传，导入同步来的 `local-image://` / `local-video://` 地址会自动解析为网页端可访问的 `/api/media/...` 地址
+  - **Web Media Upload and Display Fixed**: Image/video selection in the Web/Docker build now uploads through the media API, and legacy app-synced `local-image://` / `local-video://` URLs resolve to browser-accessible `/api/media/...` URLs
+- 🔐 **网页同步私密状态修复**：Web 端导入/同步文件夹时不再把缺失 `visibility` 的导入数据误判为私密，避免普通文件夹同步后全部上锁
+  - **Web Sync Privacy State Fixed**: Web import/sync no longer treats legacy app folders without `visibility` as private, preventing normal folders from becoming locked after sync
 - 🔑 **网页版登录密码修改入口**：自托管 Web 设置页新增密码修改表单，支持输入当前密码并设置新密码
   - **Web Login Password Change Entry**: The self-hosted Web settings page now includes a password-change form that requires the current password and a new password
-- 🔒 **桌面私密文件夹取消加密保护**：编辑私密文件夹时，取消私密状态同样需要先通过主密码解锁，避免未授权直接取消加密
-  - **Desktop Private Folder Disable Protection**: Disabling privacy on an encrypted desktop folder now requires unlocking with the master password first
+- 🔒 **私密文件夹取消加密保护**：编辑私密文件夹时，取消私密状态同样需要先通过主密码解锁，避免未授权直接取消加密
+  - **Legacy App Private Folder Disable Protection**: Disabling privacy on an encrypted legacy app folder now requires unlocking with the master password first
 
 ### 维护 / Maintenance
 
@@ -57,8 +57,8 @@
 
 ### 修复 / Fixed
 
-- 🚨 **修复 Windows 升级后"数据为空 + 应用无限重启"严重问题**：v0.5.2 在 Windows 从旧版升级后，如果新 `userData` 目录被检测为空，渲染进程会自动触发恢复流程，主进程随即 `app.relaunch() + app.quit()`；叠加 electron-updater 的 `autoInstallOnAppQuit=true`，会让每次退出都重装 pending 包并再次空库启动，形成无限重启循环。现移除渲染端自动恢复（必须由用户在 `DataRecoveryDialog` 点击确认），主进程对 `performRecovery` 增加会话级防抖，所有平台统一关闭 `autoInstallOnAppQuit`，并将 `bootstrapPromptWorkspace` 包裹为 try/catch，避免工作区初始化失败阻塞启动
-  - **Fix Windows Infinite-Restart Loop After Upgrade**: In v0.5.2, upgrading on Windows could produce an empty detected `userData`, which triggered auto-recovery in the renderer, then `app.relaunch() + app.quit()` in the main process. Combined with electron-updater's `autoInstallOnAppQuit=true`, every quit reinstalled the pending package and re-entered the empty-DB branch, producing an infinite restart loop. Auto-recovery has been removed from the renderer (the user must now confirm in `DataRecoveryDialog`), the main process guards `performRecovery` with a session-level flag, `autoInstallOnAppQuit` is now `false` on every platform, and `bootstrapPromptWorkspace` is wrapped in try/catch so workspace errors no longer block startup
+- 🚨 **修复 Windows 升级后"数据为空 + 应用无限重启"严重问题**：v0.5.2 在 Windows 从旧版升级后，如果新 `userData` 目录被检测为空，渲染进程会自动触发恢复流程，主进程随即 `app.relaunch() + app.quit()`；叠加 native updater 的 `autoInstallOnAppQuit=true`，会让每次退出都重装 pending 包并再次空库启动，形成无限重启循环。现移除渲染端自动恢复（必须由用户在 `DataRecoveryDialog` 点击确认），主进程对 `performRecovery` 增加会话级防抖，所有平台统一关闭 `autoInstallOnAppQuit`，并将 `bootstrapPromptWorkspace` 包裹为 try/catch，避免工作区初始化失败阻塞启动
+  - **Fix Windows Infinite-Restart Loop After Upgrade**: In v0.5.2, upgrading on Windows could produce an empty detected `userData`, which triggered auto-recovery in the renderer, then `app.relaunch() + app.quit()` in the main process. Combined with native updater's `autoInstallOnAppQuit=true`, every quit reinstalled the pending package and re-entered the empty-DB branch, producing an infinite restart loop. Auto-recovery has been removed from the renderer (the user must now confirm in `DataRecoveryDialog`), the main process guards `performRecovery` with a session-level flag, `autoInstallOnAppQuit` is now `false` on every platform, and `bootstrapPromptWorkspace` is wrapped in try/catch so workspace errors no longer block startup
 - 📝 **新增启动诊断日志**：关键启动事件（DB 初始化、恢复候选检测、恢复执行与结果）现会以 JSON 行写入 `<userData>/logs/startup.log`，便于用户在反馈升级/恢复问题时提供可分析的上下文；日志超过 512KB 自动轮转
   - **Startup Diagnostic Log**: Key startup events (DB init, recovery candidate detection, recovery execution and outcome) are now appended as JSON lines to `<userData>/logs/startup.log`, making upgrade/recovery issue reports diagnosable from user-shared logs; the file auto-rotates above 512 KB
 - 🗂️ **工作区引导重构为"四象限 + 双向合并"**：`bootstrapPromptWorkspace` 不再无条件 `rmSync(promptsDir)` 再导出；现在按 `DB 空 / 工作区空` 组合分四种情形处理：两边都空时 noop；仅 DB 有数据按文件真源导出；仅工作区有数据反向导入 DB；两边都有数据则按 `updatedAt` 做 newer-wins 合并。DB 端 `updated_at` 的 INTEGER/string 类型不一致已由统一的 `toEpochMs()` 比较路径消除。工作区侧被删除/重命名的遗留目录不再直接 `rmSync`，而是移动到 `<workspace>/.trash/<ISO>/` 并保留最近 5 个快照，支持 `EXDEV` 跨卷降级
@@ -90,8 +90,8 @@
 
 - 🌐 **自部署 PromptHub Web**：新增轻量级 self-hosted 网页版，支持首次 `/setup` 初始化管理员、Prompt / Folder / Skill / Media / Settings 浏览器访问，以及 Docker、Docker Compose 与 GHCR 镜像部署
   - **Self-Hosted PromptHub Web**: Added a lightweight self-hosted web edition with first-run `/setup` bootstrap, browser access for Prompts / Folders / Skills / Media / Settings, plus Docker, Docker Compose, and GHCR image deployment
-- 🔁 **桌面版直连自部署网页版备份 / 恢复**：桌面版 `设置 -> 数据` 现可直接连接 PromptHub Web，执行测试连接、上传、下载、启动拉取与定时推送，作为单用户场景下比 WebDAV 更直接的备份源 / 恢复源
-  - **Desktop Backup / Restore via Self-Hosted Web**: Desktop can now connect directly to PromptHub Web from `Settings -> Data` for connection tests, upload, download, startup pull, and scheduled push, providing a simpler backup/restore target than WebDAV for single-user setups
+- 🔁 **旧版应用直连自部署网页版备份 / 恢复**：旧版应用 `设置 -> 数据` 现可直接连接 PromptHub Web，执行测试连接、上传、下载、启动拉取与定时推送，作为单用户场景下比 WebDAV 更直接的备份源 / 恢复源
+  - **Legacy App Backup / Restore via Self-Hosted Web**: Legacy App can now connect directly to PromptHub Web from `Settings -> Data` for connection tests, upload, download, startup pull, and scheduled push, providing a simpler backup/restore target than WebDAV for single-user setups
 
 ### 修复 / Fixed
 
@@ -99,19 +99,19 @@
   - **Automatic Pre-Upgrade Data Snapshot**: Before installing an in-app update, PromptHub now creates a local snapshot of the current `userData` directory; if the backup fails, installation is blocked so upgrades are never attempted without a rollback path
 - 🔄 **旧数据恢复链路补强**：当当前数据库为空时，应用会继续扫描旧数据位置并提供一键恢复，覆盖 `0.4.7 -> 0.4.8` 这类因数据路径切换造成“看起来数据丢失”的升级场景
   - **Legacy Data Recovery Hardening**: When the current database is empty, the app scans known legacy data locations and offers one-click recovery, covering upgrade paths like `0.4.7 -> 0.4.8` where data appeared missing because the storage path changed
-- 🧠 **自部署同步改为安全合并**：桌面版与自部署网页版的 Prompt / Folder / Skill 双向同步改为按稳定 `id` 和 `updatedAt` 合并，双方各自新增的内容会保留；同一条记录冲突时以更新时间更新的一端为准；删除不会自动传播，避免误删放大
-  - **Merge-Safe Self-Hosted Sync**: Desktop and self-hosted web now merge Prompt / Folder / Skill data by stable `id` and `updatedAt`, preserving records added on either side; conflicts on the same record resolve to the newer update; deletions do not auto-propagate to avoid accidental data loss
+- 🧠 **自部署同步改为安全合并**：旧版应用与自部署网页版的 Prompt / Folder / Skill 双向同步改为按稳定 `id` 和 `updatedAt` 合并，双方各自新增的内容会保留；同一条记录冲突时以更新时间更新的一端为准；删除不会自动传播，避免误删放大
+  - **Merge-Safe Self-Hosted Sync**: Legacy App and self-hosted web now merge Prompt / Folder / Skill data by stable `id` and `updatedAt`, preserving records added on either side; conflicts on the same record resolve to the newer update; deletions do not auto-propagate to avoid accidental data loss
 - 🔗 **Symlink 安装失败自动回退复制模式**：在 Windows 或不支持符号链接的文件系统上，如果创建 Skill 平台软链接返回 `EPERM`、`EACCES` 或 `ENOTSUP`，现在会自动降级为复制安装，而不是直接失败
   - **Symlink Install Fallback to Copy Mode**: On Windows or filesystems that do not support symlinks, Skill deployment now falls back to copy mode when symlink creation returns `EPERM`, `EACCES`, or `ENOTSUP`, instead of failing the install outright
 
 ### 优化 / Improvements
 
-- 🗂️ **文件真源 + SQLite 索引**：桌面版与自部署网页版的 Prompt 主数据链统一为 workspace 文件真源 + SQLite 索引，支持从 workspace 自动回灌数据库，并把 settings、media 等数据继续收敛到同一工作区结构
-  - **File Truth + SQLite Index**: Desktop and self-hosted web now converge on workspace files as the source of truth with SQLite as the index layer, including automatic database rebuild from workspace files and a more unified workspace layout for settings and media
+- 🗂️ **文件真源 + SQLite 索引**：旧版应用与自部署网页版的 Prompt 主数据链统一为 workspace 文件真源 + SQLite 索引，支持从 workspace 自动回灌数据库，并把 settings、media 等数据继续收敛到同一工作区结构
+  - **File Truth + SQLite Index**: Legacy App and self-hosted web now converge on workspace files as the source of truth with SQLite as the index layer, including automatic database rebuild from workspace files and a more unified workspace layout for settings and media
 - 📦 **自部署交付链补齐**：补齐 web 专用 README、根脚本、CI 校验、GHCR 镜像发布与 compose 部署说明，self-hosted web 不再是“代码存在但没有正式交付链”的状态
   - **Self-Hosted Delivery Pipeline**: Added dedicated web docs, root scripts, CI verification, GHCR image publishing, and compose deployment guidance so the self-hosted web app now has a real delivery pipeline
-- 🧪 **桌面版 ↔ 自部署网页版联调回归**：补齐桌面版与本地 self-hosted web 的连接、上传、下载、启动拉取与同步合并回归测试
-  - **Desktop ↔ Self-Hosted Web Regression Coverage**: Added regression coverage for desktop-to-web connection, upload, download, startup pull, and merge-safe sync flows against a local self-hosted PromptHub Web instance
+- 🧪 **旧版应用 ↔ 自部署网页版联调回归**：补齐旧版应用与本地 self-hosted web 的连接、上传、下载、启动拉取与同步合并回归测试
+  - **Legacy App ↔ Self-Hosted Web Regression Coverage**: Added regression coverage for legacy app-to-web connection, upload, download, startup pull, and merge-safe sync flows against a local self-hosted PromptHub Web instance
 
 ### 维护 / Maintenance
 
@@ -187,8 +187,8 @@
   - **Skill Metadata Edit Revert Fix**: Fixed a bug where editing a Skill description was reverted by `useEffect` triggering `syncSkillFromRepo()` which read the stale disk value; the `SKILL_UPDATE` handler now auto-calls `syncFrontmatterToRepo()` on metadata changes
 - 🐛 **数据库迁移失败仍被标记为完成修复**：迁移失败时不再将版本标记为已完成，避免后续启动跳过失败的迁移
   - **Database Migration Failure Marking Fix**: Failed migrations no longer mark the version as completed, preventing subsequent launches from skipping failed migrations
-- 🐛 **Electron 窗口 render frame disposed 崩溃修复**：`emitWindowVisibility()`、fullscreen 回调和 close 事件中新增 `isDestroyed()` guard
-  - **Electron Window Render Frame Disposed Crash Fix**: Added `isDestroyed()` guards in `emitWindowVisibility()`, fullscreen callbacks, and close events
+- 🐛 **legacy runtime 窗口 render frame disposed 崩溃修复**：`emitWindowVisibility()`、fullscreen 回调和 close 事件中新增 `isDestroyed()` guard
+  - **legacy runtime Window Render Frame Disposed Crash Fix**: Added `isDestroyed()` guards in `emitWindowVisibility()`, fullscreen callbacks, and close events
 
 ### 优化 / Improvements
 
@@ -211,7 +211,7 @@
 
 ### 修复 / Fixed
 
-- 🪟 **Windows 二次启动错误修复**：修复 Windows 上 PromptHub 已运行时再次点击桌面图标，虽然能唤起主窗口但第二实例仍继续执行启动流程，最终报 `loading file .../app.asar/out/renderer/index.html` 失败的问题
+- 🪟 **Windows 二次启动错误修复**：修复 Windows 上 PromptHub 已运行时再次点击应用图标，虽然能唤起主窗口但第二实例仍继续执行启动流程，最终报 `loading file .../app.asar/out/renderer/index.html` 失败的问题
   - **Windows Relauch Error Fix**: Fixed the Windows case where launching PromptHub again while it was already running still let the second instance continue bootstrapping, causing a `loading file .../app.asar/out/renderer/index.html` startup error even though the main window was restored
 - 🧭 **自定义 Skill 商店源支持本地仓库路径**：修复自定义商店源把 `git-repo` 和 `local-dir` 都错误限制为 HTTPS 地址的问题，现已支持本地 git 工作目录和 `file://` 路径
   - **Local Repository Support for Custom Skill Stores**: Fixed custom store source validation incorrectly forcing both `git-repo` and `local-dir` sources to use HTTPS URLs, and added support for local git working directories and `file://` paths
@@ -258,8 +258,8 @@
 
 ### 新功能 / Added
 
-- 🖥️ **桌面版 CLI 命令**：桌面版安装后首次启动应用，会自动安装 `prompthub` 命令包装器；重新打开终端后即可直接执行 `prompthub --help`
-  - **Desktop CLI Command**: The desktop app now installs the `prompthub` shell wrapper on first launch, so users can run `prompthub --help` directly after reopening their terminal
+- 🖥️ **旧版应用 CLI 命令**：旧版应用安装后首次启动应用，会自动安装 `prompthub` 命令包装器；重新打开终端后即可直接执行 `prompthub --help`
+  - **Legacy App CLI Command**: The legacy app app now installs the `prompthub` shell wrapper on first launch, so users can run `prompthub --help` directly after reopening their terminal
 - 🤝 **平台支持扩展**：新增 Qoder、QoderWork 与 CodeBuddy 平台支持，并为 CodeBuddy 补齐亮色/暗色图标资源
   - **Platform Support Expansion**: Added Qoder, QoderWork, and CodeBuddy platform support, including dedicated light and dark CodeBuddy icons
 
@@ -307,8 +307,8 @@
   - **Deployment Status Refresh Fix**: Fixed sidebar/filter deployment state staying stale after install or uninstall operations and still showing skills as pending
 - 📁 **本地托管目录扫描修复**：默认本地扫描现在会包含 PromptHub 自己托管的 `userData/skills` 目录，手动放入的 Skill 可被识别
   - **Managed Skill Folder Scan Fix**: Default local scan now includes PromptHub's managed `userData/skills` directory so manually added skills can be discovered
-- 📸 **版本快照交互修复**：修复创建快照按钮依赖原生 `window.prompt()` 导致 Electron 环境下“点击没反应”的问题，改为应用内弹窗
-  - **Snapshot Interaction Fix**: Replaced unstable native `window.prompt()` snapshot creation with an in-app modal after the button appeared unresponsive in Electron
+- 📸 **版本快照交互修复**：修复创建快照按钮依赖原生 `window.prompt()` 导致 legacy runtime 环境下“点击没反应”的问题，改为应用内弹窗
+  - **Snapshot Interaction Fix**: Replaced unstable native `window.prompt()` snapshot creation with an in-app modal after the button appeared unresponsive in legacy runtime
 
 ### 优化 / Improvements
 
@@ -340,8 +340,8 @@
   - **Homebrew Upgrade Guidance**: Added `brew upgrade --cask prompthub` instructions to macOS update prompt for Homebrew users
 - 🌍 **更新提示多语言**：macOS 手动安装提示更新为 7 语言（zh/zh-TW/en/ja/de/es/fr），包含 DMG 安装和 Homebrew 升级两种方式
   - **Update Prompt i18n**: Updated macOS manual install instructions across all 7 locales with DMG and Homebrew upgrade paths
-- 🔧 **CI/CD manifest 修正**：新增发布前 SHA512/size 校正脚本，修复 electron-builder 生成的 manifest 与实际二进制不一致的问题
-  - **CI/CD Manifest Fix**: Added pre-release SHA512/size reconciliation script, fixing electron-builder manifest vs actual binary mismatch
+- 🔧 **CI/CD manifest 修正**：新增发布前 SHA512/size 校正脚本，修复 native builder 生成的 manifest 与实际二进制不一致的问题
+  - **CI/CD Manifest Fix**: Added pre-release SHA512/size reconciliation script, fixing native builder manifest vs actual binary mismatch
 - 🖼️ **绘图提示词 UI 优化**：`image` 类型提示词的"参考媒体"区域从折叠属性面板中提取出来，作为一级 UI 元素与 Prompt 编辑器同层展示
   - **Image Prompt UI Enhancement**: Extracted "Reference Media" section from collapsible Properties panel for `image` type prompts, displayed as a first-class UI element at the same level as the prompt editor
 - 💡 **上传限制提示**：媒体上传区域新增格式与大小说明（图片 JPG/PNG/GIF/WebP，视频 MP4/WebM/MOV，单文件 ≤50MB）
@@ -414,8 +414,8 @@
   - **WASM SQLite Migration**: Replaced better-sqlite3 (native .node) with node-sqlite3-wasm (pure WASM), fixing "not a valid Win32 application" errors on Windows x64/arm64 (closes #55, #56)
 - 🔧 **数据库初始化修复**：拆分 Schema 为表创建和索引创建两阶段，修复旧数据库升级时 "no such column: is_pinned" 错误
   - **Database Init Fix**: Split schema into table creation and index creation phases, fixing "no such column: is_pinned" error on existing databases
-- 🔧 **CI/CD 简化**：移除 electron-rebuild 和原生模块架构验证步骤，所有平台构建流程统一
-  - **CI/CD Simplification**: Removed electron-rebuild and native module architecture verification steps, unified build pipeline across all platforms
+- 🔧 **CI/CD 简化**：移除 native rebuild 和原生模块架构验证步骤，所有平台构建流程统一
+  - **CI/CD Simplification**: Removed native rebuild and native module architecture verification steps, unified build pipeline across all platforms
 
 ---
 
@@ -515,8 +515,8 @@
 
 ### 修复 / Fixed
 
-- 🍎 **macOS Intel 启动修复**：修复 macOS Intel 版本启动后白屏/无响应的问题，原因是 `better-sqlite3` 原生模块未针对 Electron 编译 (closes #35)
-  - **macOS Intel Launch Fix**: Fixed blank screen on macOS Intel caused by `better-sqlite3` ABI mismatch with Electron
+- 🍎 **macOS Intel 启动修复**：修复 macOS Intel 版本启动后白屏/无响应的问题，原因是 `better-sqlite3` 原生模块未针对 legacy runtime 编译 (closes #35)
+  - **macOS Intel Launch Fix**: Fixed blank screen on macOS Intel caused by `better-sqlite3` ABI mismatch with legacy runtime
 - 🚀 **自动更新修复**：禁用 NSIS 增量更新包，解决 Windows 平台更新时 SHA512 不匹配的问题
   - **Auto-update Fix**: Disabled NSIS differential packages to resolve SHA512 mismatch errors on Windows
 - 🐛 **Lint 修复**：修复 GitHub Action 中的上下文访问校验警告

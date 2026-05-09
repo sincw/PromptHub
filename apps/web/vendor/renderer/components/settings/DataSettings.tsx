@@ -764,7 +764,7 @@ export function DataSettings() {
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {t(
                       "settings.selfHostedSyncDesc",
-                      "Use your deployed PromptHub Web as an authenticated backup target and restore source for desktop data without WebDAV.",
+                      "Use your deployed PromptHub Web as an authenticated backup target and restore source without WebDAV.",
                     )}
                   </p>
                 </div>
@@ -952,7 +952,7 @@ export function DataSettings() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {t(
                           "settings.selfHostedAutoRunDesc",
-                          "Keep desktop and your self-hosted PromptHub workspace aligned on a background schedule.",
+                          "Keep this workspace aligned with your self-hosted PromptHub deployment on a background schedule.",
                         )}
                       </p>
                     </div>
@@ -996,7 +996,7 @@ export function DataSettings() {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {t(
                           "settings.selfHostedSyncOnStartupDesc",
-                          "Automatically pull from your self-hosted PromptHub workspace after desktop startup. Changes take effect on next launch.",
+                          "Automatically pull from your self-hosted PromptHub workspace after startup. Changes take effect on next launch.",
                         )}
                       </p>
                     </div>

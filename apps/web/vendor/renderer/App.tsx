@@ -387,8 +387,8 @@ function App() {
     window.addEventListener("open-update-dialog", handleOpenUpdate);
 
     return () => {
-      // Cleanup Electron/IPC listeners to prevent leaks on unmount/remount
-      // 清理 Electron/IPC 监听，避免卸载/重挂载导致重复触发
+      // Cleanup runtime listeners to prevent leaks on unmount/remount.
+      // 清理运行时监听，避免卸载/重挂载导致重复触发
       window.api?.off?.("window:fullscreen-changed", handleFullscreenChanged);
       window.api?.off?.(
         "window:visibility-changed",
@@ -692,7 +692,7 @@ function App() {
         // IMPORTANT: We MUST NOT auto-execute performRecovery here. Historically
         // this code auto-picked the best candidate and called performRecovery
         // directly, which triggered an unconditional relaunch+quit inside the
-        // main process. On Windows upgrades, combined with electron-updater's
+        // main process. On Windows upgrades, combined with native updater
         // `autoInstallOnAppQuit=true` and empty workspace scenarios, this
         // produced an instant restart loop with no user-visible data.
         //

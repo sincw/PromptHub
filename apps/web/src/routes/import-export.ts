@@ -378,7 +378,7 @@ importExport.get('/export', async (c) => {
 importExport.post('/import', async (c) => {
   const contentType = c.req.header('content-type') ?? '';
 
-  // Handle ZIP file upload (from desktop export)
+  // Handle ZIP file upload from historical exports.
   if (contentType.includes('application/zip') || contentType.includes('application/octet-stream') || contentType.includes('multipart/form-data')) {
     try {
       let zipBuffer: Uint8Array;
@@ -395,7 +395,7 @@ importExport.post('/import', async (c) => {
       }
 
       const files = unzipSync(zipBuffer);
-      // Desktop ZIP contains import-with-prompthub.json as the importable payload
+      // Historical ZIP exports contain import-with-prompthub.json as the importable payload.
       const jsonEntry = files['import-with-prompthub.json'];
       if (!jsonEntry) {
         return error(c, 400, ErrorCode.BAD_REQUEST, 'Invalid ZIP file: missing import-with-prompthub.json');

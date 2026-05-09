@@ -23,7 +23,7 @@ export const ui = {
       titleStart: "AI Prompt & Skill",
       titleEnd: "一站式管理工作台",
       desc: "Prompt 管理 · 技能商店 · 多平台安装 · 版本控制 · 多模型测试 —— 管理 Prompt 与 SKILL.md，一键安装到 15+ AI 编程工具。",
-      download: "下载客户端",
+      download: "开始使用",
       github: "开源协议",
       imgAlt: "PromptHub 精美界面预览",
     },

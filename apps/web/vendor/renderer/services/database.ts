@@ -1000,8 +1000,7 @@ function restoreSettingsSnapshot(snapshot: { state: any } | undefined): void {
 }
 
 async function gzipText(text: string): Promise<Blob> {
-  // Electron/Chromium 支持 CompressionStream
-  // Electron/Chromium supports CompressionStream
+  // Modern Chromium runtimes support CompressionStream.
   const cs = new CompressionStream("gzip");
   const stream = new Blob([text], { type: "application/json" })
     .stream()

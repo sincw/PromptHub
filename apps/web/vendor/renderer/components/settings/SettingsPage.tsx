@@ -34,7 +34,7 @@ interface SettingsPageProps {
 
 // Settings menu items - use i18n keys instead of hardcoded text
 // 设置菜单项 - 使用 key 而非硬编码文本
-const DESKTOP_SETTINGS_MENU = [
+const NATIVE_SETTINGS_MENU = [
   { id: "general", labelKey: "settings.general", icon: SettingsIcon },
   { id: "appearance", labelKey: "settings.appearance", icon: PaletteIcon },
   { id: "data", labelKey: "settings.data", icon: DatabaseIcon },
@@ -59,7 +59,7 @@ const WEB_SETTINGS_MENU = [
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const webRuntime = isWebRuntime();
-  const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : DESKTOP_SETTINGS_MENU;
+  const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : NATIVE_SETTINGS_MENU;
   const [activeSection, setActiveSection] = useState(
     webRuntime ? "web" : "general",
   );

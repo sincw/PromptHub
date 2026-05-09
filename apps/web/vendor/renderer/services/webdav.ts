@@ -375,8 +375,8 @@ async function ensureDirectory(url: string, config: WebDAVConfig) {
       return;
     }
 
-    // Fallback to fetch (only effective in packaged Electron)
-    // 回退到 fetch（仅在打包后的 Electron 中有效）
+    // Fallback to fetch for runtimes where CORS allows the request.
+    // 在 CORS 允许时回退到 fetch。
     const authHeader = "Basic " + btoa(`${config.username}:${config.password}`);
     const checkRes = await fetch(url, {
       method: "PROPFIND",
@@ -420,8 +420,8 @@ export async function testConnection(
       return result;
     }
 
-    // Fallback to fetch (only effective in packaged Electron)
-    // 回退到 fetch（仅在打包后的 Electron 中有效）
+    // Fallback to fetch for runtimes where CORS allows the request.
+    // 在 CORS 允许时回退到 fetch。
     const response = await fetch(config.url, {
       method: "PROPFIND",
       headers: {
@@ -616,8 +616,8 @@ export async function uploadToWebDAV(
       }
     }
 
-    // Fallback to fetch (only effective in packaged Electron)
-    // 回退到 fetch（仅在打包后的 Electron 中有效）
+    // Fallback to fetch for runtimes where CORS allows the request.
+    // 在 CORS 允许时回退到 fetch。
     const authHeader = "Basic " + btoa(`${config.username}:${config.password}`);
     const bodyBlob = new Blob([bodyString], { type: "application/json" });
 
@@ -1060,7 +1060,7 @@ export async function incrementalDownload(
       exportedAt: coreData.exportedAt,
       prompts: coreData.prompts,
       folders: coreData.folders,
-      // Support both desktop `versions` and web `promptVersions` field names
+      // Support both legacy `versions` and web `promptVersions` field names.
       versions: coreData.versions || coreData.promptVersions || [],
       skills: coreData.skills,
       skillVersions: coreData.skillVersions,
@@ -1188,8 +1188,8 @@ export async function downloadFromWebDAV(
       }
       rawData = result.data;
     } else {
-      // Fallback to fetch (only effective in packaged Electron)
-      // 回退到 fetch（仅在打包后的 Electron 中有效）
+      // Fallback to fetch for runtimes where CORS allows the request.
+      // 在 CORS 允许时回退到 fetch。
       const response = await fetch(fileUrl, {
         method: "GET",
         headers: {
@@ -1339,8 +1339,8 @@ export async function getRemoteBackupInfo(config: WebDAVConfig): Promise<{
       };
     }
 
-    // Fallback to fetch (only effective in packaged Electron)
-    // 回退到 fetch（仅在打包后的 Electron 中有效）
+    // Fallback to fetch for runtimes where CORS allows the request.
+    // 在 CORS 允许时回退到 fetch。
     const response = await fetch(fileUrl, {
       method: "GET",
       headers: {
@@ -1393,8 +1393,8 @@ export async function getRemoteBackupTimestamp(config: WebDAVConfig): Promise<{
       };
     }
 
-    // Fallback to fetch HEAD request (only effective in packaged Electron)
-    // 回退到 fetch HEAD 请求（仅在打包后的 Electron 中有效）
+    // Fallback to fetch HEAD for runtimes where CORS allows the request.
+    // 在 CORS 允许时回退到 fetch HEAD 请求。
     const response = await fetch(fileUrl, {
       method: "HEAD",
       headers: {
