@@ -46,6 +46,11 @@ interface PromptStage {
   - `smartConfig.agentModelId` is required for saved prompts.
   - `smartConfig.agentUserPrompt` is required.
   - `userPrompt` may be empty because the stage input is generated at runtime.
+- Smart-stage agent context is stage-local by default:
+  - Round 0 receives only the last assistant message before the smart stage starts, plus explicit `@stageN.*` substitutions in the agent prompt.
+  - Later rounds receive that seed assistant message plus this smart stage's completed user/assistant turns.
+  - The agent must not receive the full inherited transcript unless a future explicit stage-level context option is added.
+- The main flow model still follows the prompt-level `stageContextMode`; this context restriction is specifically for the smart-stage agent model.
 - Selecting a managed Prompt for a smart stage copies a snapshot into `agentSystemPrompt` and `agentUserPrompt`; runtime does not follow source Prompt edits.
 - Reference syntax:
   - `@stageN.output` resolves to the last output for the referenced stage.
@@ -68,6 +73,7 @@ interface PromptStage {
 - Good: `stage2` is smart, reads `@stage1.output`, runs three rounds, and downstream `stage3` can reference `@stage2.input[2]` or `@stage2.output`.
 - Base: existing stages without `type` continue to save, render, and execute as fixed stages.
 - Bad: a smart stage saved with only `userPrompt` and no `smartConfig.agentUserPrompt`; this should fail validation instead of silently executing as an empty agent.
+- Bad: passing the full inherited transcript into the smart-stage agent; this pollutes the agent decision context and breaks the stage-local contract.
 
 ### 6. Tests Required
 
@@ -99,3 +105,22 @@ const stageValues = {
 ```
 
 Store stage reference values as per-stage input/output arrays. Unindexed references resolve to the last array item.
+
+#### Wrong
+
+```ts
+const agentContext = conversationMessages;
+```
+
+This gives the smart-stage agent the entire inherited transcript.
+
+#### Correct
+
+```ts
+const agentContext = [
+  ...getLastAssistantContext(conversationMessages),
+  ...stageConversationMessages,
+];
+```
+
+The smart-stage agent starts from the immediately preceding assistant state and then only sees its own stage-local turns.

@@ -172,6 +172,11 @@ function formatMessagesForAgent(messages: ChatMessage[]): string {
     .join("\n\n");
 }
 
+function getLastAssistantContext(messages: ChatMessage[]): ChatMessage[] {
+  const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  return lastAssistant ? [lastAssistant] : [];
+}
+
 function buildSmartStageAgentMessages(
   systemPrompt: string | null | undefined,
   userPrompt: string,
@@ -1286,15 +1291,16 @@ export function MainContent() {
             }
 
             const agentConfig = toAIConfig(agentModel);
+            const smartStageSeedMessages = getLastAssistantContext(conversationMessages);
             for (let round = 0; round < smartConfig.rounds; round += 1) {
               const resolvedAgentPrompt = replaceStageOutputReferences(
                 smartConfig.agentUserPrompt,
                 stageOutputs,
               );
-              const agentContext =
-                contextMode === 'inherited'
-                  ? conversationMessages
-                  : stageConversationMessages;
+              const agentContext = [
+                ...smartStageSeedMessages,
+                ...stageConversationMessages,
+              ];
               const agentMessages = buildSmartStageAgentMessages(
                 replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
                 resolvedAgentPrompt,
@@ -1739,11 +1745,15 @@ export function MainContent() {
                     throw new Error(t('prompt.smartStageAgentModelMissing', '智能阶段未配置可用的 Agent 模型'));
                   }
                   const agentConfig = toAIConfig(agentModel);
+                  const smartStageSeedMessages = getLastAssistantContext(conversationMessages);
                   for (let round = 0; round < smartConfig.rounds; round += 1) {
                     const agentMessages = buildSmartStageAgentMessages(
                       replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
                       replaceStageOutputReferences(smartConfig.agentUserPrompt, stageOutputs),
-                      contextMode === 'inherited' ? conversationMessages : stageConversationMessages,
+                      [
+                        ...smartStageSeedMessages,
+                        ...stageConversationMessages,
+                      ],
                     );
                     const agentResult = await chatCompletion(agentConfig, agentMessages, {
                       stream: false,
