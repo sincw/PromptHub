@@ -165,18 +165,6 @@ function toAIConfig(model: AIModelConfig): AIConfig {
   };
 }
 
-function formatMessagesForAgent(messages: ChatMessage[]): string {
-  if (messages.length === 0) return "";
-  return messages
-    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
-    .join("\n\n");
-}
-
-function getLastAssistantContext(messages: ChatMessage[]): ChatMessage[] {
-  const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
-  return lastAssistant ? [lastAssistant] : [];
-}
-
 function buildSmartStageAgentMessages(
   systemPrompt: string | null | undefined,
   userPrompt: string,
@@ -187,13 +175,8 @@ function buildSmartStageAgentMessages(
     messages.push({ role: "system", content: systemPrompt.trim() });
   }
 
-  const context = formatMessagesForAgent(contextMessages);
-  messages.push({
-    role: "user",
-    content: [context ? `Current transcript:\n${context}` : "", userPrompt]
-      .filter(Boolean)
-      .join("\n\n"),
-  });
+  messages.push(...contextMessages);
+  messages.push({ role: "user", content: userPrompt });
   return messages;
 }
 
@@ -1291,19 +1274,18 @@ export function MainContent() {
             }
 
             const agentConfig = toAIConfig(agentModel);
-            const smartStageSeedMessages = getLastAssistantContext(conversationMessages);
+            const agentConversationMessages: ChatMessage[] = [];
             for (let round = 0; round < smartConfig.rounds; round += 1) {
-              const resolvedAgentPrompt = replaceStageOutputReferences(
-                smartConfig.agentUserPrompt,
-                stageOutputs,
-              );
-              const agentContext = [
-                ...smartStageSeedMessages,
-                ...stageConversationMessages,
-              ];
+              const previousMainOutputs = stageOutputs[stageId]?.output ?? [];
+              const agentUserPrompt = round === 0
+                ? replaceStageOutputReferences(smartConfig.agentUserPrompt, stageOutputs)
+                : previousMainOutputs[previousMainOutputs.length - 1] || "";
+              const agentContext = smartConfig.agentContextMode === "inherited"
+                ? agentConversationMessages
+                : [];
               const agentMessages = buildSmartStageAgentMessages(
                 replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
-                resolvedAgentPrompt,
+                agentUserPrompt,
                 agentContext,
               );
               const startedAt = Date.now();
@@ -1312,6 +1294,10 @@ export function MainContent() {
                 enableThinking: agentConfig.chatParams?.enableThinking ?? false,
               });
               totalLatencyMs += Date.now() - startedAt;
+              agentConversationMessages.push(
+                { role: 'user', content: agentUserPrompt },
+                { role: 'assistant', content: agentResult.content },
+              );
               await runMainModelTurn(agentResult.content.trim() || agentResult.content, round);
             }
           } else {
@@ -1745,20 +1731,27 @@ export function MainContent() {
                     throw new Error(t('prompt.smartStageAgentModelMissing', '智能阶段未配置可用的 Agent 模型'));
                   }
                   const agentConfig = toAIConfig(agentModel);
-                  const smartStageSeedMessages = getLastAssistantContext(conversationMessages);
+                  const agentConversationMessages: ChatMessage[] = [];
                   for (let round = 0; round < smartConfig.rounds; round += 1) {
+                    const previousMainOutputs = stageOutputs[stageId]?.output ?? [];
+                    const agentUserPrompt = round === 0
+                      ? replaceStageOutputReferences(smartConfig.agentUserPrompt, stageOutputs)
+                      : previousMainOutputs[previousMainOutputs.length - 1] || "";
                     const agentMessages = buildSmartStageAgentMessages(
                       replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
-                      replaceStageOutputReferences(smartConfig.agentUserPrompt, stageOutputs),
-                      [
-                        ...smartStageSeedMessages,
-                        ...stageConversationMessages,
-                      ],
+                      agentUserPrompt,
+                      smartConfig.agentContextMode === "inherited"
+                        ? agentConversationMessages
+                        : [],
                     );
                     const agentResult = await chatCompletion(agentConfig, agentMessages, {
                       stream: false,
                       enableThinking: agentConfig.chatParams?.enableThinking ?? false,
                     });
+                    agentConversationMessages.push(
+                      { role: 'user', content: agentUserPrompt },
+                      { role: 'assistant', content: agentResult.content },
+                    );
                     await runCompareMainTurn(agentResult.content.trim() || agentResult.content, round);
                   }
                 } else {

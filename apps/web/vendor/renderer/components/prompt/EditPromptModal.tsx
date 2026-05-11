@@ -392,7 +392,7 @@ export function EditPromptModal({
       setFolderId(form.folderId);
       setSource(form.source);
       setNotes(form.notes);
-      setShowEnglishVersion(!!(form.systemPromptEn || form.userPromptEn || form.stages.some((stage) => stage.userPromptEn)));
+      setShowEnglishVersion(false);
       setShowSystemPromptEditor(true);
       setShowUserPromptEditor(true);
     }

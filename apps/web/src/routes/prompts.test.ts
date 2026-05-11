@@ -367,6 +367,7 @@ describe('web prompt routes', () => {
             smartConfig: {
               rounds: 2,
               agentModelId: 'agent-model-1',
+              agentContextMode: 'inherited',
               agentSystemPrompt: 'Prefer Sichuan food',
               agentUserPrompt: 'Choose from @stage1.output',
               sourcePromptId: 'prompt-agent',
@@ -383,6 +384,7 @@ describe('web prompt routes', () => {
           smartConfig?: {
             rounds?: number;
             agentModelId?: string;
+            agentContextMode?: string;
             agentUserPrompt?: string;
           };
         }>;
@@ -392,6 +394,7 @@ describe('web prompt routes', () => {
         smartConfig: {
           rounds: 2,
           agentModelId: 'agent-model-1',
+          agentContextMode: 'inherited',
           agentUserPrompt: 'Choose from @stage1.output',
         },
       });

@@ -53,6 +53,7 @@ export function createDefaultSmartStageConfig(): PromptStageSmartConfig {
   return {
     rounds: 1,
     agentModelId: "",
+    agentContextMode: "inherited",
     agentSystemPrompt: "",
     agentUserPrompt: "",
     sourcePromptId: null,
@@ -111,6 +112,7 @@ export function normalizeSmartStageConfig(
   return {
     rounds,
     agentModelId: config?.agentModelId || "",
+    agentContextMode: config?.agentContextMode === "stage_local" ? "stage_local" : "inherited",
     agentSystemPrompt: config?.agentSystemPrompt || "",
     agentUserPrompt: config?.agentUserPrompt || "",
     sourcePromptId: config?.sourcePromptId || null,

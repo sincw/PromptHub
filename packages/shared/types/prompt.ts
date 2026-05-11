@@ -8,6 +8,7 @@ export type PromptType = "text" | "image" | "video";
 export type PromptExecutionMode = "single" | "multi_stage";
 export type PromptStageContextMode = "isolated" | "inherited";
 export type PromptStageType = "fixed" | "smart";
+export type PromptStageAgentContextMode = "inherited" | "stage_local";
 export type ResourceVisibility = 'private' | 'shared';
 
 export interface AiTestSessionMessage {
@@ -24,6 +25,7 @@ export interface AiTestSessionMessage {
 export interface PromptStageSmartConfig {
   rounds: number;
   agentModelId?: string | null;
+  agentContextMode?: PromptStageAgentContextMode;
   agentSystemPrompt?: string | null;
   agentUserPrompt: string;
   sourcePromptId?: string | null;

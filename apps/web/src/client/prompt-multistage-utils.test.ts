@@ -7,6 +7,7 @@ import {
   isMultiStagePrompt,
   replaceStageReferences,
   validatePromptStageReferences,
+  normalizeSmartStageConfig,
 } from '../../vendor/renderer/components/prompt/prompt-modal-utils';
 import {
   hasUserDefinedPromptVariables,
@@ -139,6 +140,7 @@ describe('multi-stage prompt utilities', () => {
           smartConfig: {
             rounds: 3,
             agentModelId: 'agent-model-1',
+            agentContextMode: 'stage_local',
             agentSystemPrompt: '你是川菜大师',
             agentUserPrompt: '根据 @stage1.output 选择',
             sourcePromptId: 'prompt-agent',
@@ -160,9 +162,15 @@ describe('multi-stage prompt utilities', () => {
     expect(payload.executionMode).toBe('multi_stage');
     expect(payload.stages?.[1]?.type).toBe('smart');
     expect(payload.stages?.[1]?.smartConfig?.rounds).toBe(3);
+    expect(payload.stages?.[1]?.smartConfig?.agentContextMode).toBe('stage_local');
     expect(payload.stages?.[1]?.smartConfig?.agentUserPrompt).toContain('@stage1.output');
     expect(payload.userPrompt).toContain('[Smart Stage: rounds=3]');
     expect(payload.userPrompt).toContain('[Agent System]');
+  });
+
+  it('defaults smart stage agent context to inherited', () => {
+    expect(normalizeSmartStageConfig(null).agentContextMode).toBe('inherited');
+    expect(normalizeSmartStageConfig({ rounds: 1, agentUserPrompt: 'Choose' }).agentContextMode).toBe('inherited');
   });
 
   it('resolves smart stage input and output references with zero-based indexes', () => {

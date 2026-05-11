@@ -19,6 +19,7 @@ type PromptStageType = "fixed" | "smart";
 interface PromptStageSmartConfig {
   rounds: number;
   agentModelId?: string | null;
+  agentContextMode?: "inherited" | "stage_local";
   agentSystemPrompt?: string | null;
   agentUserPrompt: string;
   sourcePromptId?: string | null;
@@ -44,12 +45,18 @@ interface PromptStage {
 - Smart stage:
   - `smartConfig.rounds` must be an integer from 1 to 10.
   - `smartConfig.agentModelId` is required for saved prompts.
+  - Missing `smartConfig.agentContextMode` means `"inherited"` for backward compatibility and UI defaults.
   - `smartConfig.agentUserPrompt` is required.
   - `userPrompt` may be empty because the stage input is generated at runtime.
-- Smart-stage agent context is stage-local by default:
-  - Round 0 receives only the last assistant message before the smart stage starts, plus explicit `@stageN.*` substitutions in the agent prompt.
-  - Later rounds receive that seed assistant message plus this smart stage's completed user/assistant turns.
-  - The agent must not receive the full inherited transcript unless a future explicit stage-level context option is added.
+- Smart-stage agent context is controlled by `smartConfig.agentContextMode` and only applies to the smart-stage agent model:
+  - `inherited`: the agent receives this smart stage's internal agent user/assistant history from previous rounds.
+  - `stage_local`: the agent receives only the current round user prompt, with no additional agent history.
+  - Neither mode gives the agent the full main-flow transcript by default.
+- Smart-stage round input semantics:
+  - Round 0 agent user prompt is rendered from `smartConfig.agentUserPrompt`, including explicit `@stageN.*` substitutions.
+  - Round 1+ agent user prompt is the previous main-flow assistant output from the same smart stage.
+  - The agent output becomes the main-flow user input for that round.
+  - The main-flow assistant output is stored as that round's smart-stage output.
 - The main flow model still follows the prompt-level `stageContextMode`; this context restriction is specifically for the smart-stage agent model.
 - Selecting a managed Prompt for a smart stage copies a snapshot into `agentSystemPrompt` and `agentUserPrompt`; runtime does not follow source Prompt edits.
 - Reference syntax:
@@ -73,7 +80,7 @@ interface PromptStage {
 - Good: `stage2` is smart, reads `@stage1.output`, runs three rounds, and downstream `stage3` can reference `@stage2.input[2]` or `@stage2.output`.
 - Base: existing stages without `type` continue to save, render, and execute as fixed stages.
 - Bad: a smart stage saved with only `userPrompt` and no `smartConfig.agentUserPrompt`; this should fail validation instead of silently executing as an empty agent.
-- Bad: passing the full inherited transcript into the smart-stage agent; this pollutes the agent decision context and breaks the stage-local contract.
+- Bad: passing the full inherited main transcript into the smart-stage agent; this pollutes the agent decision context and breaks the explicit agent context contract.
 
 ### 6. Tests Required
 
@@ -117,10 +124,10 @@ This gives the smart-stage agent the entire inherited transcript.
 #### Correct
 
 ```ts
-const agentContext = [
-  ...getLastAssistantContext(conversationMessages),
-  ...stageConversationMessages,
-];
+const agentContext =
+  smartConfig.agentContextMode === "inherited"
+    ? agentConversationMessages
+    : [];
 ```
 
-The smart-stage agent starts from the immediately preceding assistant state and then only sees its own stage-local turns.
+The smart-stage agent either sees only its own internal agent conversation from earlier rounds or just the current round user prompt. It does not receive the main-flow transcript unless a separate future option explicitly adds that behavior.

@@ -28,6 +28,7 @@ const promptStageSchema = z.object({
   smartConfig: z.object({
     rounds: z.number().int().min(1).max(10),
     agentModelId: z.string().max(200).nullable().optional(),
+    agentContextMode: z.enum(['inherited', 'stage_local']).optional(),
     agentSystemPrompt: z.string().max(100000).nullable().optional(),
     agentUserPrompt: z.string().max(100000),
     sourcePromptId: z.string().max(200).nullable().optional(),
