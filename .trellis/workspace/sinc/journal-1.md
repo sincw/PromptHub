@@ -281,3 +281,38 @@ Implemented multi-stage prompt authoring and execution, fixed edit-mode preserva
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Smart multi-stage prompt agent stages
+
+**Date**: 2026-05-11
+**Task**: Smart multi-stage prompt agent stages
+**Branch**: `main`
+
+### Summary
+
+Implemented smart multi-stage prompt stages, refined agent context modes, updated UI controls, specs, and verification coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3020798` | (see git log) |
+| `1721faa` | (see git log) |
+| `fc232b7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
