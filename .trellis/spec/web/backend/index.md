@@ -21,6 +21,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 | [Prompt Optimization Sessions](./prompt-optimization-sessions.md) | Cross-layer contract for persisted prompt optimization sessions and B optimizer JSON output | Active |
 | [Content Sharing](./content-sharing.md) | Cross-layer contract for share entries, public share reads, and share backup/sync payloads | Active |
+| [Multi-Stage Smart Stages](./multi-stage-smart-stages.md) | Cross-layer contract for smart-stage prompt shape, validation, references, and execution values | Active |
 
 ---
 

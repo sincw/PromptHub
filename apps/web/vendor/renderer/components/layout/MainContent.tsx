@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, Children, isValidEle
 import { flushSync } from 'react-dom';
 import { usePromptStore, ViewMode } from '../../stores/prompt.store';
 import { useFolderStore } from '../../stores/folder.store';
-import { useSettingsStore } from '../../stores/settings.store';
+import { useSettingsStore, type AIModelConfig } from '../../stores/settings.store';
 import { useUIStore } from '../../stores/ui.store';
 import { useShareStore } from '../../stores/share.store';
 import { resolveScenarioModel } from '../../services/ai-defaults';
@@ -43,6 +43,9 @@ import {
   formatMultiStagePromptTemplate,
   isMultiStagePrompt,
   normalizePromptStages,
+  normalizeSmartStageConfig,
+  replaceStageReferences,
+  type StageReferenceValues,
 } from '../prompt/prompt-modal-utils';
 import {
   filterVisiblePrompts,
@@ -133,11 +136,60 @@ function resolveStagesByLanguage(prompt: Prompt, showEnglish: boolean): PromptSt
 
 function replaceStageOutputReferences(
   text: string,
-  stageOutputs: Record<string, string>,
+  stageOutputs: StageReferenceValues,
 ): string {
-  return text.replace(/@stage(\d+)\.output/g, (token, index) => {
-    return stageOutputs[`stage${index}`] ?? token;
+  return replaceStageReferences(text, stageOutputs);
+}
+
+function recordStageTurn(
+  stageValues: StageReferenceValues,
+  stageId: string,
+  input: string,
+  output: string,
+) {
+  const current = stageValues[stageId] ?? { input: [], output: [] };
+  current.input.push(input);
+  current.output.push(output);
+  stageValues[stageId] = current;
+}
+
+function toAIConfig(model: AIModelConfig): AIConfig {
+  return {
+    id: model.id,
+    provider: model.provider,
+    apiKey: model.apiKey,
+    apiUrl: model.apiUrl,
+    model: model.model,
+    chatParams: model.chatParams,
+    imageParams: model.imageParams,
+  };
+}
+
+function formatMessagesForAgent(messages: ChatMessage[]): string {
+  if (messages.length === 0) return "";
+  return messages
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n\n");
+}
+
+function buildSmartStageAgentMessages(
+  systemPrompt: string | null | undefined,
+  userPrompt: string,
+  contextMessages: ChatMessage[],
+): ChatMessage[] {
+  const messages: ChatMessage[] = [];
+  if (systemPrompt?.trim()) {
+    messages.push({ role: "system", content: systemPrompt.trim() });
+  }
+
+  const context = formatMessagesForAgent(contextMessages);
+  messages.push({
+    role: "user",
+    content: [context ? `Current transcript:\n${context}` : "", userPrompt]
+      .filter(Boolean)
+      .join("\n\n"),
   });
+  return messages;
 }
 
 function createStagePromptSnapshot(
@@ -1112,7 +1164,7 @@ export function MainContent() {
     const contextMode = prompt.stageContextMode ?? 'isolated';
     const messages: AiTestSessionMessage[] = [];
     const conversationMessages: ChatMessage[] = [];
-    const stageOutputs: Record<string, string> = {};
+    const stageOutputs: StageReferenceValues = {};
     let totalLatencyMs = 0;
 
     if (systemPrompt) {
@@ -1149,64 +1201,117 @@ export function MainContent() {
     try {
       for (const [index, stage] of stages.entries()) {
         const stageId = `stage${index + 1}`;
-        const resolvedPrompt = replaceStageOutputReferences(stage.userPrompt, stageOutputs);
-        const stageCreatedAt = new Date().toISOString();
-        const userMessage: AiTestSessionMessage = {
-          id: createAiTestId('aiturn'),
-          role: 'user',
-          content: resolvedPrompt,
-          stageId,
-          stageTitle: stage.title ?? null,
-          createdAt: stageCreatedAt,
-        };
-        messages.push(userMessage);
-
-        const requestMessages =
-          contextMode === 'inherited'
-            ? [
-                ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-                ...conversationMessages,
-                { role: 'user' as const, content: resolvedPrompt },
-              ]
-            : buildMessagesFromPrompt(systemPrompt, resolvedPrompt);
-
-        session = {
-          ...session,
-          messages: [...messages],
-          updatedAt: stageCreatedAt,
-        };
-        updatePromptState(targetId, { activeAiTestSession: session });
+        const stageConversationMessages: ChatMessage[] = [];
 
         try {
-          const { result, latencyMs } = await executeAiChat(requestMessages, outputFormat);
-          totalLatencyMs += latencyMs;
-          const stageCompletedAt = new Date().toISOString();
-          const assistantMessage: AiTestSessionMessage = {
-            id: createAiTestId('aiturn'),
-            role: 'assistant',
-            content: result.content,
-            thinkingContent: result.thinkingContent ?? null,
-            stageId,
-            stageTitle: stage.title ?? null,
-            createdAt: stageCompletedAt,
+          const runMainModelTurn = async (
+            userInput: string,
+            stageRound?: number,
+          ) => {
+            const stageCreatedAt = new Date().toISOString();
+            const userMessage: AiTestSessionMessage = {
+              id: createAiTestId('aiturn'),
+              role: 'user',
+              content: userInput,
+              stageId,
+              stageTitle: stage.title ?? null,
+              stageRound: stageRound ?? null,
+              createdAt: stageCreatedAt,
+            };
+            messages.push(userMessage);
+
+            const inheritedContext =
+              contextMode === 'inherited'
+                ? conversationMessages
+                : stage.type === 'smart'
+                  ? stageConversationMessages
+                  : [];
+            const requestMessages =
+              inheritedContext.length > 0
+                ? [
+                    ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+                    ...inheritedContext,
+                    { role: 'user' as const, content: userInput },
+                  ]
+                : buildMessagesFromPrompt(systemPrompt, userInput);
+
+            session = {
+              ...session,
+              messages: [...messages],
+              updatedAt: stageCreatedAt,
+            };
+            updatePromptState(targetId, { activeAiTestSession: session });
+
+            const { result, latencyMs } = await executeAiChat(requestMessages, outputFormat);
+            totalLatencyMs += latencyMs;
+            const stageCompletedAt = new Date().toISOString();
+            const assistantMessage: AiTestSessionMessage = {
+              id: createAiTestId('aiturn'),
+              role: 'assistant',
+              content: result.content,
+              thinkingContent: result.thinkingContent ?? null,
+              stageId,
+              stageTitle: stage.title ?? null,
+              stageRound: stageRound ?? null,
+              createdAt: stageCompletedAt,
+            };
+            messages.push(assistantMessage);
+            conversationMessages.push(
+              { role: 'user', content: userInput },
+              { role: 'assistant', content: result.content },
+            );
+            stageConversationMessages.push(
+              { role: 'user', content: userInput },
+              { role: 'assistant', content: result.content },
+            );
+            recordStageTurn(stageOutputs, stageId, userInput, result.content);
+            session = {
+              ...session,
+              messages: [...messages],
+              updatedAt: stageCompletedAt,
+              lastLatencyMs: totalLatencyMs,
+            };
+            updatePromptState(targetId, {
+              activeAiTestSession: session,
+              aiResponse: result.content,
+              aiThinking: result.thinkingContent ?? null,
+            });
           };
-          messages.push(assistantMessage);
-          conversationMessages.push(
-            { role: 'user', content: resolvedPrompt },
-            { role: 'assistant', content: result.content },
-          );
-          stageOutputs[stageId] = result.content;
-          session = {
-            ...session,
-            messages: [...messages],
-            updatedAt: stageCompletedAt,
-            lastLatencyMs: totalLatencyMs,
-          };
-          updatePromptState(targetId, {
-            activeAiTestSession: session,
-            aiResponse: result.content,
-            aiThinking: result.thinkingContent ?? null,
-          });
+
+          if (stage.type === 'smart') {
+            const smartConfig = normalizeSmartStageConfig(stage.smartConfig);
+            const agentModel = aiModels.find((model) => model.id === smartConfig.agentModelId);
+            if (!agentModel) {
+              throw new Error(t('prompt.smartStageAgentModelMissing', '智能阶段未配置可用的 Agent 模型'));
+            }
+
+            const agentConfig = toAIConfig(agentModel);
+            for (let round = 0; round < smartConfig.rounds; round += 1) {
+              const resolvedAgentPrompt = replaceStageOutputReferences(
+                smartConfig.agentUserPrompt,
+                stageOutputs,
+              );
+              const agentContext =
+                contextMode === 'inherited'
+                  ? conversationMessages
+                  : stageConversationMessages;
+              const agentMessages = buildSmartStageAgentMessages(
+                replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
+                resolvedAgentPrompt,
+                agentContext,
+              );
+              const startedAt = Date.now();
+              const agentResult = await chatCompletion(agentConfig, agentMessages, {
+                stream: false,
+                enableThinking: agentConfig.chatParams?.enableThinking ?? false,
+              });
+              totalLatencyMs += Date.now() - startedAt;
+              await runMainModelTurn(agentResult.content.trim() || agentResult.content, round);
+            }
+          } else {
+            const resolvedPrompt = replaceStageOutputReferences(stage.userPrompt, stageOutputs);
+            await runMainModelTurn(resolvedPrompt);
+          }
         } catch (stageError) {
           const message = `${t('common.error')}: ${stageError instanceof Error ? stageError.message : t('common.error')}`;
           const failedAt = new Date().toISOString();
@@ -1232,7 +1337,8 @@ export function MainContent() {
       }
 
       const completedAt = new Date().toISOString();
-      const finalOutput = stageOutputs[`stage${stages.length}`] ?? '';
+      const finalStageOutputs = stageOutputs[`stage${stages.length}`]?.output ?? [];
+      const finalOutput = finalStageOutputs[finalStageOutputs.length - 1] ?? '';
       const completedSession: AiTestSession = {
         ...session,
         messages: [...messages],
@@ -1579,7 +1685,7 @@ export function MainContent() {
         const stagedResults = await Promise.all(
           (selectedConfigs as AIConfig[]).map(async (config) => {
             const startedAt = Date.now();
-            const stageOutputs: Record<string, string> = {};
+            const stageOutputs: StageReferenceValues = {};
             const conversationMessages: ChatMessage[] = [];
             const stageSections: string[] = [];
             let lastThinkingContent: string | undefined;
@@ -1587,35 +1693,71 @@ export function MainContent() {
             try {
               for (const [index, stage] of stages.entries()) {
                 const stageId = `stage${index + 1}`;
-                const resolvedPrompt = replaceStageOutputReferences(stage.userPrompt, stageOutputs);
-                const requestMessages =
-                  contextMode === 'inherited'
-                    ? [
-                        ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
-                        ...conversationMessages,
-                        { role: 'user' as const, content: resolvedPrompt },
-                      ]
-                    : buildMessagesFromPrompt(systemPrompt, resolvedPrompt);
-
-                const result = await chatCompletion(config, requestMessages, {
-                  stream: config.chatParams?.stream ?? false,
-                  enableThinking: config.chatParams?.enableThinking ?? false,
-                });
-
-                stageOutputs[stageId] = result.content;
-                lastThinkingContent = result.thinkingContent;
-                conversationMessages.push(
-                  { role: 'user', content: resolvedPrompt },
-                  { role: 'assistant', content: result.content },
-                );
-
+                const stageConversationMessages: ChatMessage[] = [];
                 const stageTitle = stage.title ? `${stageId} - ${stage.title}` : stageId;
-                stageSections.push(
-                  `## ${stageTitle}\n\n### Input\n${resolvedPrompt}\n\n### Output\n${result.content}`,
-                );
+
+                const runCompareMainTurn = async (userInput: string, round?: number) => {
+                  const inheritedContext =
+                    contextMode === 'inherited'
+                      ? conversationMessages
+                      : stage.type === 'smart'
+                        ? stageConversationMessages
+                        : [];
+                  const requestMessages =
+                    inheritedContext.length > 0
+                      ? [
+                          ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
+                          ...inheritedContext,
+                          { role: 'user' as const, content: userInput },
+                        ]
+                      : buildMessagesFromPrompt(systemPrompt, userInput);
+
+                  const result = await chatCompletion(config, requestMessages, {
+                    stream: config.chatParams?.stream ?? false,
+                    enableThinking: config.chatParams?.enableThinking ?? false,
+                  });
+
+                  recordStageTurn(stageOutputs, stageId, userInput, result.content);
+                  lastThinkingContent = result.thinkingContent;
+                  conversationMessages.push(
+                    { role: 'user', content: userInput },
+                    { role: 'assistant', content: result.content },
+                  );
+                  stageConversationMessages.push(
+                    { role: 'user', content: userInput },
+                    { role: 'assistant', content: result.content },
+                  );
+                  stageSections.push(
+                    `## ${stageTitle}${round !== undefined ? ` · Round ${round}` : ''}\n\n### Input\n${userInput}\n\n### Output\n${result.content}`,
+                  );
+                };
+
+                if (stage.type === 'smart') {
+                  const smartConfig = normalizeSmartStageConfig(stage.smartConfig);
+                  const agentModel = aiModels.find((model) => model.id === smartConfig.agentModelId);
+                  if (!agentModel) {
+                    throw new Error(t('prompt.smartStageAgentModelMissing', '智能阶段未配置可用的 Agent 模型'));
+                  }
+                  const agentConfig = toAIConfig(agentModel);
+                  for (let round = 0; round < smartConfig.rounds; round += 1) {
+                    const agentMessages = buildSmartStageAgentMessages(
+                      replaceStageOutputReferences(smartConfig.agentSystemPrompt || '', stageOutputs),
+                      replaceStageOutputReferences(smartConfig.agentUserPrompt, stageOutputs),
+                      contextMode === 'inherited' ? conversationMessages : stageConversationMessages,
+                    );
+                    const agentResult = await chatCompletion(agentConfig, agentMessages, {
+                      stream: false,
+                      enableThinking: agentConfig.chatParams?.enableThinking ?? false,
+                    });
+                    await runCompareMainTurn(agentResult.content.trim() || agentResult.content, round);
+                  }
+                } else {
+                  await runCompareMainTurn(replaceStageOutputReferences(stage.userPrompt, stageOutputs));
+                }
               }
 
-              const finalOutput = stageOutputs[`stage${stages.length}`] ?? '';
+              const finalStageOutputs = stageOutputs[`stage${stages.length}`]?.output ?? [];
+              const finalOutput = finalStageOutputs[finalStageOutputs.length - 1] ?? '';
               return {
                 id: config.id,
                 success: true,

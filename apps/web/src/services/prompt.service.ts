@@ -377,12 +377,24 @@ export class PromptService {
     }
 
     for (const [index, stage] of stages.entries()) {
-      if (!stage.userPrompt?.trim()) {
+      if (stage.type === 'smart') {
+        const config = stage.smartConfig;
+        if (!config?.agentUserPrompt?.trim()) {
+          throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} agentUserPrompt is required`);
+        }
+        if (!config.agentModelId?.trim()) {
+          throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} agentModelId is required`);
+        }
+        if (!Number.isInteger(config.rounds) || config.rounds < 1 || config.rounds > 10) {
+          throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} rounds must be between 1 and 10`);
+        }
+      } else if (!stage.userPrompt?.trim()) {
         throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} userPrompt is required`);
       }
 
       for (const reference of this.getStageOutputReferences(stage)) {
-        const referencedIndex = Number(reference.slice('@stage'.length, -'.output'.length)) - 1;
+        const match = reference.match(/^@stage(\d+)\.(?:input|output)(?:\[\d+])?$/);
+        const referencedIndex = match ? Number(match[1]) - 1 : -1;
         if (referencedIndex < 0 || referencedIndex >= stages.length) {
           throw new PromptServiceError(422, ErrorCode.VALIDATION_ERROR, `Stage ${index + 1} references a missing stage: ${reference}`);
         }
@@ -394,7 +406,12 @@ export class PromptService {
   }
 
   private getStageOutputReferences(stage: PromptStage): string[] {
-    const text = `${stage.userPrompt || ''}\n${stage.userPromptEn || ''}`;
-    return [...text.matchAll(/@stage\d+\.output/g)].map((match) => match[0]);
+    const text = [
+      stage.userPrompt || '',
+      stage.userPromptEn || '',
+      stage.smartConfig?.agentSystemPrompt || '',
+      stage.smartConfig?.agentUserPrompt || '',
+    ].join('\n');
+    return [...text.matchAll(/@stage\d+\.(?:input|output)(?:\[\d+])?/g)].map((match) => match[0]);
   }
 }

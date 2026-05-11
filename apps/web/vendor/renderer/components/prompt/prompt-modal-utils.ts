@@ -4,6 +4,7 @@ import type {
   PromptExecutionMode,
   PromptStage,
   PromptStageContextMode,
+  PromptStageSmartConfig,
   PromptType,
   UpdatePromptDTO,
 } from "@prompthub/shared/types";
@@ -36,14 +37,37 @@ export interface PromptBilingualFields {
 
 export const MULTI_STAGE_MIN_STAGE_COUNT = 2;
 export const MULTI_STAGE_MAX_STAGE_COUNT = 10;
-export const STAGE_OUTPUT_REFERENCE_REGEX = /@stage(\d+)\.output/g;
+export const SMART_STAGE_MIN_ROUNDS = 1;
+export const SMART_STAGE_MAX_ROUNDS = 10;
+export const STAGE_REFERENCE_REGEX = /@stage(\d+)\.(input|output)(?:\[(\d+)])?/g;
+export const STAGE_OUTPUT_REFERENCE_REGEX = /@stage(\d+)\.output(?:\[(\d+)])?/g;
+
+export interface StageReferenceValue {
+  input: string[];
+  output: string[];
+}
+
+export type StageReferenceValues = Record<string, StageReferenceValue>;
+
+export function createDefaultSmartStageConfig(): PromptStageSmartConfig {
+  return {
+    rounds: 1,
+    agentModelId: "",
+    agentSystemPrompt: "",
+    agentUserPrompt: "",
+    sourcePromptId: null,
+    sourcePromptTitle: null,
+  };
+}
 
 export function createPromptStage(index: number): PromptStage {
   return {
     id: `stage${index}`,
+    type: "fixed",
     title: "",
     userPrompt: "",
     userPromptEn: "",
+    smartConfig: null,
   };
 }
 
@@ -66,10 +90,32 @@ export function normalizePromptStages(
     .slice(0, MULTI_STAGE_MAX_STAGE_COUNT)
     .map((stage, index) => ({
       id: `stage${index + 1}`,
+      type: stage.type === "smart" ? "smart" : "fixed",
       title: stage.title || "",
       userPrompt: stage.userPrompt || "",
       userPromptEn: stage.userPromptEn || "",
+      smartConfig: stage.type === "smart"
+        ? normalizeSmartStageConfig(stage.smartConfig)
+        : null,
     }));
+}
+
+export function normalizeSmartStageConfig(
+  config: PromptStageSmartConfig | null | undefined,
+): PromptStageSmartConfig {
+  const rounds = Math.min(
+    SMART_STAGE_MAX_ROUNDS,
+    Math.max(SMART_STAGE_MIN_ROUNDS, Math.floor(Number(config?.rounds) || 1)),
+  );
+
+  return {
+    rounds,
+    agentModelId: config?.agentModelId || "",
+    agentSystemPrompt: config?.agentSystemPrompt || "",
+    agentUserPrompt: config?.agentUserPrompt || "",
+    sourcePromptId: config?.sourcePromptId || null,
+    sourcePromptTitle: config?.sourcePromptTitle || null,
+  };
 }
 
 export function isMultiStagePrompt(prompt?: Partial<Prompt> | null): boolean {
@@ -92,7 +138,9 @@ export function formatMultiStagePromptTemplate(
   return normalizePromptStages(stages)
     .map((stage, index) => {
       const content =
-        language === "en" && stage.userPromptEn
+        stage.type === "smart"
+          ? formatSmartStageTemplate(stage.smartConfig)
+          : language === "en" && stage.userPromptEn
           ? stage.userPromptEn
           : stage.userPrompt;
       return `[${getStageDisplayName(stage, index)}]\n${content || ""}`.trimEnd();
@@ -100,14 +148,32 @@ export function formatMultiStagePromptTemplate(
     .join("\n\n");
 }
 
+function formatSmartStageTemplate(
+  config: PromptStageSmartConfig | null | undefined,
+): string {
+  const normalized = normalizeSmartStageConfig(config);
+  return [
+    `[Smart Stage: rounds=${normalized.rounds}]`,
+    normalized.agentSystemPrompt ? `[Agent System]\n${normalized.agentSystemPrompt}` : "",
+    `[Agent User]\n${normalized.agentUserPrompt}`,
+  ].filter(Boolean).join("\n\n");
+}
+
 export function validatePromptStageReferences(stages: PromptStage[]): string[] {
   const errors: string[] = [];
   const normalized = normalizePromptStages(stages);
 
   normalized.forEach((stage, index) => {
-    const texts = [stage.userPrompt, stage.userPromptEn || ""];
+    const texts = stage.type === "smart"
+      ? [
+          stage.userPrompt,
+          stage.userPromptEn || "",
+          stage.smartConfig?.agentSystemPrompt || "",
+          stage.smartConfig?.agentUserPrompt || "",
+        ]
+      : [stage.userPrompt, stage.userPromptEn || ""];
     for (const text of texts) {
-      for (const match of text.matchAll(STAGE_OUTPUT_REFERENCE_REGEX)) {
+      for (const match of text.matchAll(STAGE_REFERENCE_REGEX)) {
         const refIndex = Number(match[1]) - 1;
         if (refIndex < 0 || refIndex >= normalized.length) {
           errors.push(`Stage ${index + 1} references a missing stage: ${match[0]}`);
@@ -121,14 +187,44 @@ export function validatePromptStageReferences(stages: PromptStage[]): string[] {
   return errors;
 }
 
+export function isPromptStageContentComplete(stage: PromptStage): boolean {
+  if (stage.type === "smart") {
+    const config = normalizeSmartStageConfig(stage.smartConfig);
+    return !!config.agentModelId && !!config.agentUserPrompt.trim();
+  }
+  return !!stage.userPrompt.trim();
+}
+
 export function isStageReferenced(
   stages: PromptStage[],
   targetStageIndex: number,
 ): boolean {
-  const token = `@stage${targetStageIndex + 1}.output`;
+  const outputToken = `@stage${targetStageIndex + 1}.output`;
+  const inputToken = `@stage${targetStageIndex + 1}.input`;
   return stages.some((stage, index) => {
     if (index <= targetStageIndex) return false;
-    return stage.userPrompt.includes(token) || (stage.userPromptEn || "").includes(token);
+    const texts = [
+      stage.userPrompt,
+      stage.userPromptEn || "",
+      stage.smartConfig?.agentSystemPrompt || "",
+      stage.smartConfig?.agentUserPrompt || "",
+    ];
+    return texts.some((text) => text.includes(outputToken) || text.includes(inputToken));
+  });
+}
+
+export function replaceStageReferences(
+  text: string,
+  stageValues: StageReferenceValues,
+): string {
+  return text.replace(STAGE_REFERENCE_REGEX, (token, stageNumber, kind, indexText) => {
+    const values = stageValues[`stage${stageNumber}`]?.[kind as "input" | "output"];
+    if (!values || values.length === 0) return token;
+    if (indexText !== undefined) {
+      const value = values[Number(indexText)];
+      return value ?? token;
+    }
+    return values[values.length - 1] ?? token;
   });
 }
 

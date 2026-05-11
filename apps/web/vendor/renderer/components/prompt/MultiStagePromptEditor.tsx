@@ -1,13 +1,18 @@
 import { PlusIcon, TrashIcon } from "lucide-react";
-import type { PromptStage, PromptStageContextMode } from "@prompthub/shared/types";
+import type { Prompt, PromptStage, PromptStageContextMode, PromptStageSmartConfig } from "@prompthub/shared/types";
+import type { AIModelConfig } from "../../stores/settings.store";
 import { Button, Textarea } from "../ui";
+import { Select } from "../ui/Select";
 import { useTranslation } from "react-i18next";
 import {
   MULTI_STAGE_MAX_STAGE_COUNT,
   MULTI_STAGE_MIN_STAGE_COUNT,
+  SMART_STAGE_MAX_ROUNDS,
+  SMART_STAGE_MIN_ROUNDS,
   createPromptStage,
   getStageDisplayName,
   isStageReferenced,
+  normalizeSmartStageConfig,
   normalizePromptStages,
   validatePromptStageReferences,
 } from "./prompt-modal-utils";
@@ -18,6 +23,8 @@ interface MultiStagePromptEditorProps {
   stageContextMode: PromptStageContextMode;
   onStageContextModeChange: (mode: PromptStageContextMode) => void;
   showEnglishVersion: boolean;
+  prompts: Prompt[];
+  aiModels: AIModelConfig[];
 }
 
 export function MultiStagePromptEditor({
@@ -26,10 +33,20 @@ export function MultiStagePromptEditor({
   stageContextMode,
   onStageContextModeChange,
   showEnglishVersion,
+  prompts,
+  aiModels,
 }: MultiStagePromptEditorProps) {
   const { t } = useTranslation();
   const normalizedStages = normalizePromptStages(stages);
   const validationErrors = validatePromptStageReferences(normalizedStages);
+  const chatModels = aiModels.filter((model) => (model.type ?? "chat") === "chat");
+  const promptOptions = prompts
+    .filter((prompt) => (prompt.promptType ?? "text") === "text")
+    .map((prompt) => ({ value: prompt.id, label: prompt.title }));
+  const modelOptions = chatModels.map((model) => ({
+    value: model.id,
+    label: model.name ? `${model.name} (${model.model})` : `${model.provider} / ${model.model}`,
+  }));
 
   const updateStage = (
     index: number,
@@ -40,6 +57,17 @@ export function MultiStagePromptEditor({
         stageIndex === index ? { ...stage, ...patch } : stage,
       ),
     );
+  };
+
+  const updateSmartConfig = (
+    index: number,
+    patch: Partial<PromptStageSmartConfig>,
+  ) => {
+    const current = normalizeSmartStageConfig(normalizedStages[index].smartConfig);
+    updateStage(index, {
+      type: "smart",
+      smartConfig: { ...current, ...patch },
+    });
   };
 
   const appendStage = () => {
@@ -56,10 +84,33 @@ export function MultiStagePromptEditor({
     onChange(nextStages);
   };
 
-  const insertReference = (stageIndex: number, refIndex: number) => {
-    const token = `@stage${refIndex + 1}.output`;
+  const insertReference = (
+    stageIndex: number,
+    refIndex: number,
+    kind: "input" | "output" = "output",
+  ) => {
+    const token = `@stage${refIndex + 1}.${kind}`;
+    const stage = normalizedStages[stageIndex];
+    if (stage.type === "smart") {
+      const current = normalizeSmartStageConfig(stage.smartConfig);
+      updateSmartConfig(stageIndex, {
+        agentUserPrompt: `${current.agentUserPrompt}${current.agentUserPrompt ? " " : ""}${token}`,
+      });
+      return;
+    }
     updateStage(stageIndex, {
-      userPrompt: `${normalizedStages[stageIndex].userPrompt}${normalizedStages[stageIndex].userPrompt ? " " : ""}${token}`,
+      userPrompt: `${stage.userPrompt}${stage.userPrompt ? " " : ""}${token}`,
+    });
+  };
+
+  const applyPromptSnapshot = (stageIndex: number, promptId: string) => {
+    const prompt = prompts.find((item) => item.id === promptId);
+    if (!prompt) return;
+    updateSmartConfig(stageIndex, {
+      sourcePromptId: prompt.id,
+      sourcePromptTitle: prompt.title,
+      agentSystemPrompt: prompt.systemPrompt || "",
+      agentUserPrompt: prompt.userPrompt || "",
     });
   };
 
@@ -121,31 +172,141 @@ export function MultiStagePromptEditor({
               className="w-full h-9 rounded-lg border border-border bg-muted/30 px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
             />
 
+            <div className="flex gap-2">
+              {([
+                ["fixed", t("prompt.fixedStage", "普通阶段")],
+                ["smart", t("prompt.smartStage", "智能阶段")],
+              ] as const).map(([type, label]) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() =>
+                    updateStage(index, {
+                      type,
+                      smartConfig: type === "smart"
+                        ? normalizeSmartStageConfig(stage.smartConfig)
+                        : null,
+                    })
+                  }
+                  className={`h-8 rounded-lg px-3 text-xs font-medium transition-colors ${
+                    (stage.type ?? "fixed") === type
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {index > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 text-xs">
                 <span className="text-muted-foreground">{t("prompt.insertStageOutput", "插入输出")}</span>
                 {normalizedStages.slice(0, index).map((prevStage, prevIndex) => (
-                  <button
-                    key={prevStage.id}
-                    type="button"
-                    onClick={() => insertReference(index, prevIndex)}
-                    className="rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-accent"
-                  >
-                    @{prevStage.id}.output
-                  </button>
+                  <span key={prevStage.id} className="inline-flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => insertReference(index, prevIndex, "output")}
+                      className="rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-accent"
+                    >
+                      @{prevStage.id}.output
+                    </button>
+                    {(prevStage.type === "smart") && (
+                      <button
+                        type="button"
+                        onClick={() => insertReference(index, prevIndex, "input")}
+                        className="rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground hover:text-foreground hover:bg-accent"
+                      >
+                        @{prevStage.id}.input
+                      </button>
+                    )}
+                  </span>
                 ))}
               </div>
             )}
 
-            <Textarea
-              value={stage.userPrompt}
-              onChange={(event) => updateStage(index, { userPrompt: event.target.value })}
-              placeholder={t("prompt.stagePromptPlaceholder", "输入该阶段的 User Prompt")}
-              className="min-h-[140px]"
-              enableMarkdownList
-            />
+            {stage.type === "smart" ? (
+              <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {t("prompt.smartStageAgentModel", "Agent 模型")}
+                    </label>
+                    <Select
+                      value={stage.smartConfig?.agentModelId || ""}
+                      onChange={(value) => updateSmartConfig(index, { agentModelId: value })}
+                      options={modelOptions}
+                      placeholder={t("prompt.selectAgentModel", "选择 Agent 模型")}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      {t("prompt.smartStageRounds", "轮次")}
+                    </label>
+                    <input
+                      type="number"
+                      min={SMART_STAGE_MIN_ROUNDS}
+                      max={SMART_STAGE_MAX_ROUNDS}
+                      value={normalizeSmartStageConfig(stage.smartConfig).rounds}
+                      onChange={(event) =>
+                        updateSmartConfig(index, {
+                          rounds: Number(event.target.value),
+                        })
+                      }
+                      className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                </div>
 
-            {showEnglishVersion && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {t("prompt.copyFromPrompt", "从 Prompt 复制")}
+                  </label>
+                  <Select
+                    value={stage.smartConfig?.sourcePromptId || ""}
+                    onChange={(value) => applyPromptSnapshot(index, value)}
+                    options={promptOptions}
+                    placeholder={t("prompt.selectPrompt", "选择一个提示词")}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {t("prompt.systemPrompt", "系统提示词")}
+                  </label>
+                  <Textarea
+                    value={stage.smartConfig?.agentSystemPrompt || ""}
+                    onChange={(event) => updateSmartConfig(index, { agentSystemPrompt: event.target.value })}
+                    placeholder={t("prompt.systemPromptPlaceholder", "可选的系统说明")}
+                    className="min-h-[90px]"
+                    enableMarkdownList
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {t("prompt.userPrompt", "用户提示词")}
+                  </label>
+                  <Textarea
+                    value={stage.smartConfig?.agentUserPrompt || ""}
+                    onChange={(event) => updateSmartConfig(index, { agentUserPrompt: event.target.value })}
+                    placeholder={t("prompt.smartStageUserPromptPlaceholder", "输入 Agent 用来生成本阶段输入的提示词")}
+                    className="min-h-[120px]"
+                    enableMarkdownList
+                  />
+                </div>
+              </div>
+            ) : (
+              <Textarea
+                value={stage.userPrompt}
+                onChange={(event) => updateStage(index, { userPrompt: event.target.value })}
+                placeholder={t("prompt.stagePromptPlaceholder", "输入该阶段的 User Prompt")}
+                className="min-h-[140px]"
+                enableMarkdownList
+              />
+            )}
+
+            {showEnglishVersion && stage.type !== "smart" && (
               <div className="pl-4 border-l-2 border-primary/20 space-y-2">
                 <label className="text-xs font-medium text-muted-foreground">
                   EN {t("prompt.stagePrompt", "Stage Prompt")}

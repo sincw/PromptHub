@@ -27,6 +27,7 @@ import {
   createDefaultPromptStages,
   getExistingPromptTags,
   hasPromptFormChanges,
+  isPromptStageContentComplete,
   normalizePromptStages,
   validatePromptStageReferences,
 } from "./prompt-modal-utils";
@@ -99,6 +100,7 @@ export function CreatePromptModal({
   const prompts = usePromptStore((state) => state.prompts);
   const sourceHistory = useSettingsStore((state) => state.sourceHistory);
   const addSourceHistory = useSettingsStore((state) => state.addSourceHistory);
+  const aiModels = useSettingsStore((state) => state.aiModels);
 
   // 获取所有已存在的标签
   const existingTags = useMemo(() => getExistingPromptTags(prompts), [prompts]);
@@ -240,7 +242,7 @@ export function CreatePromptModal({
   const canSubmit =
     !!title.trim() &&
     (executionMode === "multi_stage"
-      ? normalizedStages.every((stage) => stage.userPrompt.trim()) && stageValidationErrors.length === 0
+      ? normalizedStages.every(isPromptStageContentComplete) && stageValidationErrors.length === 0
       : !!userPrompt.trim());
 
   // 处理关闭请求
@@ -255,7 +257,7 @@ export function CreatePromptModal({
   const handleSubmit = useCallback(() => {
     const normalizedStages = normalizePromptStages(stages);
     const isMultiStage = executionMode === "multi_stage";
-    const hasMultiStageContent = normalizedStages.every((stage) => stage.userPrompt.trim());
+    const hasMultiStageContent = normalizedStages.every(isPromptStageContentComplete);
     const stageErrors = isMultiStage ? validatePromptStageReferences(normalizedStages) : [];
     if (!title.trim() || (!isMultiStage && !userPrompt.trim()) || (isMultiStage && (!hasMultiStageContent || stageErrors.length > 0))) {
       if (stageErrors.length > 0) {
@@ -1073,6 +1075,8 @@ export function CreatePromptModal({
                 stageContextMode={stageContextMode}
                 onStageContextModeChange={setStageContextMode}
                 showEnglishVersion={showEnglishVersion}
+                prompts={prompts}
+                aiModels={aiModels}
               />
             </div>
           ) : (

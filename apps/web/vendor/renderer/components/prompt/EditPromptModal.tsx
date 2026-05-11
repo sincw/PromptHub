@@ -45,6 +45,7 @@ import {
   getExistingPromptTags,
   getLanguageName,
   hasPromptFormChanges,
+  isPromptStageContentComplete,
   isPureEnglish,
   normalizePromptStages,
   promoteMainEnglishToEnglishVersion,
@@ -368,7 +369,7 @@ export function EditPromptModal({
   const canSubmit =
     !!title.trim() &&
     (executionMode === "multi_stage"
-      ? normalizedStages.every((stage) => stage.userPrompt.trim()) && stageValidationErrors.length === 0
+      ? normalizedStages.every(isPromptStageContentComplete) && stageValidationErrors.length === 0
       : !!userPrompt.trim());
 
   // 当 prompt 变化时更新表单
@@ -400,7 +401,7 @@ export function EditPromptModal({
   const handleSubmit = async () => {
     const normalizedStages = normalizePromptStages(stages);
     const isMultiStage = executionMode === "multi_stage";
-    const hasMultiStageContent = normalizedStages.every((stage) => stage.userPrompt.trim());
+    const hasMultiStageContent = normalizedStages.every(isPromptStageContentComplete);
     const stageErrors = isMultiStage ? validatePromptStageReferences(normalizedStages) : [];
     if (!title.trim() || (!isMultiStage && !userPrompt.trim()) || (isMultiStage && (!hasMultiStageContent || stageErrors.length > 0))) {
       if (stageErrors.length > 0) {
@@ -1566,6 +1567,8 @@ export function EditPromptModal({
                 stageContextMode={stageContextMode}
                 onStageContextModeChange={setStageContextMode}
                 showEnglishVersion={showEnglishVersion}
+                prompts={prompts}
+                aiModels={aiModels}
               />
             ),
           })

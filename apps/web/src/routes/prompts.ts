@@ -21,9 +21,18 @@ const variableSchema = z.object({
 
 const promptStageSchema = z.object({
   id: z.string().trim().min(1).max(50),
+  type: z.enum(['fixed', 'smart']).optional(),
   title: z.string().max(200).nullable().optional(),
-  userPrompt: z.string().min(1).max(100000),
+  userPrompt: z.string().max(100000),
   userPromptEn: z.string().max(100000).nullable().optional(),
+  smartConfig: z.object({
+    rounds: z.number().int().min(1).max(10),
+    agentModelId: z.string().max(200).nullable().optional(),
+    agentSystemPrompt: z.string().max(100000).nullable().optional(),
+    agentUserPrompt: z.string().max(100000),
+    sourcePromptId: z.string().max(200).nullable().optional(),
+    sourcePromptTitle: z.string().max(200).nullable().optional(),
+  }).nullable().optional(),
 });
 
 const aiTestSessionMessageSchema = z.object({
@@ -33,6 +42,7 @@ const aiTestSessionMessageSchema = z.object({
   thinkingContent: z.string().max(100000).nullable().optional(),
   stageId: z.string().max(50).optional(),
   stageTitle: z.string().max(200).nullable().optional(),
+  stageRound: z.number().int().nonnegative().nullable().optional(),
   createdAt: z.string().trim().min(1),
 });
 

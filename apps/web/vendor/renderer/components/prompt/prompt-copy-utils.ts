@@ -56,7 +56,12 @@ export function hasUserDefinedPromptVariables(
   userPrompt?: string,
   stages?: PromptStage[],
 ): boolean {
-  const stageText = stages?.map((stage) => `${stage.userPrompt}\n${stage.userPromptEn || ""}`).join("\n") || "";
+  const stageText = stages?.map((stage) => [
+    stage.userPrompt,
+    stage.userPromptEn || "",
+    stage.smartConfig?.agentSystemPrompt || "",
+    stage.smartConfig?.agentUserPrompt || "",
+  ].join("\n")).join("\n") || "";
   const combined = `${systemPrompt || ""}\n${userPrompt || ""}\n${stageText}`;
   const matches = [...combined.matchAll(VARIABLE_REGEX)];
   return matches.some((match) => !SYSTEM_VARIABLES.has(match[1].trim()));

@@ -5,6 +5,7 @@ import {
   createPromptFormData,
   formatMultiStagePromptTemplate,
   isMultiStagePrompt,
+  replaceStageReferences,
   validatePromptStageReferences,
 } from '../../vendor/renderer/components/prompt/prompt-modal-utils';
 import {
@@ -119,5 +120,85 @@ describe('multi-stage prompt utilities', () => {
 
     expect(payload.executionMode).toBe('single');
     expect(payload).not.toHaveProperty('stages');
+  });
+
+  it('preserves smart stage config and formats compatibility content', () => {
+    const payload = buildPromptPayload({
+      title: 'Smart Pipeline',
+      description: '',
+      promptType: 'text',
+      executionMode: 'multi_stage',
+      stageContextMode: 'inherited',
+      stages: [
+        { id: 'stage1', type: 'fixed', title: 'Menu', userPrompt: '请选择一个菜' },
+        {
+          id: 'stage2',
+          type: 'smart',
+          title: 'Auto Choice',
+          userPrompt: '',
+          smartConfig: {
+            rounds: 3,
+            agentModelId: 'agent-model-1',
+            agentSystemPrompt: '你是川菜大师',
+            agentUserPrompt: '根据 @stage1.output 选择',
+            sourcePromptId: 'prompt-agent',
+            sourcePromptTitle: '川菜选择器',
+          },
+        },
+      ],
+      systemPrompt: '',
+      systemPromptEn: '',
+      userPrompt: 'single',
+      userPromptEn: '',
+      tags: [],
+      images: [],
+      videos: [],
+      source: '',
+      notes: '',
+    });
+
+    expect(payload.executionMode).toBe('multi_stage');
+    expect(payload.stages?.[1]?.type).toBe('smart');
+    expect(payload.stages?.[1]?.smartConfig?.rounds).toBe(3);
+    expect(payload.stages?.[1]?.smartConfig?.agentUserPrompt).toContain('@stage1.output');
+    expect(payload.userPrompt).toContain('[Smart Stage: rounds=3]');
+    expect(payload.userPrompt).toContain('[Agent System]');
+  });
+
+  it('resolves smart stage input and output references with zero-based indexes', () => {
+    const values = {
+      stage2: {
+        input: ['麻婆豆腐', '麻辣肉片', 'C'],
+        output: [
+          '请选择：凉拌鱼皮，蒸糕，麻辣肉片',
+          '请选择：A，B，C',
+          '选择结束',
+        ],
+      },
+    };
+
+    expect(replaceStageReferences('@stage2.input', values)).toBe('C');
+    expect(replaceStageReferences('@stage2.output', values)).toBe('选择结束');
+    expect(replaceStageReferences('@stage2.input[0]', values)).toBe('麻婆豆腐');
+    expect(replaceStageReferences('@stage2.output[1]', values)).toBe('请选择：A，B，C');
+    expect(replaceStageReferences('@stage2.output[9]', values)).toBe('@stage2.output[9]');
+  });
+
+  it('validates smart stage references from agent prompts', () => {
+    expect(validatePromptStageReferences([
+      { id: 'stage1', userPrompt: 'A' },
+      {
+        id: 'stage2',
+        type: 'smart',
+        userPrompt: '',
+        smartConfig: {
+          rounds: 1,
+          agentModelId: 'agent-model',
+          agentSystemPrompt: 'Use @stage3.output',
+          agentUserPrompt: 'Choose from @stage1.output',
+        },
+      },
+      { id: 'stage3', userPrompt: '@stage2.input[0]' },
+    ])).toEqual(['Stage 2 can only reference earlier stages: @stage3.output']);
   });
 });

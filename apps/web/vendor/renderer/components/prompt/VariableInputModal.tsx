@@ -103,7 +103,12 @@ export function VariableInputModal({
   // Parse all variables (including default values)
   // 解析所有变量（包括默认值）
   const parsedVariables = useMemo(() => {
-    const stageText = stages?.map((stage) => `${stage.userPrompt}\n${stage.userPromptEn || ''}`).join('\n') || '';
+    const stageText = stages?.map((stage) => [
+      stage.userPrompt,
+      stage.userPromptEn || '',
+      stage.smartConfig?.agentSystemPrompt || '',
+      stage.smartConfig?.agentUserPrompt || '',
+    ].join('\n')).join('\n') || '';
     const combined = `${systemPrompt || ''}\n${userPrompt}\n${stageText}`;
     const matches = combined.matchAll(VARIABLE_REGEX);
     const vars: ParsedVariable[] = [];
@@ -219,6 +224,15 @@ export function VariableInputModal({
       ...stage,
       userPrompt: replaceVariables(stage.userPrompt),
       userPromptEn: stage.userPromptEn ? replaceVariables(stage.userPromptEn) : stage.userPromptEn,
+      smartConfig: stage.smartConfig
+        ? {
+            ...stage.smartConfig,
+            agentSystemPrompt: stage.smartConfig.agentSystemPrompt
+              ? replaceVariables(stage.smartConfig.agentSystemPrompt)
+              : stage.smartConfig.agentSystemPrompt,
+            agentUserPrompt: replaceVariables(stage.smartConfig.agentUserPrompt),
+          }
+        : stage.smartConfig,
     }));
 
     // Build output format config

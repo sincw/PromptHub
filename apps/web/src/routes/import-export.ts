@@ -39,14 +39,24 @@ const aiTestSessionMessageSchema = z.object({
   thinkingContent: z.string().nullable().optional(),
   stageId: z.string().optional(),
   stageTitle: z.string().nullable().optional(),
+  stageRound: z.number().int().nonnegative().nullable().optional(),
   createdAt: z.string(),
 });
 
 const promptStageSchema = z.object({
   id: z.string(),
+  type: z.enum(['fixed', 'smart']).optional(),
   title: z.string().nullable().optional(),
   userPrompt: z.string(),
   userPromptEn: z.string().nullable().optional(),
+  smartConfig: z.object({
+    rounds: z.number().int().min(1).max(10),
+    agentModelId: z.string().nullable().optional(),
+    agentSystemPrompt: z.string().nullable().optional(),
+    agentUserPrompt: z.string(),
+    sourcePromptId: z.string().nullable().optional(),
+    sourcePromptTitle: z.string().nullable().optional(),
+  }).nullable().optional(),
 });
 
 const aiTestSessionSchema = z.object({

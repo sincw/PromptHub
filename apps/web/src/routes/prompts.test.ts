@@ -351,6 +351,51 @@ describe('web prompt routes', () => {
         { id: 'stage2', title: 'Weather', userPrompt: 'Use @stage1.output' },
       ]);
 
+      const { response: smartCreateResponse, payload: smartCreatePayload } = await createPrompt(app, token, {
+        title: 'Smart Multi Stage',
+        promptType: 'text',
+        executionMode: 'multi_stage',
+        stageContextMode: 'inherited',
+        userPrompt: '[Stage 1]\nChoose\n\n[Stage 2]\nSmart',
+        stages: [
+          { id: 'stage1', title: 'Menu', userPrompt: 'Choose a dish' },
+          {
+            id: 'stage2',
+            type: 'smart',
+            title: 'Smart Choice',
+            userPrompt: '',
+            smartConfig: {
+              rounds: 2,
+              agentModelId: 'agent-model-1',
+              agentSystemPrompt: 'Prefer Sichuan food',
+              agentUserPrompt: 'Choose from @stage1.output',
+              sourcePromptId: 'prompt-agent',
+              sourcePromptTitle: 'Sichuan chooser',
+            },
+          },
+        ],
+      });
+
+      expect(smartCreateResponse.status).toBe(201);
+      const smartCreated = smartCreatePayload.data as typeof smartCreatePayload.data & {
+        stages?: Array<{
+          type?: string;
+          smartConfig?: {
+            rounds?: number;
+            agentModelId?: string;
+            agentUserPrompt?: string;
+          };
+        }>;
+      };
+      expect(smartCreated?.stages?.[1]).toMatchObject({
+        type: 'smart',
+        smartConfig: {
+          rounds: 2,
+          agentModelId: 'agent-model-1',
+          agentUserPrompt: 'Choose from @stage1.output',
+        },
+      });
+
       const invalidResponse = await app.request(
         new Request('http://local/api/prompts', {
           method: 'POST',
